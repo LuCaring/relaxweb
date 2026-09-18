@@ -232,6 +232,9 @@ class MigrationTests(unittest.TestCase):
                     self.assertEqual(status["coins"], 321)
                     self.assertFalse(status["checked_in"])
                     self.assertEqual(status["history"], [])
+                    self.assertEqual(status["holdem_turnover"]["amount"], 0)
+                    self.assertTrue(all(not t["claimed"] and not t["claimable"]
+                                        for t in status["holdem_turnover"]["tiers"]))
 
 
 if __name__ == "__main__":

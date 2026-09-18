@@ -19,7 +19,8 @@ from config import get, get_int
 from games.base import ROOM_TYPES, create_room, parse_amount
 from games.holdem import BLIND_PRESETS as GAME_BLIND_PRESETS
 from games.rating import TIERS, rating_change, rating_info
-from rewards import init_rewards, rewards_state, claim_checkin, draw_lottery
+from rewards import (init_rewards, rewards_state, claim_checkin, draw_lottery,
+                     record_holdem_turnover, claim_holdem_reward)
 
 
 HOST = str(get("servers.chat_host", env="LIVE_CHAT_HOST", default="0.0.0.0"))
@@ -223,12 +224,14 @@ def get_rating(username):
     return rating_info(*row) if row else None
 
 
-def record_hand_ratings(room, hand_id, starts, endings):
-    """评分、流水、已结算筹码在同一事务落库，重试不会再次加分。"""
+def record_hand_ratings(room, hand_id, starts, endings, stakes=None):
+    """评分、德扑下注流水、已结算筹码在同一事务落库，重复结算不会重复累计。"""
     results = {}
     with database() as conn, conn:
         # 提前取写锁，读分数到更新的整个过程只有一个写者。
         conn.execute("BEGIN IMMEDIATE")
+        if stakes is not None and room.game_type == "holdem":
+            record_holdem_turnover(conn, hand_id, stakes, time.time())
         for username, final in endings.items():
             user = conn.execute(
                 "SELECT id, rating_score, rating_games FROM users WHERE username = ?",
@@ -765,6 +768,10 @@ async def handle_delete_account(websocket, state, data):
                      "(SELECT id FROM users WHERE username = ?)", (user["username"],))
         conn.execute("DELETE FROM lottery_draws WHERE user_id = "
                      "(SELECT id FROM users WHERE username = ?)", (user["username"],))
+        conn.execute("DELETE FROM holdem_turnover WHERE user_id = "
+                     "(SELECT id FROM users WHERE username = ?)", (user["username"],))
+        conn.execute("DELETE FROM holdem_reward_claims WHERE user_id = "
+                     "(SELECT id FROM users WHERE username = ?)", (user["username"],))
         conn.execute("DELETE FROM users WHERE username = ?", (user["username"],))
     state["user"] = None
     logger.info("account deleted: %s", user["username"])
@@ -852,6 +859,9 @@ async def publish_daily_rewards(username):
         user = client_state.get("user")
         if user and user["username"] == username:
             with database() as conn:
+                # 玩家可在该手牌结束前注销；旧连接不能阻断其他玩家的结算广播。
+                if not conn.execute("SELECT 1 FROM users WHERE username = ?", (username,)).fetchone():
+                    return
                 payload = rewards_state(conn, username, time.time())
             user["coins"] = payload["coins"]
             await send_json(socket, {"type": "daily_rewards", **payload})
@@ -865,7 +875,7 @@ async def handle_rewards_action(websocket, state, data, action):
     username = user["username"]
     try:
         with database() as conn, conn:
-            # 多标签页、多连接的签到/抽奖必须串行读改写。
+            # 多标签页、多连接的每日奖励领取必须串行读改写。
             if action != "get":
                 conn.execute("BEGIN IMMEDIATE")
             now = time.time()
@@ -875,12 +885,17 @@ async def handle_rewards_action(websocket, state, data, action):
             elif action == "draw":
                 amount, replayed = draw_lottery(conn, username, data.get("request_id"), now, adjust_coins)
                 extra = {"amount": amount, "replayed": replayed, "request_id": data["request_id"]}
+            elif action == "holdem":
+                amount, replayed = claim_holdem_reward(conn, username, data.get("threshold"),
+                    data.get("day"), now, adjust_coins)
+                extra = {"amount": amount, "replayed": replayed, "threshold": data["threshold"]}
             payload = rewards_state(conn, username, now)
     except ValueError as error:
         await send_json(websocket, {"type": "rewards_error", "message": str(error),
-                                    "request_id": data.get("request_id")})
+                                    "request_id": data.get("request_id"), "action": action})
         return
-    kind = {"get": "daily_rewards", "checkin": "checkin_result", "draw": "lottery_result"}[action]
+    kind = {"get": "daily_rewards", "checkin": "checkin_result", "draw": "lottery_result",
+            "holdem": "holdem_reward_result"}[action]
     await send_json(websocket, {"type": kind, **payload, **extra})
     if action != "get":
         await publish_daily_rewards(username)
@@ -896,6 +911,10 @@ async def handle_daily_checkin(websocket, state, data):
 
 async def handle_draw_lottery(websocket, state, data):
     await handle_rewards_action(websocket, state, data, "draw")
+
+
+async def handle_claim_holdem_reward(websocket, state, data):
+    await handle_rewards_action(websocket, state, data, "holdem")
 
 
 async def handle_transfer_coins(websocket, state, data):
@@ -1318,6 +1337,7 @@ def find_user_room(username):
 
 def attach_host(room):
     """把宿主能力注入房间：成员广播、视图分发、列表变更通知与托管同步。"""
+    pending_rewards = set()
     def member_sockets():
         for socket, client_state in list(clients.items()):
             user = client_state.get("user")
@@ -1329,6 +1349,9 @@ def attach_host(room):
 
     async def broadcast_views():
         await publish_ratings(room)
+        for username in tuple(pending_rewards):
+            pending_rewards.discard(username)
+            await publish_daily_rewards(username)
         targets = []
         for socket, client_state in list(clients.items()):
             user = client_state.get("user")
@@ -1354,9 +1377,11 @@ def attach_host(room):
     room.player_rating = get_rating
     room.pending_rating_updates = set()
 
-    def record_ratings(hand_id, starts, endings):
-        results = record_hand_ratings(room, hand_id, starts, endings)
+    def record_ratings(hand_id, starts, endings, stakes=None):
+        results = record_hand_ratings(room, hand_id, starts, endings, stakes)
         room.pending_rating_updates.update(results)
+        if stakes is not None and room.game_type == "holdem":
+            pending_rewards.update(stakes)
         return results
 
     room.record_ratings = record_ratings
@@ -1932,6 +1957,7 @@ handlers = {
     "get_daily_rewards": handle_get_daily_rewards,
     "daily_checkin": handle_daily_checkin,
     "draw_lottery": handle_draw_lottery,
+    "claim_holdem_reward": handle_claim_holdem_reward,
     "get_rating_history": handle_get_rating_history,
     "get_rating_leaderboard": handle_get_rating_leaderboard,
     "transfer_coins": handle_transfer_coins,
