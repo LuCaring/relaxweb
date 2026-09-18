@@ -29,9 +29,31 @@
 .rewards-rules, .rewards-history { padding: 14px 0; border-top: 1px solid #edf0ee; font-size: 13px; line-height: 1.7; }
 .rewards-dialog summary { cursor: pointer; font-weight: 650; }
 .rewards-dialog ul { padding-left: 20px; color: #647069; }
+.rewards-tabs { display: flex; gap: 8px; margin-top: 16px; }
+.rewards-tabs button { flex: 1; min-height: 40px; border: 0; border-radius: 10px; background: #f1f4f2; color: #57665d; font: inherit; font-size: 14px; cursor: pointer; }
+.rewards-tabs button[aria-pressed="true"] { background: #228557; color: white; font-weight: 650; }
+.holdem-turnover-total { padding: 14px 18px; border-radius: 14px; background: #edf6ef; }
+.holdem-turnover-total span { color: #567060; font-size: 12px; }
+.holdem-turnover-total strong { display: block; margin-top: 4px; font-size: 28px; overflow-wrap: anywhere; }
+.holdem-reward-tiers { display: grid; gap: 10px; margin: 16px 0; }
+.holdem-reward-tier { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 12px; padding: 12px; border: 1px solid #e8eeea; border-radius: 12px; }
+.holdem-reward-tier strong { font-size: 12px; line-height: 1.7; }
+.holdem-reward-tier progress { display: block; width: 100%; height: 8px; margin-top: 8px; accent-color: #228557; }
+.holdem-reward-tier button { min-height: 42px; min-width: 94px; padding: 8px; border: 0; border-radius: 10px; background: #228557; color: white; font: inherit; font-size: 12px; font-weight: 650; cursor: pointer; }
+.holdem-reward-tier button:disabled { background: #edf1ee; color: #647069; cursor: default; }
 .rewards-dialog button:focus-visible, .rewards-dialog summary:focus-visible { outline: 3px solid #80b49c; outline-offset: 2px; }
 @media (max-width: 360px) {
     .rewards-dialog { padding: 18px; }
     .rewards-summary { gap: 10px; padding: 14px; }
     .rewards-summary strong { font-size: 24px; }
+}
+@media (max-height: 500px) {
+    .rewards-dialog { padding: 16px; }
+    .rewards-heading h2 { font-size: 20px; }
+    .rewards-eyebrow { display: none; }
+    .rewards-tabs { margin-top: 8px; }
+    .rewards-tabs button { min-height: 32px; }
+    .rewards-copy { margin: 8px 0; }
+    .rewards-summary { margin: 10px 0; padding: 10px; }
+    .rewards-summary strong { margin-top: 4px; font-size: 24px; }
 }
