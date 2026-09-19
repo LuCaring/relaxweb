@@ -1,0 +1,195 @@
+// Local deploy/serve.py + Playwright. Override CHROME_PATH, NODE_PATH and PYTHON as needed.
+const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const path = require('node:path');
+const vm = require('node:vm');
+const {execFileSync} = require('node:child_process');
+const {chromium} = require('playwright');
+const root = path.resolve(__dirname, '..');
+
+// Compare actual Python and browser rule implementations, including wildcard hands.
+const fixtures = JSON.parse(execFileSync(process.env.PYTHON || 'python3', ['-c', `
+import asyncio, json, random
+from games.base import create_room
+from games.guandan import build_deck, resolve_combo, find_moves
+random.seed(19)
+def card(r, s=0): return {"r": r, "s": s}
+cases = []
+for levels in ({2}, {7, 8}):
+    hands = [[card(7)], [card(7), card(7, 1)],
+        [card(r, r % 4) for r in range(3, 8)],
+        [card(r) for r in range(4, 9)],
+        [card(8, s) for s in range(4)],
+        [card(9, s) for s in range(4)] + [card(8, 1)],
+        [card(16, 4)] * 2 + [card(17, 4)] * 2 + [card(8, 1)]]
+    hands += [build_deck()[:27] for _ in range(6)]
+    for hand in hands:
+        for standing in (None, resolve_combo([card(5)], None, levels),
+                         resolve_combo([card(5), card(5, 1)], None, levels)):
+            cases.append(dict(hand=hand, wild=8, levels=sorted(levels), standing=standing,
+                combo=resolve_combo(hand, 8, levels, standing),
+                moves=find_moves(hand, 8, levels, standing)))
+async def views():
+    result = {}
+    for game in ('mahjong', 'guandan'):
+        room = create_room(game, room_id=1, name='周末好友桌', owner='p0', buy_in=200, blind=1)
+        for i in range(4): room.add_member('p'+str(i), 200)
+        async def noop(*args, **kwargs): pass
+        room.broadcast_views = room.broadcast_payload = room.on_rooms_changed = noop
+        await room.start()
+        g = room.game
+        if game == 'guandan':
+            g['hands']['p0'] = [card(7), card(7, 1), card(8), card(9)]
+            g['hands']['p3'] = [card(5), card(5, 1), card(10)]
+            g['to_act'] = 'p3'
+            await room.perform_action('p3', 'play', {'cards': [0, 1]})
+        else:
+            g['hands']['p0'] = [26, 0, 1, 2, 3, 4, 5, 9, 10, 11, 18, 19, 20, 27]
+            g['last_draw'] = 27
+            g['discards'] = {'p'+str(i): [4, 7, 4] for i in range(4)}
+            g['last_discard'] = {'by': 'p3', 'tile': 4}
+        result[game] = room.view_for('p0')
+        room.remove_member('p1')
+        room.note_leave('p1')
+        await room.progress_game()
+        result[game + '_aborted'] = room.view_for('p0')
+        room.cancel_timers()
+    return result
+print(json.dumps(dict(cases=cases, rooms=asyncio.run(views()))))
+`], {cwd:root, encoding:'utf8'}));
+const source = fs.readFileSync(path.join(root, 'assets/js/games/guandan.js'), 'utf8')
+  .replace(/^import\s+[\s\S]*?from\s+"[^"]+";\s*/gm, '');
+const context = {document:{addEventListener(){}}, registerGame(){}};
+vm.runInNewContext(source + '\nglobalThis.rules={resolveCombo,findMoves};', context);
+function normalize(combo) {
+  if (!combo) return null;
+  return {type:combo.type, tier:combo.tier, main:Array.isArray(combo.main) ? combo.main[0] * 20 + combo.main[1] : combo.main,
+    len:combo.len, cards:JSON.stringify(combo.cards.slice().sort((a,b)=>a.s-b.s||a.r-b.r))};
+}
+for (const fixture of fixtures.cases) {
+  const standing = fixture.standing ? {...fixture.standing, main:fixture.standing.main[0]*20+fixture.standing.main[1]} : null;
+  const actual = context.rules.resolveCombo(fixture.hand, fixture.wild, fixture.levels, standing);
+  assert.deepEqual(normalize(actual), normalize(fixture.combo));
+  const moves = context.rules.findMoves(fixture.hand, fixture.wild, fixture.levels, standing);
+  const moveKeys = list => Array.from(list, move=>JSON.stringify(normalize(move))).sort();
+  assert.deepEqual(moveKeys(moves), moveKeys(fixture.moves));
+}
+console.log(`PASS Python/JavaScript parity for ${fixtures.cases.length} hands and standing combinations`);
+
+(async()=>{
+ const browser = await chromium.launch({headless:true,
+   executablePath:process.env.CHROME_PATH || '/usr/bin/google-chrome', args:['--no-sandbox']});
+ try {
+  const page = await browser.newPage({viewport:{width:1440,height:900}, reducedMotion:'reduce', hasTouch:true});
+  const errors=[]; page.on('pageerror',e=>errors.push(e.message));
+  await page.addInitScript(()=>{window.WebSocket=class{static OPEN=1;constructor(){this.readyState=1;}send(){}close(){}addEventListener(){}};});
+  await page.goto(process.env.TEST_BASE_URL || 'http://localhost:8000/game.html');
+  await page.evaluate(async()=>{
+   window.core=await import('/assets/js/core.js');
+   core.state.currentUser={username:'p0',nickname:'我'};
+   core.state.socket={readyState:1,send:data=>{window.sent.push(JSON.parse(data));}};
+  });
+  async function setRoom(game, patch={}) {
+   await page.evaluate(room=>{
+    window.sent=[];core.state.myRoom=room;core.renderGameView();window.scrollTo(0,0);
+   }, {...fixtures.rooms[game], ...patch});
+  }
+  const actions = () => page.evaluate(()=>window.sent.filter(m=>m.type==='poker_action'));
+  await setRoom('guandan');
+  assert.equal(await page.locator('#desktopRoomChat').count(), 0);
+  await page.getByRole('button',{name:'💬 聊天',exact:true}).click();
+  await page.locator('#chatOverlay').waitFor();
+  await page.locator('.chat-overlay-close').click();
+  await page.getByRole('button',{name:'♠7',exact:true}).click();
+  await page.getByRole('button',{name:'♥7',exact:true}).click();
+  assert.match(await page.locator('.gd-selection-status').innerText(), /对子 7/);
+  await page.getByRole('button',{name:'出牌 · 2 张',exact:true}).click();
+  assert.deepEqual(await actions(), [{type:'poker_action',action:'play',cards:[0,1]}]);
+  await page.evaluate(()=>core.renderGameView());
+  assert.equal(await page.locator('.gd-hand-card:enabled').count(), 0, 'local renders preserve action lock');
+
+  await setRoom('guandan');
+  await page.getByRole('button',{name:'提示',exact:true}).click();
+  assert.equal(await page.locator('.gd-hand-card[aria-pressed=true]').count(), 2);
+  await page.getByRole('button',{name:'重选',exact:true}).click();
+  assert.equal(await page.locator('.gd-hand-card[aria-pressed=true]').count(), 0);
+  // Same hand, different standing: hint cache must refresh to single 8.
+  await setRoom('guandan', {standing:{by:'p3',type:'single',tier:0,main:[1,7],len:1,label:'单张 7',cards:[{r:7,s:0}]}});
+  await page.getByRole('button',{name:'提示',exact:true}).click();
+  assert.equal(await page.locator('.gd-hand-card[aria-pressed=true]').getAttribute('aria-label'), '♠8');
+  await setRoom('guandan', {paused:true});
+  assert.equal(await page.locator('.gd-hand-card:enabled,.gd-dock .action-btn:enabled').count(), 0);
+
+  await setRoom('mahjong');
+  await page.getByRole('button',{name:'9筒',exact:true}).click();
+  assert.equal(await page.locator('.mj-act.primary').innerText(), '打出 9筒');
+  await page.getByRole('button',{name:'1万',exact:true}).click();
+  assert.equal(await page.locator('.mj-hand-card[aria-pressed=true]').count(), 1);
+  assert.equal(await page.locator('.mj-act.primary').innerText(), '打出 1万');
+  assert.equal(await page.locator('.just-discarded').count(), 1, 'highlight only final occurrence');
+  await page.getByRole('button',{name:'打出 1万',exact:true}).click();
+  assert.deepEqual(await actions(), [{type:'poker_action',action:'discard',index:1}]);
+  await page.evaluate(()=>core.renderGameView());
+  assert.equal(await page.locator('.mj-hand-card:enabled,.mj-act:enabled').count(), 0);
+
+  await setRoom('mahjong');
+  await page.getByRole('button',{name:'9筒',exact:true}).dblclick();
+  assert.deepEqual(await actions(), [{type:'poker_action',action:'discard',index:0}]);
+  await setRoom('mahjong', {phase:'claim',to_act:'p3',claim:{by:'p3',tile:4,waiting:['p1']},your_options:{submitted:true}});
+  assert.match(await page.locator('.mj-dock-head .my-cards-label').innerText(), /已确认/);
+  assert.equal(await page.locator('.mj-act:enabled').count(),0);
+  await setRoom('mahjong', {phase:'claim',paused:true,your_options:{claim:{peng:true,hu:true}}});
+  assert.equal(await page.locator('.mj-act:enabled,.mj-hand-card:enabled').count(),0);
+
+  for(const game of ['mahjong','guandan']) {
+   for(const [width,height] of [[320,568],[390,844],[844,390],[1024,768],[1440,900]]) {
+    await page.setViewportSize({width,height});
+    const largeHand = Array.from({length:27},(_,i)=>({r:2+i%13,s:i%4}));
+    await setRoom(game, game==='guandan' ? {your_hand:largeHand} : {});
+    const geom = await page.evaluate(game=>{
+     const boxes=[...document.querySelectorAll(game==='mahjong'?'.mj-river':'.gd-seat')].map(e=>e.getBoundingClientRect());
+     return {overflow:document.documentElement.scrollWidth>innerWidth,
+      overlap:boxes.some((a,i)=>boxes.slice(i+1).some(b=>a.left<b.right&&a.right>b.left&&a.top<b.bottom&&a.bottom>b.top))};
+    },game);
+    assert.equal(geom.overflow,false,`${game} ${width}px overflow`);
+    assert.equal(geom.overlap,false,`${game} ${width}px overlapping areas`);
+    const selector = game==='mahjong' ? '.mj-hand' : '.gd-hand';
+    const deadline=await page.evaluate(()=>core.state.hallDeadlineAt);
+    await page.locator(selector).evaluate(e=>{e.scrollLeft=120;});
+    const before=await page.locator(selector).evaluate(e=>e.scrollLeft);
+    await page.locator(`${selector} button`).evaluateAll(buttons=>{
+     const area=buttons[0].parentElement.getBoundingClientRect();
+     buttons.find(b=>{const r=b.getBoundingClientRect();return r.left>=area.left&&r.right<=area.right;}).click();
+    });
+    assert.equal(await page.locator(selector).evaluate(e=>e.scrollLeft),before,`${game} selection preserves scroll`);
+    assert.equal(await page.evaluate(()=>core.state.hallDeadlineAt),deadline,`${game} selection preserves countdown`);
+    if(process.env.TABLE_SCREENSHOT_DIR) await page.screenshot({path:path.join(process.env.TABLE_SCREENSHOT_DIR,`${game}-${width}.png`),fullPage:true});
+   }
+  }
+  for (const game of ['mahjong', 'guandan']) {
+   for (const [width, height] of [[320,568], [844,390], [1440,900]]) {
+    await page.setViewportSize({width,height});
+    await setRoom(game + '_aborted');
+    assert.match(await page.locator('.game-card-page').first().innerText(), /作废/);
+    assert.equal(await page.getByRole('button',{name:'结算并再来一局',exact:true}).isEnabled(), false);
+    const dissolve = page.getByRole('button',{name:'结算并解散房间',exact:true});
+    await dissolve.scrollIntoViewIfNeeded();
+    const hit = await dissolve.evaluate(e=>{
+     const r=e.getBoundingClientRect();
+     return e.contains(document.elementFromPoint(r.x+r.width/2,r.y+r.height/2));
+    });
+    assert.ok(hit, `${game} ${width}px leave settlement must not cover its buttons`);
+    await dissolve.click();
+    assert.ok(await page.evaluate(()=>window.sent.some(m=>m.type==='settle_vote'&&m.choice==='dissolve')));
+   }
+  }
+  await page.setViewportSize({width:320,height:568});
+  await setRoom('mahjong');
+  await page.getByRole('button',{name:'牌河',exact:true}).click();
+  assert.equal(await page.locator('.mj-river-overlay').evaluate(e=>e.scrollWidth>e.clientWidth),false);
+  await page.getByRole('button',{name:'✕ 关闭',exact:true}).click();
+  assert.equal(await page.locator('.mj-river-overlay').count(),0);
+  assert.deepEqual(errors,[]);
+  console.log('PASS real engine views, follow/play/hints, single selection, double-click, locks, pause, scroll, timers and 5 responsive viewports');
+ } finally { await browser.close(); }
+})().catch(error=>{console.error(error);process.exit(1);});

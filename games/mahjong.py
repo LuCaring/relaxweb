@@ -633,21 +633,23 @@ class MahjongRoom(BaseRoom):
         """该玩家的副露（物理格式，win_forms 内部统一转换）。"""
         return list(self.game["melds"].get(username, []))
 
-    def visible_counts(self, exclude_tile=None):
+    def visible_counts(self):
         """桌面可见牌（牌河 + 副露，含暗杠的明示 4 张）。"""
         g = self.game
         counts = Counter()
         for pile in g["discards"].values():
-            counts.update(t for t in pile if t != exclude_tile)
+            counts.update(pile)
         for melds in g["melds"].values():
             for meld in melds:
-                counts.update(t for t in meld["tiles"] if t != exclude_tile)
+                counts.update(meld["tiles"])
         return counts
 
     def make_ctx(self, username, win_tile, zimo, gang_draw=False, qianggang=False):
         """和牌计分的情景：门清、绝张、圈风门风、花牌数等。"""
         g = self.game
-        counts = self.visible_counts(exclude_tile=win_tile)
+        counts = self.visible_counts()
+        if not zimo and not qianggang and win_tile is not None:
+            counts[win_tile] -= 1
         idx = self.seat_index(username)
         melds = g["melds"].get(username, [])
         exposed = [m for m in melds if m["type"] in ("chi", "peng", "gang")]
@@ -753,6 +755,11 @@ class MahjongRoom(BaseRoom):
                 }
             if username in g.get("hands", {}):
                 view["your_hand"] = list(g["hands"][username])
+                view["your_draw_index"] = (
+                    len(g["hands"][username]) - 1
+                    if g["to_act"] == username and g["phase"] == "discard"
+                    and g.get("last_draw") is not None else None
+                )
                 view["your_flowers"] = list(g["flowers"].get(username, []))
                 view["your_options"] = self.options_for(username)
                 view["tenpai"] = self.tenpai_for(username)
@@ -771,7 +778,9 @@ class MahjongRoom(BaseRoom):
         if not g or username not in g.get("hands", {}):
             return {}
         opts = {"discard": False, "angang": [], "bugang": [], "zimo": False,
-                "claim": None, "passed": False}
+                "claim": None, "passed": False, "submitted": False}
+        if self.paused or not self.in_hand():
+            return opts
         hand = g["hands"][username]
         if g["phase"] == "discard" and g["to_act"] == username and not self.paused:
             opts["discard"] = True
@@ -787,6 +796,8 @@ class MahjongRoom(BaseRoom):
                 and username in g["claim"]["options"]:
             if username in g["claim"]["passed"]:
                 opts["passed"] = True
+            elif username in g["claim"]["claims"]:
+                opts["submitted"] = True
             else:
                 mine = g["claim"]["options"][username]
                 opts["claim"] = {
@@ -854,7 +865,7 @@ class MahjongRoom(BaseRoom):
     # ---- 一手牌状态机 ----
     def note_leave(self, username):
         g = self.game
-        mid_hand = bool(g and username in g.get("hands", {}))
+        mid_hand = self.in_hand() and username in g.get("hands", {})
         if mid_hand:
             g["broken"] = True
         return mid_hand
@@ -991,9 +1002,8 @@ class MahjongRoom(BaseRoom):
         """校验手牌下标，返回牌编码；非法返回 None。"""
         g = self.game
         hand = g["hands"].get(username, [])
-        try:
-            index = int(data.get("index"))
-        except (TypeError, ValueError):
+        index = data.get("index")
+        if type(index) is not int:
             return None
         if not 0 <= index < len(hand):
             return None
@@ -1033,7 +1043,7 @@ class MahjongRoom(BaseRoom):
             entry = {}
             if counter.get(tile, 0) >= 2:
                 entry["peng"] = True
-            if counter.get(tile, 0) >= 3:
+            if counter.get(tile, 0) >= 3 and g["wall"]:
                 entry["gang"] = True
             if self.rules["chow"] and tile < HONOR_MIN \
                     and ring[(disc_idx + 1) % 4] == name:
@@ -1168,6 +1178,7 @@ class MahjongRoom(BaseRoom):
         pile = self.game["discards"][discarder]
         if pile and pile[-1] == tile:
             pile.pop()
+        self.game["last_discard"] = None
 
     def _enter_discard_phase(self, username, text):
         g = self.game
@@ -1223,7 +1234,7 @@ class MahjongRoom(BaseRoom):
 
     async def act_angang(self, username, data):
         g = self.game
-        if g["phase"] != "discard" or g["to_act"] != username:
+        if g["phase"] != "discard" or g["to_act"] != username or not g["wall"]:
             return
         tile = self.take_index(username, data)
         if tile is None or Counter(g["hands"][username])[tile] < 4:
@@ -1242,7 +1253,7 @@ class MahjongRoom(BaseRoom):
 
     async def act_bugang(self, username, data):
         g = self.game
-        if g["phase"] != "discard" or g["to_act"] != username:
+        if g["phase"] != "discard" or g["to_act"] != username or not g["wall"]:
             return
         tile = self.take_index(username, data)
         peng = next((m for m in g["melds"][username]
@@ -1253,7 +1264,7 @@ class MahjongRoom(BaseRoom):
         for name in g["ring"]:
             if name == username or name not in g["hands"]:
                 continue
-            ctx = self.make_ctx(name, tile, zimo=False)
+            ctx = self.make_ctx(name, tile, zimo=False, qianggang=True)
             best = best_score(g["hands"][name] + [tile],
                               self.meld_sets_of(name), ctx)
             if best and best[1] >= self.rules["min_fan"]:
@@ -1292,6 +1303,7 @@ class MahjongRoom(BaseRoom):
             await self._end_hand_draw()
             return
         g["hands"][username].append(tile)
+        g["claim"] = None
         g["phase"] = "discard"
         g["to_act"] = username
         g["last_draw"] = tile
@@ -1318,6 +1330,9 @@ class MahjongRoom(BaseRoom):
             return
         if not qianggang:
             self._pop_discard(discarder, tile)
+        else:
+            g["hands"][discarder].remove(tile)
+        g["hands"][username].append(tile)
         await self._end_hand_win(username, discarder, tile, False, best[0], best[1])
 
     # ---- 结束与结算 ----
@@ -1397,16 +1412,18 @@ class MahjongRoom(BaseRoom):
 
     async def _finish_hand(self, result):
         g = self.game
+        self.paused = False
+        self.pause_remaining = 0.0
         g["stage"] = "showdown"
         g["to_act"] = None
         g["deadline"] = 0
         g["claim"] = None
         g["result"] = result
+        self.enter_settlement()
         await self.broadcast_payload(
             {"type": "hand_result", "room_id": self.id, **result})
         await self.broadcast_views()
         await self.on_rooms_changed()
-        self.enter_settlement()
 
     async def _end_hand_draw(self):
         """荒庄流局：不计分，庄家连庄。"""

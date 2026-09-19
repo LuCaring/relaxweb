@@ -1725,6 +1725,7 @@ async def leave_room_internal(room, username):
                       f"游戏厅离桌：{room.name}", member.get("paid"))
     await publish_ratings(room)
     logger.info("%s left game room %s", username, room.id)
+    await send_to_user(username, {"type": "room_closed", "reason": "已离桌"})
     if not room.members:
         room.close()
         game_rooms.pop(room.id, None)
@@ -1893,8 +1894,6 @@ async def handle_leave_room(websocket, state, data):
         await dissolve_room(room, reason)
         return
     await leave_room_internal(room, user["username"])
-    await room.broadcast_views()
-    await send_json(websocket, {"type": "room_closed", "reason": "已离桌"})
 
 
 async def handle_start_game(websocket, state, data):

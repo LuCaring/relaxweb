@@ -5,10 +5,13 @@ import { gameView, onMessage } from "./registry.js";
 
 const seatBubbles = new Map();
 const desktopRoom = window.matchMedia("(min-width: 1024px)");
+export function usesDesktopChat() {
+  return desktopRoom.matches && !gameView(state.myRoom?.game_type)?.overlayChat;
+}
 desktopRoom.addEventListener("change", () => {
   closeChatOverlay();
   document.getElementById("desktopRoomChat")?.remove();
-  if (state.myRoom && desktopRoom.matches) openChatOverlay();
+  if (state.myRoom && usesDesktopChat()) openChatOverlay();
 });
 
 function roomChatRowNode(m) {
@@ -104,12 +107,13 @@ function removeSeatBubble(seat) {
 }
 
 export function openChatOverlay() {
+  const desktop = usesDesktopChat();
   const existing = document.getElementById("desktopRoomChat");
-  if (desktopRoom.matches && existing) return;
+  if (desktop && existing) return;
   closeChatOverlay();
   const overlay = document.createElement("div");
-  overlay.className = desktopRoom.matches ? "desktop-room-chat" : "chat-overlay";
-  overlay.id = desktopRoom.matches ? "desktopRoomChat" : "chatOverlay";
+  overlay.className = desktop ? "desktop-room-chat" : "chat-overlay";
+  overlay.id = desktop ? "desktopRoomChat" : "chatOverlay";
   overlay.setAttribute("aria-label", "房间聊天室");
   const head = document.createElement("div");
   head.className = "chat-overlay-head";
@@ -121,7 +125,7 @@ export function openChatOverlay() {
   close.textContent = "✕";
   close.addEventListener("click", closeChatOverlay);
   head.append(title);
-  if (!desktopRoom.matches) head.append(close);
+  if (!desktop) head.append(close);
   const list = document.createElement("div");
   list.className = "room-chat-list chat-overlay-list";
   list.setAttribute("role", "log");
@@ -152,9 +156,9 @@ export function openChatOverlay() {
   overlay.addEventListener("click", (event) => {
     if (event.target === overlay) closeChatOverlay();
   });
-  (desktopRoom.matches ? document.querySelector(".game-workspace") : document.body).append(overlay);
+  (desktop ? document.querySelector(".game-workspace") : document.body).append(overlay);
   list.scrollTop = list.scrollHeight;
-  if (!desktopRoom.matches) input.focus({ preventScroll: true });
+  if (!desktop) input.focus({ preventScroll: true });
 }
 
 export function closeChatOverlay() {
