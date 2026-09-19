@@ -1,4 +1,4 @@
-/* 掼蛋牌桌：方形桌面、组队座位、选牌出牌、提示与结算回顾。
+/* 掼蛋场景：两侧对手、上方队友、底部选牌、提示与结算回顾。
    牌型判定逻辑与 games/guandan.py 保持一致：客户端只做预校验和提示，
    服务器仍是唯一裁判。 */
 
@@ -25,6 +25,8 @@ let lastHandJson = "";
 let hintMoves = [];
 let hintCursor = 0;
 let hintKey = "";
+let lastRoomView = null;
+let turnDeadline = 0;
 
 /* =========================================================
    牌型判定（与后端 games/guandan.py 同一套规则）
@@ -71,15 +73,15 @@ function enumerateShapes(nat, natSuit, wilds, total, levels, wildRank) {
     shapes.push({ type, tier, main, len: total, needs, suit });
   };
 
-  if (wilds === 0 && total >= 4 && total <= 8) {
-    for (const [rank, count] of Object.entries(nat)) {
-      const r = Number(rank);
-      if (count === total && r >= 2 && r <= ACE) {
-        add("bomb", total, rankValue(r, levels), { [r]: count });
+  if (total >= 4 && total <= 8) {
+    for (let r = 2; r <= ACE; r += 1) {
+      const count = (nat[r] || 0) + (r === wildRank ? wilds : 0);
+      if (count >= total) {
+        add("bomb", total, rankValue(r, levels), { [r]: total });
       }
     }
   }
-  if (wilds === 0 && total === 4 && (nat[16] || 0) === 2 && (nat[17] || 0) === 2) {
+  if (total === 4 && (nat[16] || 0) === 2 && (nat[17] || 0) === 2) {
     add("king_bomb", 99, rankKey(4, 0), { 16: 2, 17: 2 });
   }
 
@@ -125,7 +127,7 @@ function enumerateShapes(nat, natSuit, wilds, total, levels, wildRank) {
     for (let top = LOW + 4; top <= ACE; top += 1) {
       const needs = {};
       for (let r = top - 4; r <= top; r += 1) needs[r] = 1;
-      if (checkNeeds(needs, nat, wilds)) add("straight", 0, rankValue(top, levels), needs);
+      if (checkNeeds(needs, nat, wilds)) add("straight", 0, rankKey(1, top), needs);
     }
     for (let suit = 0; suit < 4; suit += 1) {
       for (let top = LOW + 4; top <= ACE; top += 1) {
@@ -141,7 +143,7 @@ function enumerateShapes(nat, natSuit, wilds, total, levels, wildRank) {
         if (ok) {
           const needs = {};
           for (let r = top - 4; r <= top; r += 1) needs[r] = 1;
-          add("flush_straight", 5.5, rankValue(top, levels), needs, suit);
+          add("flush_straight", 5.5, rankKey(1, top), needs, suit);
         }
       }
     }
@@ -153,7 +155,7 @@ function enumerateShapes(nat, natSuit, wilds, total, levels, wildRank) {
       for (let top = LOW + pairs - 1; top <= ACE; top += 1) {
         const needs = {};
         for (let r = top - pairs + 1; r <= top; r += 1) needs[r] = 2;
-        if (checkNeeds(needs, nat, wilds)) add("pairs_seq", 0, rankValue(top, levels), needs);
+        if (checkNeeds(needs, nat, wilds)) add("pairs_seq", 0, rankKey(1, top), needs);
       }
     }
   }
@@ -163,7 +165,7 @@ function enumerateShapes(nat, natSuit, wilds, total, levels, wildRank) {
       for (let top = LOW + triples - 1; top <= ACE; top += 1) {
         const needs = {};
         for (let r = top - triples + 1; r <= top; r += 1) needs[r] = 3;
-        if (checkNeeds(needs, nat, wilds)) add("triple_seq", 0, rankValue(top, levels), needs);
+        if (checkNeeds(needs, nat, wilds)) add("triple_seq", 0, rankKey(1, top), needs);
       }
     }
   }
@@ -182,8 +184,10 @@ function comboLabel(shape) {
 }
 
 function realizeShape(shape, cards, wildRank) {
-  const wildCards = cards.filter((c) => isWildCard(c, wildRank));
-  const nats = cards.filter((c) => !isWildCard(c, wildRank));
+  const wildCards = shape.type === "bomb" ? [] : cards.filter((c) => isWildCard(c, wildRank));
+  const natural = cards.filter((c) => !isWildCard(c, wildRank));
+  const nats = shape.type === "bomb"
+    ? [...natural, ...cards.filter((c) => isWildCard(c, wildRank))] : natural;
   const pool = new Map();
   if (shape.suit === null) {
     for (const card of nats) {
@@ -199,7 +203,7 @@ function realizeShape(shape, cards, wildRank) {
   }
   const picked = [];
   for (const [rank, need] of Object.entries(shape.needs)) {
-    const key = shape.suit === null ? rank : `${rank}:${shape.suit}`;
+    const key = shape.suit === null ? Number(rank) : `${rank}:${shape.suit}`;
     picked.push(...(pool.get(key) || []).slice(0, need));
   }
   if (shape.len - picked.length > wildCards.length) return null;
@@ -209,7 +213,7 @@ function realizeShape(shape, cards, wildRank) {
     label: comboLabel(shape), cards: picked };
 }
 
-function resolveCombo(cards, wildRank, levels) {
+function resolveCombo(cards, wildRank, levels, standing = null) {
   const nats = cards.filter((c) => !isWildCard(c, wildRank));
   const nat = {};
   const natSuit = {};
@@ -218,7 +222,8 @@ function resolveCombo(cards, wildRank, levels) {
     natSuit[`${card.r}:${card.s}`] = (natSuit[`${card.r}:${card.s}`] || 0) + 1;
   }
   const wilds = cards.length - nats.length;
-  const shapes = enumerateShapes(nat, natSuit, wilds, cards.length, levels, wildRank);
+  const shapes = enumerateShapes(nat, natSuit, wilds, cards.length, levels, wildRank)
+    .filter((shape) => !standing || beats(shape, standing));
   if (!shapes.length) return null;
   shapes.sort((a, b) => {
     const ka = shapeSortKey(a);
@@ -229,8 +234,8 @@ function resolveCombo(cards, wildRank, levels) {
 }
 
 function beats(candidate, standing) {
-  if (candidate.type === "king_bomb") return true;
   if (standing.type === "king_bomb") return false;
+  if (candidate.type === "king_bomb") return true;
   if (candidate.tier && standing.tier) {
     if (candidate.tier !== standing.tier) return candidate.tier > standing.tier;
     return candidate.type === standing.type && candidate.main > standing.main;
@@ -255,9 +260,10 @@ function findMoves(hand, wildRank, levels, standing) {
   const seen = new Set();
   for (let count = 1; count <= hand.length; count += 1) {
     for (const shape of enumerateShapes(nat, natSuit, wilds, count, levels, wildRank)) {
-      const combo = realizeShape(shape, hand, wildRank);
+      const picked = realizeShape(shape, hand, wildRank);
+      if (!picked) continue;
+      const combo = resolveCombo(picked.cards, wildRank, levels, standing);
       if (!combo) continue;
-      if (standing && !beats(combo, standing)) continue;
       const key = `${combo.type}:${combo.main}:${combo.len}`;
       if (seen.has(key)) continue;
       seen.add(key);
@@ -354,7 +360,48 @@ function resolvedSelection() {
   if (!selectedIndices.size) return null;
   const cards = [...selectedIndices].map((i) => hand[i]).filter(Boolean);
   if (cards.length !== selectedIndices.size) return null;
-  return resolveCombo(cards, wildRankForMe(), levelSet());
+  return resolveCombo(cards, wildRankForMe(), levelSet(), standingCombo());
+}
+
+function standingCombo() {
+  const room = state.myRoom;
+  if (room.free_lead || !room.standing) return null;
+  const standing = room.standing;
+  return { ...standing, main: Array.isArray(standing.main)
+    ? rankKey(...standing.main) : standing.main };
+}
+
+function availableMoves() {
+  const room = state.myRoom;
+  const key = JSON.stringify([room.room_id, room.hand_no, room.your_hand,
+    room.standing, room.free_lead, room.levels, room.my_team, room.rules?.wild]);
+  if (hintKey !== key) {
+    hintMoves = findMoves(room.your_hand || [], wildRankForMe(), levelSet(), standingCombo());
+    hintCursor = 0;
+    hintKey = key;
+  }
+  return hintMoves;
+}
+
+function updateSelection() {
+  document.querySelectorAll(".gd-hand-card").forEach((button) => {
+    const picked = selectedIndices.has(Number(button.dataset.index));
+    button.setAttribute("aria-pressed", String(picked));
+    button.querySelector(".gcard").classList.toggle("picked", picked);
+  });
+  document.querySelector(".gd-selection-status")?.replaceWith(selectionStatusNode());
+  document.querySelector(".gd-dock .action-bar")?.replaceWith(gdActionBarNode(resolvedSelection()));
+}
+
+function selectionStatusNode() {
+  const note = document.createElement("div");
+  note.className = "gd-selection-status";
+  note.setAttribute("role", "status");
+  const count = selectedIndices.size;
+  const combo = resolvedSelection();
+  note.textContent = count ? `已选 ${count} 张 · ${combo?.label || "当前选择无法出牌，请重新选牌"}`
+    : "点击选牌，可多选；再次点击取消";
+  return note;
 }
 
 function seatNode(p) {
@@ -372,6 +419,13 @@ function seatNode(p) {
   dot.className = "gs-team-dot";
   dot.title = TEAM_NAMES[team];
   name.append(dot, document.createTextNode(p.nickname));
+  const avatar = document.createElement("div");
+  avatar.className = "casual-avatar";
+  avatar.textContent = (p.nickname || p.username).slice(0, 1);
+  const relation = document.createElement("span");
+  relation.className = "gs-relation";
+  relation.textContent = p.username === state.currentUser?.username ? "我"
+    : team === room.my_team ? "队友" : "对手";
   const info = document.createElement("div");
   info.className = "gs-info";
   const stack = document.createElement("span");
@@ -382,7 +436,7 @@ function seatNode(p) {
   count.textContent = room.status === "playing"
     ? (p.in_hand ? `🂠 ${p.cards}` : "已出完") : `${formatCoins(p.stack)} 筹码`;
   info.append(stack, count);
-  seat.append(name, ratingBadge(p.rating), info);
+  seat.append(avatar, relation, name, ratingBadge(p.rating), info);
   if (p.finished) {
     const badge = document.createElement("span");
     badge.className = "gs-role";
@@ -408,7 +462,7 @@ function levelsBarNode() {
     const chip = document.createElement("span");
     chip.className = "gd-level-chip";
     const label = team === myTeam ? `我方 · ${TEAM_NAMES[team]}` : `对方 · ${TEAM_NAMES[team]}`;
-    chip.innerHTML = `<i class="gd-dot" style="background:${TEAM_COLORS[team]}"></i>${label} 级 <b>${levels[team]}</b>`;
+    chip.innerHTML = `<i class="gd-dot" style="background:${TEAM_COLORS[team]}"></i>${label} 级 <b>${RANK_CHARS[levels[team]] || levels[team]}</b>`;
     if (team === myTeam) chip.classList.add("mine");
     bar.append(chip);
   }
@@ -492,8 +546,10 @@ function gdResultNode(result) {
     const who = document.createElement("span");
     const role = result.roles?.[name] || "";
     const team = result.teams?.[name];
-    who.innerHTML = `<i class="gd-dot" style="background:${TEAM_COLORS[team]}"></i>`
-      + `${displayNameOf(name)} · ${role}`;
+    const dot = document.createElement("i");
+    dot.className = "gd-dot";
+    dot.style.background = TEAM_COLORS[team];
+    who.append(dot, document.createTextNode(`${displayNameOf(name)} · ${role}`));
     const amount = document.createElement("span");
     const paid = result.payouts?.[name] || 0;
     const gained = result.gains?.[name] || 0;
@@ -532,35 +588,42 @@ function gdActionBarNode(resolved) {
   const myTurn = isMyTurn() && !room.paused;
 
   if (myTurn) {
-    const legal = Boolean(resolved) && (room.free_lead || beats(resolved, room.standing));
+    const legal = Boolean(resolved) && (room.free_lead || beats(resolved, standingCombo()));
     const hint = document.createElement("button");
     hint.type = "button";
     hint.className = "action-btn";
     hint.textContent = "提示";
-    hint.disabled = !room.free_lead && !findMoves(room.your_hand || [], wildRankForMe(), levelSet(), room.standing).length;
+    hint.disabled = gdActionLock || !availableMoves().length;
+    hint.textContent = availableMoves().length ? "提示" : "无牌可接";
     hint.addEventListener("click", () => {
-      const key = JSON.stringify(room.your_hand);
-      if (hintKey !== key) {
-        hintMoves = findMoves(room.your_hand || [], wildRankForMe(), levelSet(), room.standing);
-        hintCursor = 0;
-        hintKey = key;
-      }
+      availableMoves();
       if (!hintMoves.length) return;
       const move = hintMoves[hintCursor % hintMoves.length];
       hintCursor += 1;
       const indices = indicesOf(room.your_hand || [], move.cards);
       if (indices) {
         selectedIndices = new Set(indices);
-        renderGameView();
+        updateSelection();
       }
     });
     bar.append(hint);
 
+    const clear = document.createElement("button");
+    clear.type = "button";
+    clear.className = "action-btn gd-clear";
+    clear.textContent = "重选";
+    clear.disabled = gdActionLock || !selectedIndices.size;
+    clear.addEventListener("click", () => {
+      selectedIndices.clear();
+      updateSelection();
+    });
+    bar.append(clear);
+
     const play = document.createElement("button");
     play.type = "button";
     play.className = "action-btn primary";
-    play.textContent = resolved && legal ? `出牌 · ${resolved.label}` : "选中要出的牌";
-    play.disabled = !legal;
+    play.textContent = legal ? `出牌 · ${selectedIndices.size} 张` : "出牌";
+    play.disabled = gdActionLock || !legal;
     play.addEventListener("click", () => {
       if (!resolved || !legal) return;
       gdAct({ action: "play", cards: [...selectedIndices].sort((a, b) => a - b) });
@@ -572,6 +635,7 @@ function gdActionBarNode(resolved) {
       pass.type = "button";
       pass.className = "action-btn danger";
       pass.textContent = "不出";
+      pass.disabled = gdActionLock;
       pass.addEventListener("click", () => {
         selectedIndices = new Set();
         gdAct({ action: "pass" });
@@ -585,10 +649,14 @@ function gdActionBarNode(resolved) {
 function renderGuandanTable() {
   const room = state.myRoom;
   const body = elements.gameMain;
-  gdActionLock = false;
+  if (lastRoomView !== room) {
+    gdActionLock = false;
+    lastRoomView = room;
+    turnDeadline = Date.now() + (room.turn_left || 0) * 1000;
+  }
   body.replaceChildren();
 
-  const handJson = JSON.stringify(room.your_hand || []);
+  const handJson = JSON.stringify([room.room_id, room.hand_no, room.your_hand || []]);
   if (handJson !== lastHandJson) {
     selectedIndices = new Set();
     lastHandJson = handJson;
@@ -596,7 +664,7 @@ function renderGuandanTable() {
   }
 
   const wrap = document.createElement("div");
-  wrap.className = "poker-page gd-page";
+  wrap.className = "casual-page gd-page";
   body.append(wrap);
 
   const table = document.createElement("div");
@@ -606,7 +674,7 @@ function renderGuandanTable() {
   topbar.className = "poker-topbar";
   const levels = room.levels || [2, 2];
   const myTeam = room.my_team ?? 0;
-  const levelText = myTeam === 0 ? `${levels[0]}对${levels[1]}` : `${levels[1]}对${levels[0]}`;
+  const levelText = [myTeam, 1 - myTeam].map((team) => RANK_CHARS[levels[team]] || levels[team]).join("对");
   const left = document.createElement("span");
   left.textContent = `第 ${room.hand_no || "-"} 局 · 底注 ${room.blind} · 级 ${levelText}`
     + (room.rules?.wild ? " · 逢人配开" : " · 逢人配关")
@@ -637,9 +705,10 @@ function renderGuandanTable() {
     seat.classList.add(positions[relative] || "pos-top");
     seats.append(seat);
   });
-  table.append(seats);
-
-  table.append(centerNode());
+  const arena = document.createElement("div");
+  arena.className = "gd-arena";
+  arena.append(seats, centerNode());
+  table.append(arena);
 
   if (room.result) table.append(gdResultNode(room.result));
 
@@ -659,14 +728,15 @@ function renderGuandanTable() {
   wrap.append(table);
 
   const dock = document.createElement("div");
-  dock.className = "poker-dock gd-dock";
+  dock.className = "casual-dock gd-dock";
   dock.classList.toggle("is-my-turn", isMyTurn() && !room.paused);
   const dockHead = document.createElement("div");
   dockHead.className = "dock-head";
   const label = document.createElement("div");
   label.className = "my-cards-label";
   const hand = room.your_hand || [];
-  label.textContent = isMyTurn()
+  label.textContent = room.paused ? "牌局已暂停"
+    : isMyTurn()
     ? `轮到你出牌 · 剩 ${hand.length} 张`
     : `你的手牌 · 剩 ${hand.length} 张`;
   const chatToggle = document.createElement("button");
@@ -687,6 +757,7 @@ function renderGuandanTable() {
 
   const myCards = document.createElement("div");
   myCards.className = "gd-hand";
+  myCards.classList.toggle("many-cards", hand.length > 14);
   if (!hand.length) {
     const waiting = document.createElement("span");
     waiting.className = "my-cards-label";
@@ -698,6 +769,9 @@ function renderGuandanTable() {
     const node = document.createElement("button");
     node.type = "button";
     node.className = "gd-hand-card";
+    node.dataset.index = index;
+    node.setAttribute("aria-pressed", String(selectedIndices.has(index)));
+    node.disabled = gdActionLock || room.paused;
     const cardNode = gcardNode(card, {
       wild: isWildCard(card, wildRank),
       picked: selectedIndices.has(index),
@@ -707,11 +781,12 @@ function renderGuandanTable() {
     node.addEventListener("click", () => {
       if (selectedIndices.has(index)) selectedIndices.delete(index);
       else selectedIndices.add(index);
-      renderGameView();
+      updateSelection();
     });
     myCards.append(node);
   }
   dock.append(myCards);
+  dock.append(selectionStatusNode());
 
   const countdown = document.createElement("div");
   countdown.className = "countdown";
@@ -724,7 +799,8 @@ function renderGuandanTable() {
   if (!room.paused) {
     if (isMyTurn()) {
       dock.append(gdActionBarNode(resolved));
-      if (room.turn_left > 0) startHallTicker(fill, room.turn_left);
+      const remaining = (turnDeadline - Date.now()) / 1000;
+      if (remaining > 0) startHallTicker(fill, remaining);
     }
   } else {
     const pausedNote = document.createElement("div");
@@ -742,6 +818,7 @@ function renderGuandanTable() {
 ========================================================= */
 
 registerGame("guandan", {
+  overlayChat: true,
   stakeLabel: "底注",
   blindLabel: "下一局底注",
   waitingHint: "掼蛋需要正好 4 名玩家：座位间隔的两人自动一队。等待房主开局，中途退出本局作废、筹码原封退回。",
