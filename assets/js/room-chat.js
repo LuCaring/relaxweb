@@ -5,13 +5,23 @@ import { gameView, onMessage } from "./registry.js";
 
 const seatBubbles = new Map();
 const desktopRoom = window.matchMedia("(min-width: 1024px)");
+export function usesCompactDesktopChat() {
+  const room = state.myRoom;
+  return desktopRoom.matches
+    && Boolean(gameView(room?.game_type)?.compactDesktopChat)
+    && room?.status === "playing"
+    && !room.hand_ready
+    && !room.settlement;
+}
 export function usesDesktopChat() {
-  return desktopRoom.matches && !gameView(state.myRoom?.game_type)?.overlayChat;
+  return desktopRoom.matches
+    && !usesCompactDesktopChat()
+    && !gameView(state.myRoom?.game_type)?.overlayChat;
 }
 desktopRoom.addEventListener("change", () => {
   closeChatOverlay();
   document.getElementById("desktopRoomChat")?.remove();
-  if (state.myRoom && usesDesktopChat()) openChatOverlay();
+  if (state.myRoom && (usesDesktopChat() || usesCompactDesktopChat())) openChatOverlay();
 });
 
 function roomChatRowNode(m) {
@@ -107,18 +117,21 @@ function removeSeatBubble(seat) {
 }
 
 export function openChatOverlay() {
-  const desktop = usesDesktopChat();
+  const compact = usesCompactDesktopChat();
+  const desktop = usesDesktopChat() || compact;
   const existing = document.getElementById("desktopRoomChat");
-  if (desktop && existing) return;
+  if (desktop && existing && existing.classList.contains("compact-room-chat") === compact) return;
   closeChatOverlay();
   const overlay = document.createElement("div");
-  overlay.className = desktop ? "desktop-room-chat" : "chat-overlay";
+  overlay.className = desktop
+    ? `desktop-room-chat${compact ? " compact-room-chat" : ""}`
+    : "chat-overlay";
   overlay.id = desktop ? "desktopRoomChat" : "chatOverlay";
   overlay.setAttribute("aria-label", "房间聊天室");
   const head = document.createElement("div");
   head.className = "chat-overlay-head";
   const title = document.createElement("div");
-  title.textContent = "房间聊天";
+  title.textContent = compact ? "桌边聊天" : "房间聊天";
   const close = document.createElement("button");
   close.className = "chat-overlay-close";
   close.type = "button";

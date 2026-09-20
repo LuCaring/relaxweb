@@ -81,6 +81,16 @@ class TableState(unittest.IsolatedAsyncioTestCase):
         standing = room.view_for("b")["standing"]
         self.assertEqual((standing["tier"], standing["main"], standing["len"]), (0, [1, 7], 1))
 
+    async def test_casual_game_views_include_player_avatars(self):
+        for game in ("guandan", "mahjong"):
+            room = await room_for(game)
+            room.player_avatar = lambda username: f"https://example.test/{username}.png"
+            players = room.view_for("a")["players"]
+            self.assertEqual(
+                [player["avatar"] for player in players],
+                [f"https://example.test/{name}.png" for name in room.seating],
+            )
+
     async def test_king_bomb_settles_even_as_last_four_cards(self):
         for previous_finish in ([], ["c"], ["b"]):
             room = await room_for("guandan")

@@ -3,7 +3,7 @@
 import { alertDialog } from "./dialog.js";
 import { renderGameView, send, setRoomMode, state, updateCoinChip } from "./core.js";
 import { gameView, onMessage, registerView } from "./registry.js";
-import { closeChatOverlay, resetRoomChat, openChatOverlay, usesDesktopChat } from "./room-chat.js";
+import { closeChatOverlay, resetRoomChat, openChatOverlay, usesCompactDesktopChat, usesDesktopChat } from "./room-chat.js";
 import { closeHandResultOverlay, renderHandResultOverlay, renderSettlementView } from "./room-settlement.js";
 import { renderRoomLobby } from "./room-waiting.js";
 import { observeGameRoom, resetGameAudioRoom } from "./game-audio.js";
@@ -12,7 +12,7 @@ export { closeChatOverlay };
 
 export function renderRoom() {
   setRoomMode();
-  if (usesDesktopChat()) openChatOverlay();
+  if (usesDesktopChat() || usesCompactDesktopChat()) openChatOverlay();
   else document.getElementById("desktopRoomChat")?.remove();
   const room = state.myRoom;
   if (!room) return;

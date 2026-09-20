@@ -4,7 +4,7 @@
    全部打出的牌。起和判定与番种计算以服务器为准。 */
 
 import {
-  displayNameOf, elements, formatCoins, ratingBadge, renderGameView, requestProfile,
+  displayNameOf, elements, formatCoins, playerAvatarNode, ratingBadge, renderGameView, requestProfile,
   send, startHallTicker, state,
 } from "../core.js";
 import { registerGame } from "../registry.js";
@@ -236,9 +236,10 @@ function statusNode() {
 function playerHeadNode(p, isMe) {
   const head = document.createElement("div");
   head.className = "mj-player-head";
-  const avatar = document.createElement("div");
-  avatar.className = "casual-avatar";
-  avatar.textContent = (isMe ? state.currentUser?.nickname || state.currentUser?.username || "我" : p.nickname || p.username).slice(0, 1);
+  const player = isMe
+    ? { ...p, ...state.currentUser, avatar: p?.avatar || state.currentUser?.avatar || "" }
+    : p;
+  const avatar = playerAvatarNode(player);
   const wind = document.createElement("span");
   wind.className = "mj-wind";
   wind.textContent = isMe
@@ -314,7 +315,7 @@ function myAreaNode() {
   }
   area.dataset.username = state.currentUser?.username;
   area.dataset.seat = me;
-  area.append(playerHeadNode(null, true));
+  area.append(playerHeadNode(room.players?.[me] || null, true));
   const melds = room.players?.[me]?.melds || [];
   if (melds.length) {
     const box = document.createElement("div");
@@ -790,7 +791,7 @@ function renderMahjongTable() {
 ========================================================= */
 
 registerGame("mahjong", {
-  overlayChat: true,
+  compactDesktopChat: true,
   stakeLabel: "底注",
   blindLabel: "下一局底注",
   waitingHint: "国标麻将需要正好 4 名玩家：吃碰杠胡、八番起和，花牌每张 1 分。等待房主开局，中途退出本局作废、筹码原封退回。",

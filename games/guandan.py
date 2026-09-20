@@ -427,6 +427,7 @@ class GuandanRoom(BaseRoom):
                 {
                     "username": name,
                     "nickname": self.display_name(name),
+                    "avatar": self.player_avatar(name),
                     "stack": member["stack"],
                     "rating": self.player_rating(name),
                     "team": self.team_of(name),

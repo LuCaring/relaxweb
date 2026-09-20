@@ -12,8 +12,8 @@
 .gd-seats { position: absolute; inset: 0; pointer-events: none; }
 .gd-seat { position: absolute; width: 110px; display: flex; flex-direction: column; align-items: center; gap: 4px; pointer-events: auto; color: #e9f2ff; }
 .gd-seat.pos-top { top: 10px; left: 50%; transform: translateX(-50%); }
-.gd-seat.pos-left { left: 0; top: 45%; transform: translateY(-50%); }
-.gd-seat.pos-right { right: 0; top: 45%; transform: translateY(-50%); }
+.gd-seat.pos-left { left: 0; top: 38%; transform: translateY(-50%); }
+.gd-seat.pos-right { right: 0; top: 38%; transform: translateY(-50%); }
 .gd-seat.pos-bottom { bottom: 4px; left: 0; }
 .gd-seat.pos-bottom .casual-avatar, .gd-seat.pos-bottom .rating-badge, .gd-seat.pos-bottom .gs-relation { display: none; }
 .gs-relation { position: absolute; top: 52px; padding: 2px 9px; background: #203d63; color: #dbeaff; border: 1px solid #a9c5e744; border-radius: 20px; font-size: 10px; }
@@ -24,7 +24,7 @@
 .gd-seat .rating-badge { font-size: 10px; color: #c0d4ef; background: none; }
 .gs-role, .gs-pass { border-radius: 12px; padding: 3px 9px; font-size: 12px; background: #ffda82; color: #604018; }
 .gs-pass { background: #ffffff15; color: #bed1e8; }
-.gd-center { position: absolute; left: 50%; top: 64%; transform: translate(-50%, -50%); width: calc(100% - 260px); max-width: 650px; display: flex; flex-direction: column; align-items: center; gap: 12px; }
+.gd-center { position: absolute; left: 50%; top: 66%; transform: translate(-50%, -50%); width: calc(100% - 300px); max-width: 650px; display: flex; flex-direction: column; align-items: center; gap: 12px; }
 .gd-standing-cards { display: flex; justify-content: safe center; max-width: 100%; overflow-x: auto; padding: 5px; }
 .gd-standing-cards .gcard + .gcard { margin-left: -20px; }
 .gd-standing-by, .gd-free-lead { font-size: 13px; color: #ffdf95; text-align: center; }
@@ -33,9 +33,16 @@
 .gcard.red { color: #d23a52; }
 .gc-rank { font-size: 21px; }
 .gc-suit { font-size: 16px; margin-top: 4px; }
+.gcard.joker-card { align-items: center; justify-content: center; padding: 5px; }
+.gcard .gc-joker-icon { font-family: "Apple Color Emoji", "Segoe UI Emoji", sans-serif; font-size: 38px; line-height: 1; }
+.gcard.joker-big .gc-joker-icon { filter: saturate(1.35) contrast(1.05); }
+.gcard.joker-small .gc-joker-icon { filter: grayscale(1) contrast(1.25); }
+.gcard .gc-joker-label { margin-top: 3px; font-size: 11px; letter-spacing: .08em; }
 .gcard.small { width: 34px; height: 48px; padding: 4px; border-radius: 4px; }
 .gcard.small .gc-rank { font-size: 13px; }
 .gcard.small .gc-suit { font-size: 11px; margin-top: 2px; }
+.gcard.small .gc-joker-icon { font-size: 22px; }
+.gcard.small .gc-joker-label { font-size: 8px; margin-top: 1px; }
 .gcard.wild { border-color: #f7b934; }
 .gcard.wild::after { content: '配'; position: absolute; right: 3px; bottom: 4px; color: #ab7210; font-size: 10px; }
 .gd-dock .dock-head { order: 0; }
@@ -59,7 +66,7 @@
     .gs-relation { top: 35px; font-size: 9px; }
     .gd-seat .rating-badge { display: none; }
     .gs-info { gap: 3px; font-size: 10px; }
-    .gd-center { width: calc(100% - 155px); top: 62%; }
+    .gd-center { width: calc(100% - 155px); top: 64%; }
     .gd-standing-by { font-size: 11px; }
     .gcard { width: 52px; height: 74px; padding: 6px; }
     .gc-rank { font-size: 19px; }

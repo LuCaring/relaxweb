@@ -34,6 +34,7 @@ async def views():
     for game in ('mahjong', 'guandan'):
         room = create_room(game, room_id=1, name='周末好友桌', owner='p0', buy_in=200, blind=1)
         for i in range(4): room.add_member('p'+str(i), 200)
+        room.player_avatar = lambda username: 'https://example.test/' + username + '.png'
         async def noop(*args, **kwargs): pass
         room.broadcast_views = room.broadcast_payload = room.on_rooms_changed = noop
         await room.start()
@@ -96,10 +97,8 @@ console.log(`PASS Python/JavaScript parity for ${fixtures.cases.length} hands an
   }
   const actions = () => page.evaluate(()=>window.sent.filter(m=>m.type==='poker_action'));
   await setRoom('guandan');
-  assert.equal(await page.locator('#desktopRoomChat').count(), 0);
-  await page.getByRole('button',{name:'💬 聊天',exact:true}).click();
-  await page.locator('#chatOverlay').waitFor();
-  await page.locator('.chat-overlay-close').click();
+  assert.equal(await page.locator('#desktopRoomChat.compact-room-chat').count(), 1);
+  assert.equal(await page.locator('.gd-seat .casual-avatar img').count(), 4);
   await page.getByRole('button',{name:'♠7',exact:true}).click();
   await page.getByRole('button',{name:'♥7',exact:true}).click();
   assert.match(await page.locator('.gd-selection-status').innerText(), /对子 7/);
@@ -120,7 +119,27 @@ console.log(`PASS Python/JavaScript parity for ${fixtures.cases.length} hands an
   await setRoom('guandan', {paused:true});
   assert.equal(await page.locator('.gd-hand-card:enabled,.gd-dock .action-btn:enabled').count(), 0);
 
+  await setRoom('guandan', {your_hand:[{r:16,s:4},{r:17,s:4}]});
+  assert.equal(await page.locator('.joker-small .gc-joker-icon').innerText(), '🃏');
+  assert.equal(await page.locator('.joker-big .gc-joker-icon').innerText(), '🃏');
+  assert.notEqual(await page.locator('.joker-small .gc-joker-icon').evaluate(e=>getComputedStyle(e).filter), 'none');
+  assert.notEqual(await page.locator('.joker-big .gc-joker-icon').evaluate(e=>getComputedStyle(e).filter), 'none');
+  if(process.env.TABLE_SCREENSHOT_DIR) await page.screenshot({path:path.join(process.env.TABLE_SCREENSHOT_DIR,'guandan-jokers.png'),fullPage:true});
+
+  await setRoom('guandan', {players:fixtures.rooms.guandan.players.map((p,i)=>({...p,passed:i===1}))});
+  assert.equal(await page.evaluate(()=>{
+   const a=document.querySelector('.gd-seat.pos-left .gs-pass')?.getBoundingClientRect();
+   const b=document.querySelector('.gd-standing-cards')?.getBoundingClientRect();
+   return Boolean(a&&b&&a.left<b.right&&a.right>b.left&&a.top<b.bottom&&a.bottom>b.top);
+  }),false,'player status must not overlap played cards');
+
+  await setRoom('guandan', {status:'waiting'});
+  assert.equal(await page.locator('#desktopRoomChat:not(.compact-room-chat)').count(),1,
+    'guandan waiting room restores full desktop chat');
+
   await setRoom('mahjong');
+  assert.equal(await page.locator('#desktopRoomChat.compact-room-chat').count(), 1);
+  assert.equal(await page.locator('.mj-player-head .casual-avatar img').count(), 4);
   await page.getByRole('button',{name:'9筒',exact:true}).click();
   assert.equal(await page.locator('.mj-act.primary').innerText(), '打出 9筒');
   await page.getByRole('button',{name:'1万',exact:true}).click();
@@ -140,12 +159,24 @@ console.log(`PASS Python/JavaScript parity for ${fixtures.cases.length} hands an
   assert.equal(await page.locator('.mj-act:enabled').count(),0);
   await setRoom('mahjong', {phase:'claim',paused:true,your_options:{claim:{peng:true,hu:true}}});
   assert.equal(await page.locator('.mj-act:enabled,.mj-hand-card:enabled').count(),0);
+  await setRoom('mahjong', {status:'waiting'});
+  assert.equal(await page.locator('#desktopRoomChat:not(.compact-room-chat)').count(),1,
+    'mahjong waiting room restores full desktop chat');
 
   for(const game of ['mahjong','guandan']) {
    for(const [width,height] of [[320,568],[390,844],[844,390],[1024,768],[1440,900]]) {
     await page.setViewportSize({width,height});
+    await page.waitForTimeout(20);
     const largeHand = Array.from({length:27},(_,i)=>({r:2+i%13,s:i%4}));
     await setRoom(game, game==='guandan' ? {your_hand:largeHand} : {});
+    assert.equal(await page.locator('#desktopRoomChat.compact-room-chat').count(),width>=1024?1:0,
+      `${game} ${width}px compact chat visibility`);
+    if(width>=1024) {
+     const chatBox=await page.locator('#desktopRoomChat').boundingBox();
+     assert.ok(chatBox&&chatBox.x>=0&&chatBox.y>=0&&chatBox.x+chatBox.width<=width
+       &&chatBox.y+chatBox.height<=height,
+       `${game} ${width}px compact chat stays in viewport: ${JSON.stringify(chatBox)}`);
+    }
     const geom = await page.evaluate(game=>{
      const boxes=[...document.querySelectorAll(game==='mahjong'?'.mj-river':'.gd-seat')].map(e=>e.getBoundingClientRect());
      return {overflow:document.documentElement.scrollWidth>innerWidth,
@@ -163,6 +194,8 @@ console.log(`PASS Python/JavaScript parity for ${fixtures.cases.length} hands an
     });
     assert.equal(await page.locator(selector).evaluate(e=>e.scrollLeft),before,`${game} selection preserves scroll`);
     assert.equal(await page.evaluate(()=>core.state.hallDeadlineAt),deadline,`${game} selection preserves countdown`);
+    if(width>=1024) assert.ok(await page.locator('#desktopRoomChat').isVisible(),
+      `${game} selection preserves compact chat`);
     if(process.env.TABLE_SCREENSHOT_DIR) await page.screenshot({path:path.join(process.env.TABLE_SCREENSHOT_DIR,`${game}-${width}.png`),fullPage:true});
    }
   }
@@ -170,6 +203,10 @@ console.log(`PASS Python/JavaScript parity for ${fixtures.cases.length} hands an
    for (const [width, height] of [[320,568], [844,390], [1440,900]]) {
     await page.setViewportSize({width,height});
     await setRoom(game + '_aborted');
+    if(width>=1024) {
+     assert.equal(await page.locator('#desktopRoomChat:not(.compact-room-chat)').count(),1,
+       `${game} settlement restores full desktop chat`);
+    }
     assert.match(await page.locator('.game-card-page').first().innerText(), /作废/);
     assert.equal(await page.getByRole('button',{name:'结算并再来一局',exact:true}).isEnabled(), false);
     const dissolve = page.getByRole('button',{name:'结算并解散房间',exact:true});
@@ -185,6 +222,10 @@ console.log(`PASS Python/JavaScript parity for ${fixtures.cases.length} hands an
   }
   await page.setViewportSize({width:320,height:568});
   await setRoom('mahjong');
+  assert.equal(await page.locator('#desktopRoomChat').count(),0);
+  await page.getByRole('button',{name:'打开聊天',exact:true}).click();
+  await page.locator('#chatOverlay').waitFor();
+  await page.locator('.chat-overlay-close').click();
   await page.getByRole('button',{name:'牌河',exact:true}).click();
   assert.equal(await page.locator('.mj-river-overlay').evaluate(e=>e.scrollWidth>e.clientWidth),false);
   await page.getByRole('button',{name:'✕ 关闭',exact:true}).click();

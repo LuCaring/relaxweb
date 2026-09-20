@@ -93,6 +93,22 @@ export function ratingBadge(rating) {
   return badge;
 }
 
+export function playerAvatarNode(player, className = "casual-avatar") {
+  const avatar = document.createElement("div");
+  avatar.className = className;
+  const label = player?.nickname || player?.username || "玩家";
+  if (player?.avatar) {
+    const image = document.createElement("img");
+    image.src = player.avatar;
+    image.alt = `${label}的头像`;
+    image.loading = "lazy";
+    avatar.append(image);
+  } else {
+    avatar.textContent = label.slice(0, 1).toUpperCase();
+  }
+  return avatar;
+}
+
 export function formatClock(epochSeconds) {
   const date = new Date(epochSeconds * 1000);
   const pad = (n) => String(n).padStart(2, "0");

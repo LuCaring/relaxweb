@@ -2,7 +2,7 @@
    牌型判定逻辑与 games/guandan.py 保持一致：客户端只做预校验和提示，
    服务器仍是唯一裁判。 */
 
-import { displayNameOf, elements, formatCoins, ratingBadge, renderGameView, requestProfile, send, startHallTicker, state } from "../core.js";
+import { displayNameOf, elements, formatCoins, playerAvatarNode, ratingBadge, renderGameView, requestProfile, send, startHallTicker, state } from "../core.js";
 import { registerGame } from "../registry.js";
 import { openChatOverlay, reapplySeatBubbles } from "../room-chat.js";
 
@@ -322,13 +322,18 @@ function gcardNode(card, opts = {}) {
   const rank = document.createElement("span");
   rank.className = "gc-rank";
   if (card.s === 4) {
-    rank.textContent = "王";
+    const big = card.r === 17;
+    node.classList.add("joker-card", big ? "joker-big" : "joker-small");
+    rank.classList.add("gc-joker-icon");
+    rank.textContent = "🃏";
+    node.title = big ? "大王" : "小王";
   } else {
     rank.textContent = RANK_CHARS[card.r] || String(card.r);
   }
   const suit = document.createElement("span");
   suit.className = "gc-suit";
-  suit.textContent = card.s === 4 ? (card.r === 17 ? "大" : "小") : SUIT_CHARS[card.s];
+  if (card.s === 4) suit.classList.add("gc-joker-label");
+  suit.textContent = card.s === 4 ? (card.r === 17 ? "大王" : "小王") : SUIT_CHARS[card.s];
   node.append(rank, suit);
   return node;
 }
@@ -419,9 +424,7 @@ function seatNode(p) {
   dot.className = "gs-team-dot";
   dot.title = TEAM_NAMES[team];
   name.append(dot, document.createTextNode(p.nickname));
-  const avatar = document.createElement("div");
-  avatar.className = "casual-avatar";
-  avatar.textContent = (p.nickname || p.username).slice(0, 1);
+  const avatar = playerAvatarNode(p);
   const relation = document.createElement("span");
   relation.className = "gs-relation";
   relation.textContent = p.username === state.currentUser?.username ? "我"
@@ -818,7 +821,7 @@ function renderGuandanTable() {
 ========================================================= */
 
 registerGame("guandan", {
-  overlayChat: true,
+  compactDesktopChat: true,
   stakeLabel: "底注",
   blindLabel: "下一局底注",
   waitingHint: "掼蛋需要正好 4 名玩家：座位间隔的两人自动一队。等待房主开局，中途退出本局作废、筹码原封退回。",

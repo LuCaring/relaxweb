@@ -1712,6 +1712,7 @@ def attach_host(room):
     room.on_dissolve_requested = on_dissolve_requested
     room.on_rebuy_requested = on_rebuy_requested
     room.display_name = display_name
+    room.player_avatar = lambda username: get_profile(username)["avatar"]
     room.set_escrow = sync_escrow
     room.player_rating = get_rating
     room.pending_rating_updates = set()

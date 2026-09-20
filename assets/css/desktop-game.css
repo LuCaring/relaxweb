@@ -68,6 +68,33 @@
         padding: 0 14px;
         cursor: pointer;
     }
+    .game-in-room:has(.casual-page) .desktop-room-chat.compact-room-chat {
+        position: absolute;
+        z-index: 30;
+        right: clamp(12px, 2.2vw, 32px);
+        bottom: clamp(128px, 17vh, 168px);
+        top: auto;
+        width: clamp(250px, 21vw, 310px);
+        height: clamp(180px, 25vh, 230px);
+        min-height: 0;
+        border-color: #9eb9d544;
+        border-radius: 14px;
+        background: #102d4df2;
+        color: #edf4ff;
+        box-shadow: 0 12px 36px #06182f66;
+        backdrop-filter: blur(10px);
+    }
+    .compact-room-chat .chat-overlay-head { padding: 10px 12px; color: #edf4ff; }
+    .compact-room-chat .chat-overlay-head::after { content: "全桌可见"; color: #9fb7d2; }
+    .compact-room-chat .room-chat-list { padding: 0 12px; }
+    .compact-room-chat .room-chat-list:empty::before { padding: 18px 6px; color: #9fb7d2; }
+    .compact-room-chat .rc-message { margin: 9px 0; }
+    .compact-room-chat .rc-name { color: #ffdc8b; }
+    .compact-room-chat .rc-time { color: #8ea8c6; }
+    .compact-room-chat .rc-text { color: #edf4ff; }
+    .compact-room-chat .chat-overlay-composer { padding: 9px; border-color: #ffffff18; }
+    .compact-room-chat .chat-input { padding: 8px 10px; border-color: #ffffff22; background: #ffffff12; color: #fff; }
+    .compact-room-chat .send-button { padding-inline: 11px; background: #3e7baa; }
     .game-in-room .chat-open-row,
     .game-in-room .dock-chat-toggle { display: none; }
     .poker-page { gap: 16px; }

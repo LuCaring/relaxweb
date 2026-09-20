@@ -60,6 +60,7 @@ class BaseRoom:
         broadcast_views()            给每个成员连接发送其私有视图
         on_rooms_changed()           房间列表发生变化时通知宿主广播
         display_name(username)       用户名 -> 展示昵称
+        player_avatar(username)      读取公开头像 URL
         set_escrow(username, amount) 筹码变动后同步托管（宿主写数据库）
         player_rating(username)     读取公开段位
         record_ratings(id, starts, endings, stakes=None, statistics=None)
@@ -91,6 +92,7 @@ class BaseRoom:
         self.on_dissolve_requested = None   # async (reason) -> None，宿主注入
         self.on_rebuy_requested = None      # async () -> None，宿主注入
         self.display_name = lambda username: username
+        self.player_avatar = lambda username: ""
         self.set_escrow = lambda username, amount: None
         self.player_rating = lambda username: None
         self.record_ratings = lambda hand_id, starts, endings, stakes=None, statistics=None: {}

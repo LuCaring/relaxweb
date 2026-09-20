@@ -718,6 +718,7 @@ class MahjongRoom(BaseRoom):
             view["players"].append({
                 "username": name,
                 "nickname": self.display_name(name),
+                "avatar": self.player_avatar(name),
                 "stack": member["stack"],
                 "rating": self.player_rating(name),
                 "in_hand": in_hand,
