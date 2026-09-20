@@ -50,6 +50,7 @@ export function openMiningGame(root, run) {
     <button class="minigame-exit" type="button">带着收获离开</button>`;
   root.append(layer);
   const grid = layer.querySelector(".mine-grid"); let active = true; let busy = false; let loot = run.loot || {};
+  grid.style.setProperty("--mine-size", String(run.size));
   const lootLine = layer.querySelector("[data-loot]");
   renderLoot(lootLine, loot, "背包还是空的");
   for (let index = 0; index < run.size * run.size; index += 1) {

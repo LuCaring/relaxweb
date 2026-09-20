@@ -157,6 +157,7 @@ class EstateFrontendTests(unittest.TestCase):
 
         # 矿壁格数来自本次矿局下发的边长，不再写死 25
         self.assertIn("run.size * run.size", mining)
+        self.assertIn('setProperty("--mine-size", String(run.size))', mining)
         self.assertNotIn("index < 25", mining)
 
         # 规则层只按传入的规则推进，且不 import 任何 estate 模块

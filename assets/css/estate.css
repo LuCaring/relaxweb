@@ -162,8 +162,8 @@ body.estate-active .game-container { width: 100%; max-width: none; height: 100dv
 .mine-timbers i { position: absolute; width: 9px; height: 9px; border-radius: 50%; background: #b68b55; box-shadow: inset 2px 2px #ead083; }
 .mine-timbers i:nth-child(1) { left: -20px; top: 5%; }.mine-timbers i:nth-child(2) { right: -20px; top: 5%; }.mine-timbers i:nth-child(3) { left: -20px; bottom: 3%; }
 .mine-status { position: absolute; z-index: 3; left: 50%; top: 96px; transform: translateX(-50%); width: min(520px, calc(100% - 24px)); display: flex; justify-content: space-between; padding: 9px 13px; color: #f9e5b5; background: #25232dcc; border: 2px solid #a28a6b; border-radius: 7px; }
-.mine-grid { position: absolute; z-index: 2; left: 50%; top: 55%; transform: translate(-50%, -50%); display: grid; grid-template-columns: repeat(5, 1fr); gap: 7px; width: min(520px, calc(100vw - 28px)); aspect-ratio: 1; padding: 12px; background: #26242c; border: 5px solid #6d5140; border-radius: 12px; box-shadow: inset 0 0 0 4px #17171d, inset 0 0 36px #08090d, 0 12px 40px #000a; }
-.mine-cell { position: relative; overflow: hidden; color: #ffdc80; background: linear-gradient(145deg, var(--mine-rock-light), var(--mine-rock) 43%, var(--mine-rock-dark)); border: 3px solid #211f27; border-radius: 9px 5px 8px 4px; box-shadow: inset 4px 4px #ffffff17, inset -5px -5px #11131a55, 0 3px 0 #15151b; font-size: clamp(17px, 4vw, 32px); font-weight: 900; cursor: pointer; text-shadow: 0 2px #17131b; }
+.mine-grid { position: absolute; z-index: 2; left: 50%; top: 55%; transform: translate(-50%, -50%); display: grid; grid-template-columns: repeat(var(--mine-size, 5), minmax(0, 1fr)); grid-template-rows: repeat(var(--mine-size, 5), minmax(0, 1fr)); gap: 7px; width: min(520px, calc(100vw - 28px)); aspect-ratio: 1; padding: 12px; background: #26242c; border: 5px solid #6d5140; border-radius: 12px; box-shadow: inset 0 0 0 4px #17171d, inset 0 0 36px #08090d, 0 12px 40px #000a; }
+.mine-cell { position: relative; display: grid; place-items: center; width: 100%; height: 100%; min-width: 0; min-height: 0; padding: 0; overflow: hidden; color: #ffdc80; background: linear-gradient(145deg, var(--mine-rock-light), var(--mine-rock) 43%, var(--mine-rock-dark)); border: 3px solid #211f27; border-radius: 9px 5px 8px 4px; box-shadow: inset 4px 4px #ffffff17, inset -5px -5px #11131a55, 0 3px 0 #15151b; font-size: clamp(17px, 4vw, 32px); font-weight: 900; cursor: pointer; text-shadow: 0 2px #17131b; }
 .mine-cell::before, .mine-cell::after { content: ""; position: absolute; height: 3px; background: #1e202788; transform: rotate(28deg); }
 .mine-cell::before { width: 52%; left: 8%; top: 30%; }.mine-cell::after { width: 38%; right: 9%; bottom: 28%; transform: rotate(-35deg); }
 .mine-cell i { position: absolute; width: 5px; height: 4px; transform: rotate(35deg); background: color-mix(in srgb, var(--mine-glow) 65%, #8f8b83); box-shadow: 0 0 5px color-mix(in srgb, var(--mine-glow) 45%, transparent); }
@@ -172,7 +172,8 @@ body.estate-active .game-container { width: 100%; max-width: none; height: 100dv
 .mine-cell.vein-1::after { background: color-mix(in srgb, var(--mine-glow) 45%, #312d35); }
 .mine-cell.striking { animation: rock-shake .16s infinite; }
 .mine-cell.revealed { background: #252630; box-shadow: inset 0 0 14px #11131b; animation: rock-open .3s both; }
-.mine-cell.revealed > img { position: relative; z-index: 2; width: 64%; height: 64%; object-fit: contain; image-rendering: pixelated; filter: drop-shadow(0 3px 0 #0006); }
+.mine-cell.revealed > img { position: relative; z-index: 2; grid-area: 1 / 1; width: 64%; height: 64%; object-fit: contain; image-rendering: pixelated; filter: drop-shadow(0 3px 0 #0006); }
+.mine-cell.revealed .mine-asset-fallback { grid-area: 1 / 1; }
 .mine-cell[data-asset-ready="true"] .mine-asset-fallback { display: none; }
 .mine-loot-item { display: inline-flex; align-items: center; gap: 3px; margin-right: 8px; white-space: nowrap; }
 .mine-loot-item img { width: 20px; height: 20px; object-fit: contain; image-rendering: pixelated; }
