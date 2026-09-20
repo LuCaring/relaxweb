@@ -218,8 +218,17 @@ def enumerate_shapes(nat, nat_suit, wilds, total, levels, wild_rank=None):
     return shapes
 
 
+def _display_ranks(shape):
+    """牌面展示顺序：三带二先三张后对子，其余组合按点数分组。"""
+    ranks = sorted(shape["needs"])
+    if shape["type"] == "triple_pair":
+        triple_rank = shape["main"][1]
+        return [triple_rank] + [rank for rank in ranks if rank != triple_rank]
+    return ranks
+
+
 def _realize(shape, nats, wild_cards, levels):
-    """给 shape 分配具体牌：先自然牌，缺口用万能牌补；凑不齐返回 None。"""
+    """给 shape 分配具体牌，并按牌型结构排列；缺口就地用万能牌补。"""
     if shape["type"] == "bomb":
         nats = nats + wild_cards
         wild_cards = []
@@ -227,21 +236,29 @@ def _realize(shape, nats, wild_cards, levels):
     if shape["suit"] is None:
         for card in nats:
             pool.setdefault(card["r"], []).append(card)
-        picked = []
-        for rank, need in shape["needs"].items():
-            picked.extend(pool.get(rank, [])[:need])
     else:
         suit = shape["suit"]
         for card in nats:
             pool.setdefault((card["r"], card["s"]), []).append(card)
-        picked = []
-        for rank, need in shape["needs"].items():
-            picked.extend(pool.get((rank, suit), [])[:need])
-    short = shape["len"] - len(picked)
-    if short > len(wild_cards):
+
+    picked = []
+    wild_index = 0
+    for rank in _display_ranks(shape):
+        need = shape["needs"][rank]
+        key = rank if shape["suit"] is None else (rank, shape["suit"])
+        natural = sorted(pool.get(key, [])[:need], key=lambda c: (c["s"], c["r"]))
+        picked.extend(natural)
+        short = need - len(natural)
+        if wild_index + short > len(wild_cards):
+            return None
+        picked.extend(wild_cards[wild_index:wild_index + short])
+        wild_index += short
+
+    # 万能牌单出时 needs 为空，仍需把这张牌放进结果。
+    remaining = shape["len"] - len(picked)
+    if remaining > len(wild_cards) - wild_index:
         return None
-    picked.extend(wild_cards[:short])
-    picked.sort(key=lambda c: (c["s"], c["r"]))
+    picked.extend(wild_cards[wild_index:wild_index + remaining])
     return {"type": shape["type"], "tier": shape["tier"], "main": shape["main"],
             "len": shape["len"], "label": combo_label(shape), "cards": picked}
 

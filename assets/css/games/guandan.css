@@ -27,6 +27,9 @@
 .gd-center { position: absolute; left: 50%; top: 66%; transform: translate(-50%, -50%); width: calc(100% - 300px); max-width: 650px; display: flex; flex-direction: column; align-items: center; gap: 12px; }
 .gd-standing-cards { display: flex; justify-content: safe center; max-width: 100%; overflow-x: auto; padding: 5px; }
 .gd-standing-cards .gcard + .gcard { margin-left: -20px; }
+.gd-standing-cards.combo-triple_pair .gcard:nth-child(4),
+.gd-standing-cards.combo-pairs_seq .gcard:nth-child(2n + 3),
+.gd-standing-cards.combo-triple_seq .gcard:nth-child(3n + 4) { margin-left: -8px; }
 .gd-standing-by, .gd-free-lead { font-size: 13px; color: #ffdf95; text-align: center; }
 .gd-free-lead { color: #c1d5ed; }
 .gcard { position: relative; display: inline-flex; flex: none; flex-direction: column; align-items: flex-start; justify-content: flex-start; width: 64px; height: 88px; padding: 8px; border: 1px solid #d0d9e4; border-radius: 8px; background: linear-gradient(135deg, #fff, #f1f5fa); box-shadow: 0 3px 5px #08203c44; color: #1d2838; font-weight: 800; line-height: 1.1; }

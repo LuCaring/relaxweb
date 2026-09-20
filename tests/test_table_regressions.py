@@ -81,6 +81,26 @@ class TableState(unittest.IsolatedAsyncioTestCase):
         standing = room.view_for("b")["standing"]
         self.assertEqual((standing["tier"], standing["main"], standing["len"]), (0, [1, 7], 1))
 
+    def test_guandan_combos_are_ordered_by_structure(self):
+        cases = [
+            ([card(9, 0), card(7, 0), card(9, 1), card(7, 1), card(9, 2)],
+             [9, 9, 9, 7, 7]),
+            ([card(3, 0), card(4, 0), card(5, 0), card(3, 1), card(4, 1), card(5, 1)],
+             [3, 3, 4, 4, 5, 5]),
+            ([card(3, 0), card(4, 0), card(3, 1), card(4, 1), card(3, 2), card(4, 2)],
+             [3, 3, 3, 4, 4, 4]),
+            ([card(7, 2), card(3, 0), card(6, 0), card(4, 1), card(5, 3)],
+             [3, 4, 5, 6, 7]),
+        ]
+        for cards, expected in cases:
+            actual = resolve_combo(cards, None, {2})
+            self.assertEqual([item["r"] for item in actual["cards"]], expected)
+
+        wild = card(8, 1)
+        actual = resolve_combo(
+            [card(3, 0), card(7, 0), card(3, 1), card(7, 2), wild], 8, {8})
+        self.assertEqual([item["r"] for item in actual["cards"]], [7, 7, 8, 3, 3])
+
     async def test_casual_game_views_include_player_avatars(self):
         for game in ("guandan", "mahjong"):
             room = await room_for(game)

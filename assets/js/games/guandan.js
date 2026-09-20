@@ -183,6 +183,15 @@ function comboLabel(shape) {
   return `${name} ${mainChar(shape.main)}`;
 }
 
+function displayRanks(shape) {
+  const ranks = Object.keys(shape.needs).map(Number).sort((a, b) => a - b);
+  if (shape.type === "triple_pair") {
+    const tripleRank = shape.main % 20;
+    return [tripleRank, ...ranks.filter((rank) => rank !== tripleRank)];
+  }
+  return ranks;
+}
+
 function realizeShape(shape, cards, wildRank) {
   const wildCards = shape.type === "bomb" ? [] : cards.filter((c) => isWildCard(c, wildRank));
   const natural = cards.filter((c) => !isWildCard(c, wildRank));
@@ -202,13 +211,21 @@ function realizeShape(shape, cards, wildRank) {
     }
   }
   const picked = [];
-  for (const [rank, need] of Object.entries(shape.needs)) {
-    const key = shape.suit === null ? Number(rank) : `${rank}:${shape.suit}`;
-    picked.push(...(pool.get(key) || []).slice(0, need));
+  let wildIndex = 0;
+  for (const rank of displayRanks(shape)) {
+    const need = shape.needs[rank];
+    const key = shape.suit === null ? rank : `${rank}:${shape.suit}`;
+    const naturalCards = (pool.get(key) || []).slice(0, need)
+      .sort((a, b) => a.s - b.s || a.r - b.r);
+    picked.push(...naturalCards);
+    const short = need - naturalCards.length;
+    if (wildIndex + short > wildCards.length) return null;
+    picked.push(...wildCards.slice(wildIndex, wildIndex + short));
+    wildIndex += short;
   }
-  if (shape.len - picked.length > wildCards.length) return null;
-  picked.push(...wildCards.slice(0, shape.len - picked.length));
-  picked.sort((a, b) => a.s - b.s || a.r - b.r);
+  const remaining = shape.len - picked.length;
+  if (remaining > wildCards.length - wildIndex) return null;
+  picked.push(...wildCards.slice(wildIndex, wildIndex + remaining));
   return { type: shape.type, tier: shape.tier, main: shape.main, len: shape.len,
     label: comboLabel(shape), cards: picked };
 }
@@ -311,8 +328,17 @@ function wildRankForMe() {
   return (room.levels || [2, 2])[team];
 }
 
+function wildRankForPlayer(username) {
+  const room = state.myRoom;
+  if (!room.rules?.wild) return null;
+  const player = room.players?.find((item) => item.username === username);
+  return (room.levels || [2, 2])[player?.team ?? 0];
+}
+
 function gcardNode(card, opts = {}) {
   const node = document.createElement("span");
+  node.dataset.rank = card.r;
+  node.dataset.suit = card.s;
   const red = card.s === 1 || card.s === 2 || card.r === 17;
   node.className = `gcard${red ? " red" : ""}${opts.small ? " small" : ""}${opts.picked ? " picked" : ""}`;
   if (opts.wild) {
@@ -486,8 +512,13 @@ function centerNode() {
   if (standing) {
     const cards = document.createElement("div");
     cards.className = "gd-standing-cards";
+    cards.classList.add(`combo-${standing.type}`);
+    const standingWildRank = wildRankForPlayer(standing.by);
     for (const card of standing.cards || []) {
-      cards.append(gcardNode(card, { small: (standing.cards || []).length > 8 }));
+      cards.append(gcardNode(card, {
+        small: (standing.cards || []).length > 8,
+        wild: isWildCard(card, standingWildRank),
+      }));
     }
     const by = document.createElement("div");
     by.className = "gd-standing-by";

@@ -75,6 +75,13 @@ for (const fixture of fixtures.cases) {
   const moveKeys = list => Array.from(list, move=>JSON.stringify(normalize(move))).sort();
   assert.deepEqual(moveKeys(moves), moveKeys(fixture.moves));
 }
+for (const [cards, expected] of [
+ [[{r:9,s:0},{r:7,s:0},{r:9,s:1},{r:7,s:1},{r:9,s:2}],[9,9,9,7,7]],
+ [[{r:3,s:0},{r:4,s:0},{r:5,s:0},{r:3,s:1},{r:4,s:1},{r:5,s:1}],[3,3,4,4,5,5]],
+ [[{r:3,s:0},{r:4,s:0},{r:3,s:1},{r:4,s:1},{r:3,s:2},{r:4,s:2}],[3,3,3,4,4,4]],
+]) {
+  assert.deepEqual(Array.from(context.rules.resolveCombo(cards,null,[2]).cards,c=>c.r),expected);
+}
 console.log(`PASS Python/JavaScript parity for ${fixtures.cases.length} hands and standing combinations`);
 
 (async()=>{
@@ -132,6 +139,19 @@ console.log(`PASS Python/JavaScript parity for ${fixtures.cases.length} hands an
    const b=document.querySelector('.gd-standing-cards')?.getBoundingClientRect();
    return Boolean(a&&b&&a.left<b.right&&a.right>b.left&&a.top<b.bottom&&a.bottom>b.top);
   }),false,'player status must not overlap played cards');
+
+  await setRoom('guandan', {
+   levels:[8,8],
+   standing:{by:'p3',type:'triple_pair',tier:0,main:[2,7],len:5,label:'三带二 7',
+    cards:[{r:7,s:0},{r:7,s:2},{r:8,s:1},{r:3,s:0},{r:3,s:1}]},
+  });
+  assert.deepEqual(await page.locator('.gd-standing-cards .gcard').evaluateAll(cards=>
+    cards.map(card=>Number(card.dataset.rank))),[7,7,8,3,3]);
+  assert.equal(await page.locator('.gd-standing-cards .gcard.wild').count(),1,
+    'played wild card remains marked inside its represented group');
+  if(process.env.TABLE_SCREENSHOT_DIR) await page.screenshot({
+   path:path.join(process.env.TABLE_SCREENSHOT_DIR,'guandan-triple-pair.png'),fullPage:true,
+  });
 
   await setRoom('guandan', {status:'waiting'});
   assert.equal(await page.locator('#desktopRoomChat:not(.compact-room-chat)').count(),1,
