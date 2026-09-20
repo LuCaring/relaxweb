@@ -351,8 +351,13 @@ function gcardNode(card, opts = {}) {
   if (card.s === 4) {
     const big = card.r === 17;
     node.classList.add("joker-card", big ? "joker-big" : "joker-small");
-    rank.classList.add("gc-joker-icon");
-    rank.textContent = "🃏";
+    rank.classList.add("gc-joker-rank");
+    const icon = document.createElement("img");
+    icon.className = "gc-joker-icon";
+    icon.src = "assets/cards/joker-flat.png";
+    icon.alt = "";
+    icon.draggable = false;
+    rank.append(icon);
     node.title = big ? "大王" : "小王";
   } else {
     rank.textContent = RANK_CHARS[card.r] || String(card.r);
@@ -451,7 +456,8 @@ function seatNode(p) {
   dot.className = "gs-team-dot";
   dot.title = TEAM_NAMES[team];
   name.append(dot, document.createTextNode(p.nickname));
-  const avatar = playerAvatarNode(p);
+  const avatar = playerAvatarNode(p.username === state.currentUser?.username
+    ? { ...p, avatar: p.avatar || state.currentUser.avatar || "" } : p);
   const relation = document.createElement("span");
   relation.className = "gs-relation";
   relation.textContent = p.username === state.currentUser?.username ? "我"
@@ -706,7 +712,7 @@ function renderGuandanTable() {
   table.className = "gd-table";
 
   const topbar = document.createElement("div");
-  topbar.className = "poker-topbar";
+  topbar.className = "gd-topbar";
   const levels = room.levels || [2, 2];
   const myTeam = room.my_team ?? 0;
   const levelText = [myTeam, 1 - myTeam].map((team) => RANK_CHARS[levels[team]] || levels[team]).join("对");
@@ -722,7 +728,7 @@ function renderGuandanTable() {
   table.append(levelsBarNode());
 
   const status = document.createElement("div");
-  status.className = "poker-status";
+  status.className = "gd-status";
   const la = room.last_action;
   status.textContent = la
     ? `${la.nickname} ${la.text}`

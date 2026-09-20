@@ -138,6 +138,12 @@ console.log(`PASS Python/JavaScript parity for ${fixtures.cases.length} hands an
   await setRoom('guandan');
   assert.equal(await page.locator('#desktopRoomChat.compact-room-chat').count(), 1);
   assert.equal(await page.locator('.gd-seat .casual-avatar img').count(), 4);
+  assert.deepEqual(await page.evaluate(()=>{
+   const avatar=document.querySelector('.gd-seat.me .casual-avatar').getBoundingClientRect();
+   const status=document.querySelector('.gd-status, .gd-table > .poker-status').getBoundingClientRect();
+   const arena=document.querySelector('.gd-arena').getBoundingClientRect();
+   return {ownAvatarVisible:avatar.width>0&&avatar.height>0,statusAboveCards:status.bottom<=arena.top};
+  }),{ownAvatarVisible:true,statusAboveCards:true},'own avatar remains visible and activity text stays above the playing area');
   await page.getByRole('button',{name:'♠7',exact:true}).click();
   await page.getByRole('button',{name:'♥7',exact:true}).click();
   assert.match(await page.locator('.gd-selection-status').innerText(), /对子 7/);
@@ -159,10 +165,15 @@ console.log(`PASS Python/JavaScript parity for ${fixtures.cases.length} hands an
   assert.equal(await page.locator('.gd-hand-card:enabled,.gd-dock .action-btn:enabled').count(), 0);
 
   await setRoom('guandan', {your_hand:[{r:16,s:4},{r:17,s:4}]});
-  assert.equal(await page.locator('.joker-small .gc-joker-icon').innerText(), '🃏');
-  assert.equal(await page.locator('.joker-big .gc-joker-icon').innerText(), '🃏');
+  await page.locator('.joker-big .gc-joker-icon').evaluate(img=>img.decode());
+  assert.equal(await page.locator('.joker-small .gc-joker-icon').getAttribute('src'), 'assets/cards/joker-flat.png');
+  assert.equal(await page.locator('.joker-big .gc-joker-icon').getAttribute('src'), 'assets/cards/joker-flat.png');
   assert.notEqual(await page.locator('.joker-small .gc-joker-icon').evaluate(e=>getComputedStyle(e).filter), 'none');
-  assert.notEqual(await page.locator('.joker-big .gc-joker-icon').evaluate(e=>getComputedStyle(e).filter), 'none');
+  assert.equal(await page.locator('.joker-big .gc-joker-icon').evaluate(e=>getComputedStyle(e).filter), 'none');
+  assert.ok(await page.locator('.joker-card').evaluateAll(cards=>cards.every(card=>{
+   const c=card.getBoundingClientRect(),i=card.querySelector('.gc-joker-icon').getBoundingClientRect();
+   return i.left-c.left<=9&&i.top-c.top<=9&&i.right<c.right-10;
+  })),'joker icons sit in the same upper-left corner as other card ranks');
   if(process.env.TABLE_SCREENSHOT_DIR) await page.screenshot({path:path.join(process.env.TABLE_SCREENSHOT_DIR,'guandan-jokers.png'),fullPage:true});
 
   await setRoom('guandan', {players:fixtures.rooms.guandan.players.map((p,i)=>({...p,passed:i===1}))});
@@ -226,6 +237,17 @@ console.log(`PASS Python/JavaScript parity for ${fixtures.cases.length} hands an
     await page.waitForTimeout(20);
     const largeHand = Array.from({length:27},(_,i)=>({r:2+i%13,s:i%4}));
     await setRoom(game, game==='guandan' ? {your_hand:largeHand} : {});
+    if(game==='guandan') {
+     assert.ok(await page.locator('.gd-seat.me .casual-avatar').isVisible(),`${width}px own avatar is visible`);
+     await setRoom(game,{your_hand:largeHand,last_action:{nickname:'很长的玩家昵称',text:'打出了三带二，现在等待下一位玩家出牌'}});
+     assert.ok(await page.evaluate(()=>{
+      const status=document.querySelector('.gd-status').getBoundingClientRect();
+      const arena=document.querySelector('.gd-arena').getBoundingClientRect();
+      const cards=document.querySelector('.gd-standing-cards').getBoundingClientRect();
+      const levels=document.querySelector('.gd-levels').getBoundingClientRect();
+      return levels.bottom<=status.top&&status.bottom<=arena.top&&status.bottom<=cards.top;
+     }),`${width}px long activity text stays above the cards`);
+    }
     assert.equal(await page.locator('#desktopRoomChat.compact-room-chat').count(),width>=1024?1:0,
       `${game} ${width}px compact chat visibility`);
     if(width>=1024) {
