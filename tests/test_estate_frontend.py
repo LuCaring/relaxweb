@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""小胖庄园前端装配与双端输入的静态契约。"""
+"""休闲庄园前端装配与双端输入的静态契约。"""
 from pathlib import Path
 import json
 import struct
@@ -68,9 +68,12 @@ class EstateFrontendTests(unittest.TestCase):
             self.assertEqual(png_size(root / "tools" / f"rod_{level}_icon.png"), (32, 32))
             self.assertEqual(png_size(root / "tools" / f"rod_{level}_held.png"), (16, 32))
         self.assertEqual(png_size(root / "player" / "character-sheet.png"), (889, 1769))
+        self.assertEqual(png_size(ROOT / "assets/estate/signs/estate-sign.png"), (2048, 768))
+        for building in ("seed-shop", "warehouse", "mine"):
+            self.assertEqual(png_size(ROOT / f"assets/estate/buildings/{building}.png"), (1536, 1024))
 
         attribution = self.read("assets/estate/ATTRIBUTION.md")
-        self.assertIn("小胖庄园原创像素素材", attribution)
+        self.assertIn("休闲庄园原创像素素材", attribution)
         assets = self.read("assets/js/estate/assets.js")
         self.assertIn('const ROOT = "assets/estate/xiaopang"', assets)
         for function in ("cropAsset", "catchAsset", "mineralAsset", "toolAsset", "inventoryAsset", "drawPlayerAsset"):
@@ -129,7 +132,7 @@ class EstateFrontendTests(unittest.TestCase):
         self.assertNotIn("Math.floor(elapsed)", fishing)
         self.assertIn("fishing-catch-card", fishing)
         self.assertIn("继续钓鱼", fishing)
-        self.assertIn("返回小胖钓场", fishing)
+        self.assertIn("返回静谧湖钓场", fishing)
         self.assertIn("estate_mine_cell", self.read("assets/js/estate/mining.js"))
         mining = self.read("assets/js/estate/mining.js")
         self.assertIn('bomb: "💣"', mining)
@@ -174,16 +177,48 @@ class EstateFrontendTests(unittest.TestCase):
         self.assertNotIn('active?.kind === "shop"', ui)
         self.assertNotIn("disabled ||=", ui)
 
-    def test_all_interactive_places_use_xiaopang_branding(self):
+    def test_all_interactive_places_use_neutral_branding(self):
         combined = "\n".join([
             self.read("assets/js/estate/map.js"),
             self.read("assets/js/estate/ui.js"),
             self.read("assets/js/estate/fishing.js"),
         ])
-        for name in ("小胖种子铺", "小胖谷仓", "小胖湖钓场", "小胖矿洞", "小胖农田"):
+        for name in ("种子铺", "仓库", "静谧湖钓场", "矿洞", "休闲农田"):
             self.assertIn(name, combined)
-        for old_name in ("露露种子铺", "丰收谷仓", "星石矿洞", "月牙湖钓场", "谷仓库存"):
-            self.assertNotIn(old_name, combined)
+        self.assertNotIn("小" + "胖", combined)
+
+    def test_estate_sign_uses_current_profile_username(self):
+        assets = self.read("assets/js/estate/assets.js")
+        estate_map = self.read("assets/js/estate/map.js")
+        store = self.read("estate/store.py")
+        self.assertIn('ESTATE_SIGN = "assets/estate/signs/estate-sign.png"', assets)
+        self.assertIn('estateStore.snapshot?.profile?.username', estate_map)
+        self.assertIn('const suffix = "的庄园"', estate_map)
+        self.assertIn('"username": username', store)
+
+    def test_visits_theft_notifications_and_twelve_plots_are_wired(self):
+        protocol = self.read("assets/js/estate/protocol.js")
+        estate_map = self.read("assets/js/estate/map.js")
+        ui = self.read("assets/js/estate/ui.js")
+        view = self.read("assets/js/estate/view.js")
+        server = self.read("chat_server.py")
+        for message in ("estate_list_visits", "estate_enter_visit", "estate_visit_move",
+                        "estate_steal_crop", "estate_notifications"):
+            self.assertIn(message, protocol + server)
+        self.assertIn("[530, 396]", estate_map)
+        self.assertIn("偷走全部收成", ui)
+        self.assertIn("拜访其他庄园", ui)
+        self.assertIn("返回我的庄园", view)
+        self.assertIn("estateStore.players", estate_map)
+
+    def test_custom_buildings_use_fixed_place_names(self):
+        assets = self.read("assets/js/estate/assets.js")
+        estate_map = self.read("assets/js/estate/map.js")
+        self.assertIn("BUILDING_ASSETS", assets)
+        for path in ("seed-shop.png", "warehouse.png", "mine.png"):
+            self.assertIn(path, assets)
+        for name in ('"种子铺"', '"仓库"', '"矿洞"'):
+            self.assertIn(name, estate_map)
 
     def test_javascript_parses(self):
         for path in (ROOT / "assets/js/estate").glob("*.js"):

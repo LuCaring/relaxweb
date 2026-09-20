@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""小胖庄园表结构与目录测试。"""
+"""休闲庄园表结构与目录测试。"""
 import sqlite3
 from pathlib import Path
 import sys
@@ -27,7 +27,7 @@ class EstateSchemaTests(unittest.TestCase):
             )
         }
         self.assertTrue({"estate_profiles", "estate_plots", "estate_inventory",
-                         "estate_actions"}.issubset(tables))
+                         "estate_actions", "estate_thefts"}.issubset(tables))
 
     def test_profile_rejects_invalid_values(self):
         for column, value in (("level", 0), ("xp", -1), ("warehouse_level", 0),

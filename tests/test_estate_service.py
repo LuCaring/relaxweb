@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""小胖庄园建档、快照和经济事务测试。"""
+"""休闲庄园建档、快照和经济事务测试。"""
 import sqlite3
 from pathlib import Path
 import sys
@@ -60,7 +60,7 @@ class EstateServiceTests(unittest.TestCase):
         second = self.call(estate_state, "alice", NOW + 20)
         other = self.call(estate_state, "bob", NOW)
         self.assertEqual(first["profile"]["plot_count"], 4)
-        self.assertEqual(len(first["plots"]), 8)
+        self.assertEqual(len(first["plots"]), 12)
         self.assertEqual(first["version"], second["version"])
         self.assertEqual(first["profile"]["warehouse_used"], 0)
         self.assertEqual(other["coins"], 500)

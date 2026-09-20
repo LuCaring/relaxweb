@@ -212,7 +212,7 @@
     },
     {
       "id": "xiaopang_grass",
-      "name": "小胖草",
+      "name": "神奇草",
       "atlas_indexes": [
         84,
         85,
@@ -222,7 +222,7 @@
     },
     {
       "id": "xiaopang_flower",
-      "name": "小胖花",
+      "name": "奇迹花",
       "atlas_indexes": [
         88,
         89,
@@ -359,29 +359,29 @@
     },
     {
       "id": "xiaopang_fish",
-      "name": "小胖鱼",
+      "name": "神秘鱼",
       "file": "fish/xiaopang_fish.png"
     }
   ],
   "collectibles": [
     {
       "id": "xiaopang_bottle",
-      "name": "小胖漂流瓶",
+      "name": "神秘漂流瓶",
       "file": "collectibles/xiaopang_bottle.png"
     },
     {
       "id": "xiaopang_button",
-      "name": "小胖的金纽扣",
+      "name": "遗失的金纽扣",
       "file": "collectibles/xiaopang_button.png"
     },
     {
       "id": "xiaopang_watch",
-      "name": "小胖旧怀表",
+      "name": "古旧怀表",
       "file": "collectibles/xiaopang_watch.png"
     },
     {
       "id": "xiaopang_underwear",
-      "name": "小胖的内裤",
+      "name": "一条不知道是谁的内裤",
       "file": "collectibles/xiaopang_underwear.png"
     }
   ],

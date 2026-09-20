@@ -1,6 +1,12 @@
 "use strict";
 
 const ROOT = "assets/estate/xiaopang";
+export const ESTATE_SIGN = "assets/estate/signs/estate-sign.png";
+export const BUILDING_ASSETS = {
+  shop: "assets/estate/buildings/seed-shop.png",
+  warehouse: "assets/estate/buildings/warehouse.png",
+  mining: "assets/estate/buildings/mine.png",
+};
 const CROP_STAGES = ["01_sprout", "02_seedling", "03_growing", "04_mature"];
 const imageCache = new Map();
 

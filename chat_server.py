@@ -45,6 +45,11 @@ from estate import (
     start_fishing as estate_start_fishing,
     start_mining as estate_start_mining,
     upgrade_tool as estate_upgrade_tool,
+    list_estates as estate_list_estates,
+    mark_notifications_read as estate_mark_notifications_read,
+    notifications as estate_notifications,
+    public_estate_state,
+    steal_crop as estate_steal_crop,
 )
 
 
@@ -78,6 +83,22 @@ history = deque(maxlen=50)
 register_ip_times = {}
 active_bet = None
 room_leave_timers = {}
+estate_channels = {}
+ESTATE_PLOT_POSITIONS = (
+    (330, 108), (430, 108), (530, 108), (330, 204),
+    (430, 204), (530, 204), (330, 300), (430, 300),
+    (530, 300), (330, 396), (430, 396), (530, 396),
+)
+ESTATE_BLOCKS = ((32, 24, 250, 168), (675, 30, 245, 160),
+                 (24, 326, 230, 155), (680, 302, 280, 298))
+
+
+def valid_estate_position(x, y):
+    if not (18 <= x <= 942 and 24 <= y <= 582):
+        return False
+    return not any(x + 12 > bx and x - 12 < bx + width
+                   and y + 12 > by and y - 12 < by + height
+                   for bx, by, width, height in ESTATE_BLOCKS)
 logger = logging.getLogger("live-chat")
 
 
@@ -839,6 +860,8 @@ async def handle_delete_account(websocket, state, data):
                      "(SELECT id FROM users WHERE username = ?)", (user["username"],))
         conn.execute("DELETE FROM lottery_draws WHERE user_id = "
                      "(SELECT id FROM users WHERE username = ?)", (user["username"],))
+        conn.execute("DELETE FROM estate_thefts WHERE owner_username=? OR visitor_username=?",
+                     (user["username"], user["username"]))
         for table in ("estate_actions", "estate_fishing_sessions", "estate_mining_runs",
                       "estate_tools", "estate_inventory", "estate_plots", "estate_profiles"):
             conn.execute(f"DELETE FROM {table} WHERE username = ?", (user["username"],))
@@ -1011,6 +1034,176 @@ async def publish_estate(username, snapshot, result=None, request_id=None):
             await _ws_send(socket, encoded)
 
 
+async def broadcast_estate_channel(owner, payload, exclude=None):
+    encoded = json.dumps(payload, ensure_ascii=False, separators=(",", ":"))
+    for socket in list(estate_channels.get(owner.lower(), set())):
+        if socket is exclude or socket not in clients:
+            continue
+        await _ws_send(socket, encoded)
+
+
+async def leave_estate_channel(websocket, state):
+    owner = state.pop("estate_owner", None)
+    if not owner:
+        return
+    members = estate_channels.get(owner.lower())
+    if members:
+        members.discard(websocket)
+        if not members:
+            estate_channels.pop(owner.lower(), None)
+    user = state.get("user")
+    if user:
+        await broadcast_estate_channel(owner, {
+            "type": "estate_visit_left", "username": user["username"],
+        }, exclude=websocket)
+
+
+async def join_estate_channel(websocket, state, owner):
+    await leave_estate_channel(websocket, state)
+    members = estate_channels.setdefault(owner.lower(), set())
+    players = []
+    for socket in list(members):
+        other_state = clients.get(socket, {})
+        other = other_state.get("user")
+        if other:
+            players.append({"username": other["username"],
+                            **other_state.get("estate_position", {"x": 275, "y": 440,
+                              "direction": "down", "walking": False})})
+    members.add(websocket)
+    state["estate_owner"] = owner
+    state["estate_position"] = {"x": 275, "y": 440, "direction": "down", "walking": False}
+    state["estate_position_at"] = time.monotonic()
+    user = state.get("user")
+    await broadcast_estate_channel(owner, {
+        "type": "estate_visit_joined", "username": user["username"],
+        **state["estate_position"],
+    }, exclude=websocket)
+    return players
+
+
+async def handle_estate_list_visits(websocket, state, data):
+    user = state.get("user")
+    if not user:
+        await send_json(websocket, {"type": "estate_error", "code": "auth_required", "message": "请先登录"})
+        return
+    try:
+        with database() as conn:
+            entries = estate_list_estates(conn, user["username"], data.get("query"), int(time.time()))
+        await send_json(websocket, {"type": "estate_visit_list", "estates": entries,
+                                    "request_id": data.get("request_id")})
+    except EstateError as error:
+        await send_json(websocket, {"type": "estate_error", "code": error.code,
+                                    "message": str(error), "request_id": data.get("request_id")})
+
+
+async def handle_estate_enter_visit(websocket, state, data):
+    user = state.get("user")
+    if not user:
+        await send_json(websocket, {"type": "estate_error", "code": "auth_required", "message": "请先登录"})
+        return
+    try:
+        with database() as conn:
+            snapshot = public_estate_state(conn, user["username"], data.get("owner_username"), int(time.time()))
+        players = await join_estate_channel(websocket, state, snapshot["owner_username"])
+        await send_json(websocket, {"type": "estate_visit_state", **snapshot,
+                                    "players": players, "request_id": data.get("request_id")})
+    except EstateError as error:
+        await send_json(websocket, {"type": "estate_error", "code": error.code,
+                                    "message": str(error), "request_id": data.get("request_id")})
+
+
+async def handle_estate_leave_visit(websocket, state, data):
+    await leave_estate_channel(websocket, state)
+    await send_json(websocket, {"type": "estate_visit_left_self", "request_id": data.get("request_id")})
+
+
+async def handle_estate_visit_move(websocket, state, data):
+    user = state.get("user")
+    owner = state.get("estate_owner")
+    if not user or not owner or rate_limited(state, "last_estate_move", .06):
+        return
+    try:
+        x, y = float(data.get("x")), float(data.get("y"))
+    except (TypeError, ValueError):
+        return
+    if not valid_estate_position(x, y):
+        return
+    previous = state.get("estate_position", {"x": x, "y": y})
+    moved = math.hypot(x - previous["x"], y - previous["y"])
+    now_mono = time.monotonic()
+    elapsed = max(.06, now_mono - state.get("estate_position_at", now_mono))
+    if moved > 220 * elapsed + 28:
+        return
+    direction = data.get("direction") if data.get("direction") in ("up", "down", "left", "right") else "down"
+    position = {"x": round(x, 1), "y": round(y, 1), "direction": direction,
+                "walking": bool(data.get("walking"))}
+    state["estate_position"] = position
+    state["estate_position_at"] = now_mono
+    await broadcast_estate_channel(owner, {"type": "estate_visit_moved",
+        "username": user["username"], **position}, exclude=websocket)
+
+
+async def handle_estate_steal_crop(websocket, state, data):
+    user = state.get("user")
+    owner = state.get("estate_owner")
+    request_id = data.get("request_id")
+    if not user:
+        await send_json(websocket, {"type": "estate_error", "code": "auth_required", "message": "请先登录", "request_id": request_id})
+        return
+    if not owner or owner.lower() != str(data.get("owner_username") or "").lower():
+        await send_json(websocket, {"type": "estate_error", "code": "not_visiting", "message": "未在目标庄园内", "request_id": request_id})
+        return
+    try:
+        plot_id = int(data.get("plot_id"))
+        plot_x, plot_y = ESTATE_PLOT_POSITIONS[plot_id]
+        position = state.get("estate_position", {})
+        if math.hypot(float(position.get("x", -999)) - (plot_x + 41),
+                      float(position.get("y", -999)) - (plot_y + 35)) > 82:
+            raise ValueError
+    except (TypeError, ValueError, IndexError):
+        await send_json(websocket, {"type": "estate_error", "code": "too_far",
+                                    "message": "请先走到农田附近", "request_id": request_id})
+        return
+    try:
+        with database() as conn, conn:
+            conn.execute("BEGIN IMMEDIATE")
+            now = int(time.time())
+            result = estate_steal_crop(conn, user["username"], request_id, owner,
+                                       plot_id, now)
+            snapshot = public_estate_state(conn, user["username"], owner, now)
+        await send_json(websocket, {"type": "estate_steal_result", "result": result,
+                                    "state": snapshot, "request_id": request_id})
+        if not result.get("replayed"):
+            await broadcast_estate_channel(owner, {"type": "estate_crop_stolen",
+                "plot_id": result["plot_id"], "visitor_username": user["username"]},
+                exclude=websocket)
+    except (EstateError, sqlite3.Error) as error:
+        code = error.code if isinstance(error, EstateError) else "estate_failed"
+        message = str(error) if isinstance(error, EstateError) else "庄园暂时忙碌，请稍后重试"
+        await send_json(websocket, {"type": "estate_error", "code": code,
+                                    "message": message, "request_id": request_id})
+
+
+async def handle_estate_get_notifications(websocket, state, data):
+    user = state.get("user")
+    if not user:
+        return
+    with database() as conn, conn:
+        rows = estate_notifications(conn, user["username"], int(time.time()))
+    await send_json(websocket, {"type": "estate_notifications", "notifications": rows,
+                                "request_id": data.get("request_id")})
+
+
+async def handle_estate_mark_notifications_read(websocket, state, data):
+    user = state.get("user")
+    if not user:
+        return
+    with database() as conn, conn:
+        result = estate_mark_notifications_read(conn, user["username"], data.get("ids"), int(time.time()))
+    await send_json(websocket, {"type": "estate_notifications_read", "result": result,
+                                "request_id": data.get("request_id")})
+
+
 async def handle_estate_action(websocket, state, data, action):
     user = state.get("user")
     if not user:
@@ -1107,6 +1300,12 @@ async def handle_estate_action(websocket, state, data, action):
 
 async def handle_get_estate(websocket, state, data):
     await handle_estate_action(websocket, state, data, "get")
+    user = state.get("user")
+    if user:
+        await join_estate_channel(websocket, state, user["username"])
+        with database() as conn, conn:
+            rows = estate_notifications(conn, user["username"], int(time.time()))
+        await send_json(websocket, {"type": "estate_notifications", "notifications": rows})
 
 
 async def handle_estate_buy(websocket, state, data):
@@ -2367,6 +2566,13 @@ handlers = {
     "estate_start_mining": handle_estate_start_mining,
     "estate_mine_cell": handle_estate_mine_cell,
     "estate_finish_mining": handle_estate_finish_mining,
+    "estate_list_visits": handle_estate_list_visits,
+    "estate_enter_visit": handle_estate_enter_visit,
+    "estate_leave_visit": handle_estate_leave_visit,
+    "estate_visit_move": handle_estate_visit_move,
+    "estate_steal_crop": handle_estate_steal_crop,
+    "estate_get_notifications": handle_estate_get_notifications,
+    "estate_mark_notifications_read": handle_estate_mark_notifications_read,
     "claim_holdem_reward": handle_claim_holdem_reward,
     "get_rating_history": handle_get_rating_history,
     "get_rating_leaderboard": handle_get_rating_leaderboard,
@@ -2412,6 +2618,7 @@ async def handler(websocket):
         "last_invite_create": 0.0,
         "last_transfer": 0.0,
         "last_bet_action": 0.0,
+        "last_estate_move": 0.0,
     }
     clients[websocket] = state
     logger.info("connection opened; online=%d", len(clients))
@@ -2431,6 +2638,7 @@ async def handler(websocket):
     except websockets.ConnectionClosed:
         pass
     finally:
+        await leave_estate_channel(websocket, state)
         clients.pop(websocket, None)
         logger.info("connection closed; online=%d", len(clients))
         await cleanup_rooms_on_disconnect(state)

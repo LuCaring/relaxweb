@@ -5,7 +5,9 @@ import {
   PIXEL, drawBuilding, drawBush, drawCharacter, drawCrate, drawFence, drawGroundDetails,
   drawSignpost, drawTree, drawWater, pixelRect,
 } from "./art.js";
-import { cropAsset, cropStage, drawAsset, drawPlayerAsset } from "./assets.js";
+import {
+  BUILDING_ASSETS, cropAsset, cropStage, drawAsset, drawPlayerAsset, ESTATE_SIGN,
+} from "./assets.js";
 import { drawSprite, stableSprite } from "./sprites.js";
 
 const WORLD = { width: 960, height: 600 };
@@ -19,12 +21,13 @@ const BLOCKS = [
 const PLOT_POSITIONS = [
   [330, 108], [430, 108], [530, 108], [330, 204],
   [430, 204], [530, 204], [330, 300], [430, 300],
+  [530, 300], [330, 396], [430, 396], [530, 396],
 ];
 const ZONES = [
-  { kind: "shop", label: "小胖种子铺", x: 150, y: 205 },
-  { kind: "warehouse", label: "小胖谷仓", x: 790, y: 208 },
-  { kind: "fishing", label: "小胖湖钓场", x: 650, y: 430 },
-  { kind: "mining", label: "小胖矿洞", x: 140, y: 500 },
+  { kind: "shop", label: "种子铺", x: 150, y: 205 },
+  { kind: "warehouse", label: "仓库", x: 790, y: 208 },
+  { kind: "fishing", label: "静谧湖钓场", x: 650, y: 430 },
+  { kind: "mining", label: "矿洞", x: 140, y: 500 },
 ];
 
 // 角色与交互参数：数值本身就是手感，集中命名便于调整。
@@ -37,6 +40,55 @@ const INTERACT_RADIUS = 78;         // 与目标中心的距离小于它才能�
 const EDGE = { left: 18, top: 24, right: 18, bottom: 18 };
 // 作物成熟时从农场图集里挑的精灵编号，按作物 ID 稳定散列。
 const CROP_SPRITES = [4, 5, 6, 8, 17, 18, 20, 29, 30, 32, 41, 42, 44, 53, 54, 56, 65, 66, 68, 80, 81, 83];
+const ESTATE_SIGN_BOX = { x: 350, y: 17, width: 220, height: 83 };
+
+function signLabel(username) {
+  const name = String(username || "玩家").trim() || "玩家";
+  const suffix = "的庄园";
+  const full = `${name}${suffix}`;
+  if (full.length <= 12) return full;
+  return `${name.slice(0, Math.max(1, 11 - suffix.length))}…${suffix}`;
+}
+
+function drawEstateSign(ctx, username) {
+  const box = ESTATE_SIGN_BOX;
+  if (!drawAsset(ctx, ESTATE_SIGN, box.x, box.y, box.width, box.height)) return;
+  const label = signLabel(username);
+  let fontSize = 18;
+  ctx.save();
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.font = `bold ${fontSize}px "Microsoft YaHei", sans-serif`;
+  while (fontSize > 11 && ctx.measureText(label).width > 134) {
+    fontSize -= 1;
+    ctx.font = `bold ${fontSize}px "Microsoft YaHei", sans-serif`;
+  }
+  ctx.lineJoin = "round";
+  ctx.lineWidth = 3;
+  ctx.strokeStyle = "#fff0bd";
+  ctx.fillStyle = "#57321f";
+  ctx.strokeText(label, box.x + box.width / 2, box.y + 43);
+  ctx.fillText(label, box.x + box.width / 2, box.y + 43);
+  ctx.restore();
+}
+
+function drawBuildingAsset(ctx, kind, box, label, signY, fallback) {
+  if (!drawAsset(ctx, BUILDING_ASSETS[kind], box.x, box.y, box.width, box.height)) {
+    fallback();
+    return;
+  }
+  ctx.save();
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.font = 'bold 13px "Microsoft YaHei", sans-serif';
+  ctx.lineJoin = "round";
+  ctx.lineWidth = 3;
+  ctx.strokeStyle = "#f8dda0";
+  ctx.fillStyle = "#512d1c";
+  ctx.strokeText(label, box.x + box.width / 2, box.y + signY);
+  ctx.fillText(label, box.x + box.width / 2, box.y + signY);
+  ctx.restore();
+}
 
 function drawPathSurface(ctx, x, y, w, h, orientation) {
   pixelRect(ctx, x, y, w, h, "#b28b50");
@@ -134,10 +186,14 @@ function drawPlot(ctx, plot) {
 
 function nearTarget(player, snapshot) {
   let best = null;
-  const candidates = [...ZONES];
+  const visiting = Boolean(estateStore.visit);
+  const candidates = visiting ? [] : [...ZONES];
   for (const plot of snapshot?.plots || []) {
     const pos = PLOT_POSITIONS[plot.index];
-    candidates.push({ kind: "plot", label: plot.locked ? "解锁土地" : plot.crop_id ? "查看作物" : "播种", plot, x: pos[0] + 41, y: pos[1] + 35 });
+    const mature = plot.crop_id && Number(plot.ready_at) <= estateNow();
+    const label = visiting ? (mature ? "偷菜" : plot.crop_id ? "作物尚未成熟" : "空土地")
+      : plot.locked ? "解锁土地" : plot.crop_id ? "查看作物" : "播种";
+    candidates.push({ kind: "plot", label, plot, x: pos[0] + 41, y: pos[1] + 35 });
   }
   for (const zone of candidates) {
     const distance = Math.hypot(player.x - zone.x, player.y - zone.y);
@@ -153,12 +209,13 @@ function collides(x, y) {
     && y + PLAYER_BOX > block.y && y - PLAYER_BOX < block.y + block.h);
 }
 
-export function createEstateMap(canvas, input, onInteract, onTarget) {
+export function createEstateMap(canvas, input, onInteract, onTarget, onMove = () => {}) {
   const ctx = canvas.getContext("2d");
   const player = { x: 275, y: 440, facing: 1, direction: "down", walking: 0, lastMove: 0 };
   let frame = 0;
   let last = performance.now();
   let target = null;
+  let lastSent = 0;
 
   function resize() {
     const box = canvas.getBoundingClientRect();
@@ -176,11 +233,15 @@ export function createEstateMap(canvas, input, onInteract, onTarget) {
       canvas.height / 2 - player.y * scale));
     ctx.setTransform(scale, 0, 0, scale, ox, oy);
     drawGround(ctx, performance.now());
-    drawBuilding(ctx, 34, 24, 242, 166, "#efbd70", "#b8503d", "小胖种子铺");
-    drawBuilding(ctx, 684, 28, 230, 164, "#dca75d", "#844237", "小胖谷仓");
-    drawBuilding(ctx, 24, 326, 230, 155, "#776d66", "#4d4655", "小胖矿洞", "#b9a7bd");
+    drawBuildingAsset(ctx, "shop", { x: 34, y: 24, width: 242, height: 166 }, "种子铺", 61,
+      () => drawBuilding(ctx, 34, 24, 242, 166, "#efbd70", "#b8503d", "种子铺"));
+    drawBuildingAsset(ctx, "warehouse", { x: 684, y: 28, width: 230, height: 164 }, "仓库", 70,
+      () => drawBuilding(ctx, 684, 28, 230, 164, "#dca75d", "#844237", "仓库"));
+    drawBuildingAsset(ctx, "mining", { x: 24, y: 326, width: 230, height: 155 }, "矿洞", 38,
+      () => drawBuilding(ctx, 24, 326, 230, 155, "#776d66", "#4d4655", "矿洞", "#b9a7bd"));
     drawFence(ctx, 302, 72, 316);
     drawFence(ctx, 302, 478, 316);
+    drawEstateSign(ctx, estateStore.snapshot?.profile?.username);
     drawBush(ctx, 280, 28, true); drawBush(ctx, 622, 42); drawBush(ctx, 642, 164, true);
     drawCrate(ctx, 652, 158); drawCrate(ctx, 658, 134);
     drawSprite(ctx, "farm", 74, 55, 150, 2.5);
@@ -190,7 +251,7 @@ export function createEstateMap(canvas, input, onInteract, onTarget) {
     drawSprite(ctx, "town", 115, 52, 430, 3);
     drawSprite(ctx, "town", 116, 93, 430, 3);
     drawSprite(ctx, "town", 117, 184, 430, 3, { flipX: true });
-    drawSignpost(ctx, 604, 370, "小胖湖");
+    drawSignpost(ctx, 604, 370, "静谧湖");
     for (let x = 6; x < 650; x += 72) {
       drawTree(ctx, x, 540 + (x % 3) * 3, x % 2, performance.now());
     }
@@ -202,7 +263,16 @@ export function createEstateMap(canvas, input, onInteract, onTarget) {
     pixelRect(ctx, 645, 397, 8, 38, "#67452f");
     pixelRect(ctx, 682, 397, 8, 38, "#67452f");
     ctx.fillStyle = "#f5eed2"; ctx.font = "bold 13px sans-serif"; ctx.textAlign = "center";
-    ctx.fillText("小胖湖钓场", 820, 292);
+    ctx.fillText("静谧湖钓场", 820, 292);
+    for (const remote of estateStore.players.values()) {
+      const avatar = { ...remote, facing: remote.direction === "left" ? -1 : 1,
+        walking: remote.walking ? performance.now() / 90 : 0, lastMove: performance.now() };
+      if (!drawPlayerAsset(ctx, avatar, performance.now())) drawCharacter(ctx, avatar, performance.now());
+      ctx.font = 'bold 12px "Microsoft YaHei", sans-serif';
+      ctx.textAlign = "center"; ctx.lineWidth = 3; ctx.strokeStyle = "#26372d"; ctx.fillStyle = "#fff3c2";
+      ctx.strokeText(remote.username, remote.x, remote.y - 58);
+      ctx.fillText(remote.username, remote.x, remote.y - 58);
+    }
     if (target) {
       ctx.strokeStyle = "#fff4a8"; ctx.lineWidth = 3; ctx.setLineDash([6, 4]);
       ctx.strokeRect(target.x - 24, target.y - 24, 48, 48); ctx.setLineDash([]);
@@ -225,6 +295,7 @@ export function createEstateMap(canvas, input, onInteract, onTarget) {
         player.facing = Math.sign(dx); player.direction = dx < 0 ? "left" : "right";
       } else player.direction = dy < 0 ? "up" : "down";
     }
+    if (now - lastSent >= 100) { onMove({ ...player, moving: Boolean(dx || dy) }); lastSent = now; }
     const nextTarget = nearTarget(player, estateStore.snapshot);
     if (nextTarget?.kind !== target?.kind || nextTarget?.plot?.index !== target?.plot?.index) {
       target = nextTarget; onTarget(target);

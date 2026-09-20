@@ -1,4 +1,4 @@
-"""小胖庄园的工具、钓鱼与矿场规则。
+"""休闲庄园的工具、钓鱼与矿场规则。
 
 依赖方向单向：本模块使用 ``estate.store`` 的公开内核，内核不反向依赖本模块。
 ``make_board`` 与 ``pick_fishing_catch`` 是公开的随机性接缝：服务端用它们生成
@@ -78,7 +78,7 @@ def buy_tool(conn, username, request_id, tool_type, now, adjust_coins):
         if profile["level"] < rule["unlock_level"]:
             raise estate_error(LEVEL_LOCKED)
         balance = debit(adjust_coins, conn, username, rule["price"],
-                        f"小胖庄园购买：{rule['name']}", request_id)
+                        f"休闲庄园购买：{rule['name']}", request_id)
         conn.execute(
             "INSERT INTO estate_tools(username,tool_type,level,durability,updated_at) "
             "VALUES (?,?,?,?,?)",
@@ -105,7 +105,7 @@ def upgrade_tool(conn, username, request_id, tool_type, now, adjust_coins):
         if load_profile(conn, username)["level"] < target["unlock_level"]:
             raise estate_error(LEVEL_LOCKED)
         balance = debit(adjust_coins, conn, username, rule["upgrade_price"],
-                        f"小胖庄园升级：{target['name']}", request_id)
+                        f"休闲庄园升级：{target['name']}", request_id)
         conn.execute(
             "UPDATE estate_tools SET level=?,durability=?,updated_at=? "
             "WHERE username=? AND tool_type=?",
@@ -131,7 +131,7 @@ def repair_tool(conn, username, request_id, tool_type, now, adjust_coins):
         missing = rule["max_durability"] - current["durability"]
         cost = max(1.0, round(rule["repair_price"] * missing / rule["max_durability"], 2))
         balance = debit(adjust_coins, conn, username, cost,
-                        f"小胖庄园修理：{rule['name']}", request_id)
+                        f"休闲庄园修理：{rule['name']}", request_id)
         conn.execute(
             "UPDATE estate_tools SET durability=?,updated_at=? "
             "WHERE username=? AND tool_type=?",

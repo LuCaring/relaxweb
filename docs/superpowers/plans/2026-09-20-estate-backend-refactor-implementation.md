@@ -1,4 +1,4 @@
-# 小胖庄园后端重构实施计划
+# 休闲庄园后端重构实施计划
 
 日期：2026-09-20
 依据：`docs/superpowers/specs/2026-09-20-estate-backend-refactor-design.md`

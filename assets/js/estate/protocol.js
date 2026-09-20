@@ -4,7 +4,7 @@ import { elements, send, state, updateCoinChip } from "../core.js";
 import { alertDialog } from "../dialog.js";
 import { onMessage } from "../registry.js";
 import { playGameSound } from "../game-audio.js";
-import { clearEstate, estateStore, setEstateSnapshot } from "./state.js";
+import { clearEstate, estateStore, setEstateSnapshot, setVisitSnapshot } from "./state.js";
 
 let sequence = 0;
 
@@ -83,6 +83,58 @@ onMessage("estate_error", (data) => {
   if (data.state) setEstateSnapshot(data.state);
   void alertDialog(data.message || "庄园操作失败");
 });
+
+onMessage("estate_visit_list", (data) => {
+  settleRequest(data.request_id, { result: data.estates || [] });
+});
+
+onMessage("estate_visit_state", (data) => {
+  settleRequest(data.request_id, { result: data });
+  setVisitSnapshot(data);
+});
+
+onMessage("estate_steal_result", (data) => {
+  settleRequest(data.request_id, { result: data.result });
+  setVisitSnapshot({ ...data.state, players: [...estateStore.players.values()] });
+});
+
+onMessage("estate_visit_joined", (data) => {
+  estateStore.players.set(data.username, data);
+});
+onMessage("estate_visit_left", (data) => estateStore.players.delete(data.username));
+onMessage("estate_visit_moved", (data) => estateStore.players.set(data.username, data));
+onMessage("estate_crop_stolen", (data) => {
+  if (!estateStore.visit) return;
+  const plot = estateStore.snapshot.plots.find((item) => item.index === data.plot_id);
+  if (plot) { plot.crop_id = null; plot.planted_at = null; plot.ready_at = null; }
+  if (estateStore.snapshot.steal_limits) {
+    estateStore.snapshot.steal_limits.owner_remaining = Math.max(0,
+      estateStore.snapshot.steal_limits.owner_remaining - 1);
+  }
+  estateStore.listeners.forEach((listener) => listener(estateStore.snapshot));
+});
+onMessage("estate_notifications", (data) => {
+  estateStore.notifications = data.notifications || [];
+  settleRequest(data.request_id, { result: estateStore.notifications });
+  estateStore.listeners.forEach((listener) => listener(estateStore.snapshot));
+});
+onMessage("estate_notifications_read", (data) => {
+  settleRequest(data.request_id, { result: data.result });
+});
+onMessage("estate_visit_left_self", (data) => {
+  settleRequest(data.request_id, { result: true });
+});
+
+export function sendEstatePosition(player) {
+  if (!estateStore.snapshot) return;
+  send({ type: "estate_visit_move", x: player.x, y: player.y,
+    direction: player.direction, walking: Boolean(player.moving) });
+}
+
+export async function leaveEstateVisit() {
+  if (estateStore.visit) await estateRequest("estate_leave_visit");
+  requestEstate();
+}
 
 document.addEventListener("authstatechange", ({ detail }) => {
   if (!detail.user) {

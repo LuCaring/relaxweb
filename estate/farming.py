@@ -1,4 +1,4 @@
-"""小胖庄园农场：购买、播种、收获与出售。
+"""休闲庄园农场：购买、播种、收获与出售。
 
 金币、库存与等级变更一律通过 ``estate.store`` 的内核原语完成，
 每个操作经 ``store.run_action`` 保证幂等。
@@ -57,7 +57,7 @@ def _buy_consumable(conn, username, profile, request_id, adjust_coins, kind, ite
     require_capacity(conn, username, profile, count)
     total = round(entry[spec["price_key"]] * count, 2)
     balance = debit(adjust_coins, conn, username, total,
-                    f"小胖庄园购买：{entry['name']}{spec['suffix']} ×{count}", request_id)
+                    f"休闲庄园购买：{entry['name']}{spec['suffix']} ×{count}", request_id)
     change_inventory(conn, username, spec["item_of"](str(item_id)), count)
     return {"action": "buy", "kind": kind, "item_id": item_id,
             "quantity": count, "cost": total, "coins": balance}
@@ -70,7 +70,7 @@ def _buy_plot(conn, username, profile, request_id, adjust_coins, item_id):
     rule = PLOT_UNLOCKS[index]
     _ensure_level(profile, rule)
     balance = debit(adjust_coins, conn, username, rule["price"],
-                    f"小胖庄园购买：第 {index + 1} 块土地", request_id)
+                    f"休闲庄园购买：第 {index + 1} 块土地", request_id)
     conn.execute("UPDATE estate_profiles SET plot_count=plot_count+1 WHERE username=?",
                  (username,))
     return {"action": "buy", "kind": "plot", "item_id": index,
@@ -88,7 +88,7 @@ def _buy_land(conn, username, profile, request_id, adjust_coins, item_id):
                                      ("max_level", "土地已达到最高等级"))
     _ensure_level(profile, current)
     balance = debit(adjust_coins, conn, username, current["upgrade_price"],
-                    f"小胖庄园升级：第 {index + 1} 块土地", request_id)
+                    f"休闲庄园升级：第 {index + 1} 块土地", request_id)
     conn.execute("UPDATE estate_plots SET land_level=? WHERE username=? AND plot_index=?",
                  (next_level, username, index))
     return {"action": "buy", "kind": "land", "item_id": index,
@@ -100,7 +100,7 @@ def _buy_warehouse(conn, username, profile, request_id, adjust_coins):
                                      ("max_level", "仓库已达到最高等级"))
     _ensure_level(profile, current)
     balance = debit(adjust_coins, conn, username, current["upgrade_price"],
-                    "小胖庄园升级：仓库扩容", request_id)
+                    "休闲庄园升级：仓库扩容", request_id)
     conn.execute("UPDATE estate_profiles SET warehouse_level=? WHERE username=?",
                  (next_level, username))
     return {"action": "buy", "kind": "warehouse", "item_id": next_level,
@@ -203,7 +203,7 @@ def sell(conn, username, request_id, item_id, quantity, now, adjust_coins):
         change_inventory(conn, username, item_id, -count)
         total = round(info["sell_price"] * count, 2)
         balance = credit(adjust_coins, conn, username, total,
-                         f"小胖庄园出售：{info['name']} ×{count}", request_id)
+                         f"休闲庄园出售：{info['name']} ×{count}", request_id)
         return {"action": "sell", "item_id": item_id, "quantity": count,
                 "earned": total, "coins": balance}
 
@@ -229,7 +229,7 @@ def sell_all(conn, username, request_id, now, adjust_coins):
             change_inventory(conn, username, entry["item_id"], -entry["quantity"])
         total = round(total, 2)
         balance = credit(adjust_coins, conn, username, total,
-                         "小胖庄园一键出售", request_id)
+                         "休闲庄园一键出售", request_id)
         return {"action": "sell_all", "sold": sold, "earned": total, "coins": balance}
 
     return run_action(conn, username, request_id, "sell_all", payload, now, mutate)

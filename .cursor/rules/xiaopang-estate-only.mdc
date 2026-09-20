@@ -1,15 +1,15 @@
 ---
-description: Limit this branch and its pull requests to Xiaopang Estate work
+description: Limit this branch and its pull requests to Relax Estate work
 alwaysApply: true
 ---
 
-# Xiaopang Estate Scope
+# Relax Estate Scope
 
-- All implementation, refactoring, documentation, tests, commits, and pull requests in this workstream must serve 小胖庄园.
+- All implementation, refactoring, documentation, tests, commits, and pull requests in this workstream must serve 休闲庄园.
 - Work primarily in `estate/**`, `assets/js/estate/**`, `assets/css/estate.css`, `assets/estate/**`, `tests/test_estate_*`, and estate-specific documentation.
-- Shared files such as `chat_server.py`, `game.html`, `assets/js/main.js`, or common game infrastructure may be changed only when the smallest necessary integration is required for 小胖庄园 to work with the current upstream architecture.
+- Shared files such as `chat_server.py`, `game.html`, `assets/js/main.js`, or common game infrastructure may be changed only when the smallest necessary integration is required for 休闲庄园 to work with the current upstream architecture.
 - Do not add, redesign, refactor, or fix behavior for Mahjong, poker, UNO, Guandan, livestreaming, chat, betting, rewards, ratings, account administration, or other unrelated features.
-- Upstream changes outside 小胖庄园 are context to preserve. Do not copy them into the workstream or claim them as part of the estate pull request.
+- Upstream changes outside 休闲庄园 are context to preserve. Do not copy them into the workstream or claim them as part of the estate pull request.
 - Running existing project-wide regression tests is allowed to confirm that estate changes did not break other features; do not modify unrelated tests merely to make them pass.
 - If an estate change appears to require a substantial unrelated-system change, stop and ask the user before expanding scope.
-- Keep future pull-request titles and descriptions focused on 小胖庄园 and its minimal integration points.
+- Keep future pull-request titles and descriptions focused on 休闲庄园 and its minimal integration points.

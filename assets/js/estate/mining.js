@@ -43,7 +43,7 @@ export function openMiningGame(root, run) {
   layer.innerHTML = `
     <div class="mine-cave-glow"></div>
     <div class="mine-timbers"><i></i><i></i><i></i></div>
-    <div class="minigame-title"><b>小胖矿洞 · ${run.mine_name}</b><span>第 ${run.mine_level} 层 · 小心藏在岩层里的炸弹</span></div>
+    <div class="minigame-title"><b>矿洞 · ${run.mine_name}</b><span>第 ${run.mine_level} 层 · 小心藏在岩层里的炸弹</span></div>
     <div class="mine-status"><b>剩余敲击 <span data-strikes>${run.strikes_left}</span></b><span data-loot>背包还是空的</span></div>
     <div class="mine-grid" role="grid"></div>
     <div class="mine-blast" hidden><b>BOOM!</b><span>挖到炸弹，本轮采矿结束</span></div>

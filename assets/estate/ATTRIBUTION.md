@@ -1,6 +1,6 @@
-# 小胖庄园素材说明
+# 休闲庄园素材说明
 
-## 小胖庄园人物原画
+## 休闲庄园人物原画
 
 - `xiaopang/player/character-sheet.png`：用户提供的人物透明图集。
 - 游戏按原稿中的正面、背面与侧面行走帧实时裁切；向左行走由侧面帧镜像生成。
@@ -24,10 +24,12 @@
 
 两个素材包的许可证文本分别见 `kenney/License-tiny-farm.txt` 与 `kenney/License-tiny-town.txt`。建筑主体、角色动画、水面、土地、交互反馈与界面仍由项目内 Canvas/CSS 程序绘制。
 
-## 小胖庄园原创像素素材
+## 休闲庄园原创像素素材
 
-- 作者：小胖庄园项目所有者（用户提供）
+- 作者：休闲庄园项目所有者（用户提供）
 - 来源：`xiaopang-estate-pixel-assets.zip` 与 `xiaopang-priority-assets-reviewed.zip`
 - 使用文件：`xiaopang/` 下的作物、鱼类、收藏品、矿物和鱼竿透明 PNG。
 - 修改情况：游戏直接使用压缩包内的 `game-ready` 规范图；运行时仅进行最近邻缩放，没有重新生成或平滑处理。
+- `signs/estate-sign.png`：用户提供的庄园木牌透明 PNG，运行时动态绘制当前用户名。
+- `buildings/seed-shop.png`、`warehouse.png`、`mine.png`：用户提供的种子铺、仓库与矿洞透明 PNG；运行时在空白招牌上绘制固定场所名称。
 - 未接入内容：人物整图及矿镐、鱼饵、矿格、炸弹和特效总览仅为参考图，未复制到运行时资源。

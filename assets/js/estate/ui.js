@@ -95,7 +95,7 @@ export function createEstateUI(root, activities = {}) {
 
   function renderShop() {
     const snapshot = estateStore.snapshot; if (!snapshot) return;
-    show("小胖种子铺");
+    show("种子铺");
     const crops = Object.values(snapshot.catalog.crops)
       .sort((a, b) => a.unlock_level - b.unlock_level || a.name.localeCompare(b.name, "zh-CN"));
     const unlockedCount = crops.filter((crop) => snapshot.profile.level >= crop.unlock_level).length;
@@ -113,7 +113,7 @@ export function createEstateUI(root, activities = {}) {
 
   function renderWarehouse() {
     const snapshot = estateStore.snapshot; if (!snapshot) return;
-    show("小胖谷仓");
+    show("仓库");
     if (!snapshot.inventory.length) {
       sheetBody.append(note("谷仓空空的，先去商店买种子吧。"));
     }
@@ -190,7 +190,7 @@ export function createEstateUI(root, activities = {}) {
 
   function renderFishing() {
     const snapshot = estateStore.snapshot; if (!snapshot) return;
-    show("小胖湖钓场");
+    show("静谧湖钓场");
     sheetBody.append(note(
       `湖中有 ${Object.keys(snapshot.catalog.fish).length} 种鱼类，`
       + `还有 ${Object.keys(snapshot.catalog.fishing_treasures || {}).length} 种神秘收藏物。`
@@ -236,7 +236,7 @@ export function createEstateUI(root, activities = {}) {
 
   function renderMining() {
     const snapshot = estateStore.snapshot; if (!snapshot) return;
-    show("小胖矿洞");
+    show("矿洞");
     sheetBody.append(note(
       "每次下矿消耗一点矿镐耐久，空手或触雷也会消耗。越深奖励越好、炸弹越多；"
       + "触雷立即结束，已获得的矿物可以保留并结算经验。"));
@@ -272,7 +272,28 @@ export function createEstateUI(root, activities = {}) {
   function renderPlot(plot) {
     const snapshot = estateStore.snapshot; if (!snapshot) return;
     active = { kind: "plot", index: plot.index };
-    show(`小胖农田 · 第 ${plot.index + 1} 块`);
+    show(`休闲农田 · 第 ${plot.index + 1} 块`);
+    if (estateStore.visit) {
+      if (!plot.crop_id) { sheetBody.append(note("这块土地目前没有作物。")); return; }
+      const crop = snapshot.catalog.crops[plot.crop_id];
+      const ready = Number(plot.ready_at) <= estateNow();
+      const limits = snapshot.steal_limits || {};
+      sheetBody.append(note(ready
+        ? `${crop.name}已经成熟。偷取后整块收成会进入你的仓库。`
+        : `${crop.name}还在生长，距离成熟 ${formatDuration(plot.ready_at - estateNow())}。`));
+      sheetBody.append(button(ready ? "偷走全部收成" : "尚未成熟", async () => {
+        try {
+          await estateRequest("estate_steal_crop", {
+            owner_username: estateStore.visit.owner_username, plot_id: plot.index,
+          });
+          closeSheet();
+        } catch { /* 协议层统一提示 */ }
+      }, { className: "estate-button estate-button-gold",
+        disabled: !ready || limits.visitor_remaining < 1 || limits.owner_remaining < 1 }));
+      sheetBody.append(note(`你今天还能从这里偷 ${limits.visitor_remaining ?? 0} 块；`
+        + `该庄园今日还可被偷 ${limits.owner_remaining ?? 0} 块。`));
+      return;
+    }
     if (plot.locked) {
       const rule = catalogEntry(snapshot.catalog.plot_unlocks, plot.index);
       sheetBody.append(note(rule
@@ -331,6 +352,41 @@ export function createEstateUI(root, activities = {}) {
     }
   }
 
+  async function renderVisits(query = "") {
+    active = { kind: "visits" }; show("拜访其他庄园");
+    const search = document.createElement("input");
+    search.className = "estate-search"; search.placeholder = "输入账号用户名"; search.value = query;
+    const searchButton = button("搜索", () => renderVisits(search.value));
+    const searchRow = document.createElement("div"); searchRow.className = "estate-sheet-actions";
+    searchRow.append(search, searchButton); sheetBody.append(searchRow, note("无论对方是否在线，都可以拜访已经创建的庄园。"));
+    try {
+      const entries = await estateRequest("estate_list_visits", { query });
+      if (!entries.length) sheetBody.append(note("没有找到可拜访的庄园。"));
+      for (const entry of entries) {
+        sheetBody.append(itemCard({ title: `${entry.username} 的庄园`,
+          meta: entry.mature_plots ? `${entry.mature_plots} 块成熟作物` : "暂无成熟作物",
+          controls: [button(`拜访 ${entry.username} 的庄园`, async () => {
+            try {
+              await estateRequest("estate_enter_visit", { owner_username: entry.username });
+              closeSheet();
+            } catch { /* 协议层统一提示 */ }
+          })] }));
+      }
+    } catch { /* 协议层统一提示 */ }
+  }
+
+  function renderNotifications() {
+    active = { kind: "notifications" }; show("访客记录");
+    const rows = estateStore.notifications;
+    if (!rows.length) { sheetBody.append(note("最近 30 天没有失窃记录。")); return; }
+    for (const row of rows) {
+      sheetBody.append(itemCard({ title: `${row.visitor_username} 偷走了 ${row.crop_name}`,
+        meta: `数量 ${row.quantity} · ${new Date(row.created_at * 1000).toLocaleString("zh-CN")}` }));
+    }
+    const unread = rows.filter((row) => !row.read).map((row) => row.id);
+    if (unread.length) estateCommand("estate_mark_notifications_read", { ids: unread });
+  }
+
   /** 面板分派表：`render()` 与 `interact()` 共用同一条链。 */
   const PANELS = {
     shop: () => renderShop(),
@@ -352,10 +408,13 @@ export function createEstateUI(root, activities = {}) {
 
   function render() {
     const snapshot = estateStore.snapshot; if (!snapshot) return;
-    hudCoins.textContent = Number(snapshot.coins).toFixed(2);
+    const home = estateStore.homeSnapshot || snapshot;
+    hudCoins.textContent = home.coins == null ? "--" : Number(home.coins).toFixed(2);
     hudLevel.textContent = `Lv.${snapshot.profile.level}`;
-    hudWarehouse.textContent = `${snapshot.profile.warehouse_used}/${snapshot.profile.warehouse_capacity}`;
-    xpFill.style.width = `${Math.min(100, snapshot.profile.xp / snapshot.profile.xp_next * 100)}%`;
+    hudWarehouse.textContent = home.profile?.warehouse_used == null ? "--"
+      : `${home.profile.warehouse_used}/${home.profile.warehouse_capacity}`;
+    xpFill.style.width = snapshot.profile.xp_next
+      ? `${Math.min(100, snapshot.profile.xp / snapshot.profile.xp_next * 100)}%` : "0%";
     if (!sheet.hidden && active) {
       PANELS[active.kind]?.(active.kind === "plot" ? activePlot() : undefined);
     }
@@ -374,6 +433,8 @@ export function createEstateUI(root, activities = {}) {
 
   return {
     render, interact, closeSheet,
+    openVisits: renderVisits,
+    openNotifications: renderNotifications,
     openFishing() { openPanel("fishing"); },
     destroy() { window.clearInterval(timer); close.removeEventListener("click", closeSheet); },
   };

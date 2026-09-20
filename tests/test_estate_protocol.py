@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""小胖庄园真实 WebSocket 协议回归。"""
+"""休闲庄园真实 WebSocket 协议回归。"""
 import asyncio
 import json
 from pathlib import Path
@@ -50,7 +50,7 @@ async def main():
                     await send(a, type="get_estate")
                     initial = await receive(a, "estate_state")
                     assert initial["profile"]["plot_count"] == 4
-                    assert len(initial["plots"]) == 8
+                    assert len(initial["plots"]) == 12
 
                     await send(a, type="estate_buy", request_id="buy-wheat-001",
                                kind="seed", item_id="wheat", quantity=1)

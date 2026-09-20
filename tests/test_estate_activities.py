@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""小胖庄园工具、钓鱼和矿场领域测试。"""
+"""休闲庄园工具、钓鱼和矿场领域测试。"""
 import sqlite3
 from pathlib import Path
 import sys
@@ -162,7 +162,7 @@ class ActivityTests(unittest.TestCase):
             TreasureRng(), {"rarity_bonus": 1}, {"level": 3},
         )
         self.assertEqual(catch_id, "treasure:xiaopang_underwear")
-        self.assertEqual(catch["name"], "小胖的内裤")
+        self.assertEqual(catch["name"], "一条不知道是谁的内裤")
 
     def test_caught_collectible_is_kept_and_not_sellable(self):
         self.call(buy_tool, "alice", "buy-rod-rare", "rod", NOW, adjust_coins)
@@ -176,7 +176,7 @@ class ActivityTests(unittest.TestCase):
             winning_trace(started["pattern"]), NOW + 25,
         )
         self.assertEqual(result["catch_kind"], "collectible")
-        self.assertEqual(result["catch_name"], "小胖的内裤")
+        self.assertEqual(result["catch_name"], "一条不知道是谁的内裤")
         item = next(i for i in self.call(estate_state, "alice", NOW + 25)["inventory"]
                     if i["id"] == "collectible:xiaopang_underwear")
         self.assertFalse(item["sellable"])

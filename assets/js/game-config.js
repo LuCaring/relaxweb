@@ -5,7 +5,7 @@ export const GAME_TYPES = [
     id: "estate",
     mode: "solo",
     view: "estate",
-    name: "小胖庄园",
+    name: "休闲庄园",
     icon: "🌾",
     desc: "经营你的像素庄园：种田、钓鱼、挖矿，让每一枚金币慢慢生长。",
   },

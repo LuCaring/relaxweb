@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""小胖庄园扩充内容目录契约。"""
+"""休闲庄园扩充内容目录契约。"""
 import json
 from pathlib import Path
 import sys
@@ -19,14 +19,14 @@ class EstateCatalogContentTests(unittest.TestCase):
         self.assertEqual(len(FISH), 24)
         self.assertEqual(len(FISHING_TREASURES), 4)
 
-    def test_xiaopang_content_is_present_and_endgame_rare(self):
-        self.assertEqual(CROPS["xiaopang_grass"]["name"], "小胖草")
-        self.assertEqual(CROPS["xiaopang_flower"]["name"], "小胖花")
+    def test_rare_content_is_present_and_endgame_rare(self):
+        self.assertEqual(CROPS["xiaopang_grass"]["name"], "神奇草")
+        self.assertEqual(CROPS["xiaopang_flower"]["name"], "奇迹花")
         self.assertGreaterEqual(CROPS["xiaopang_grass"]["unlock_level"], 6)
-        self.assertEqual(FISH["xiaopang_fish"]["name"], "小胖鱼")
+        self.assertEqual(FISH["xiaopang_fish"]["name"], "神秘鱼")
         self.assertGreaterEqual(FISH["xiaopang_fish"]["rarity"], 6)
         underwear = FISHING_TREASURES["xiaopang_underwear"]
-        self.assertEqual(underwear["name"], "小胖的内裤")
+        self.assertEqual(underwear["name"], "一条不知道是谁的内裤")
         self.assertEqual(underwear["rarity"], max(v["rarity"] for v in FISHING_TREASURES.values()))
         self.assertGreaterEqual(underwear["required_rod_level"], 3)
 
@@ -36,7 +36,7 @@ class EstateCatalogContentTests(unittest.TestCase):
         info = item_info("collectible:xiaopang_underwear")
         self.assertEqual(info["kind"], "collectible")
         self.assertFalse(info["sellable"])
-        self.assertEqual(info["name"], "小胖的内裤")
+        self.assertEqual(info["name"], "一条不知道是谁的内裤")
 
     def test_catalog_uses_reviewed_economy_version(self):
         self.assertEqual(public_catalog()["balance_version"], "v1")

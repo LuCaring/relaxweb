@@ -1,4 +1,4 @@
-"""小胖庄园领域内核：档案、库存、容量、金币、经验、幂等与读模型。
+"""休闲庄园领域内核：档案、库存、容量、金币、经验、幂等与读模型。
 
 只依赖一个已打开的 SQLite 连接，不导入 ``farming`` 或 ``activities``
 （依赖方向单向：catalog ← store ← 上层业务）。调用方负责开启与提交事务。
@@ -371,6 +371,7 @@ def estate_state(conn, username, now):
         "coins": round(float(balance[0] or 0), 2),
         "profile": {
             **profile,
+            "username": username,
             "xp_next": xp_for_next(profile["level"]),
             "warehouse_capacity": capacity(profile),
             "warehouse_used": used + profile["reserved_capacity"],

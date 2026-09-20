@@ -1,4 +1,4 @@
-# 小胖庄园第一阶段实施计划
+# 休闲庄园第一阶段实施计划
 
 日期：2026-09-19  
 依据：`docs/superpowers/specs/2026-09-19-pixel-estate-phase1-design.md`  
@@ -300,7 +300,7 @@ git commit -m "feat: expose estate websocket protocol"
 静态测试应验证：
 
 - `main.js` 能到达全部 `estate/` 模块。
-- 游戏厅包含名称“小胖庄园”，并标记为单人直接入口。
+- 游戏厅包含名称“休闲庄园”，并标记为单人直接入口。
 - 点击庄园卡片不会进入房间列表或发送 `create_room`。
 - 未登录不会请求庄园。
 - 退出登录会清空庄园状态和待处理请求。
@@ -325,7 +325,7 @@ python tests/test_frontend.py
 
 ```powershell
 git add assets/js tests/test_frontend.py
-git commit -m "feat: add 小胖庄园 hall entry"
+git commit -m "feat: add 休闲庄园 hall entry"
 ```
 
 ## 任务 7：选定并登记正式像素素材
@@ -472,7 +472,7 @@ git commit -m "feat: add estate farming interface"
 
 桌面：
 
-- 登录后从大厅进入小胖庄园。
+- 登录后从大厅进入休闲庄园。
 - WASD 移动到商店，购买种子。
 - 移动到土地，播种。
 - 使用测试时钟推进到成熟，收获并出售。
@@ -571,14 +571,14 @@ PR 创建前必须由用户在 HTML 页面明确确认桌面与手机体验。�
 
 ```powershell
 git add README.md
-git commit -m "docs: document 小胖庄园 farming phase"
+git commit -m "docs: document 休闲庄园 farming phase"
 ```
 
 ## 实施完成判定
 
 第一阶段只有同时满足以下条件才算完成：
 
-- 小胖庄园是登录用户可直接进入的永久单人游戏，不经过房间系统。
+- 休闲庄园是登录用户可直接进入的永久单人游戏，不经过房间系统。
 - 角色可在桌面和手机地图上稳定移动并与目标交互。
 - 购买、播种、离线成熟、收获、出售、土地升级、仓库扩容和等级解锁均由服务端权威处理。
 - 重复请求、并发标签页、断线重试和服务重启不会造成重复奖励、重复扣款或状态丢失。

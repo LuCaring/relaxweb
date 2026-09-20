@@ -1,7 +1,7 @@
 "use strict";
 
 /**
- * 小胖庄园纯规则层。
+ * 休闲庄园纯规则层。
  *
  * 这里只放能被 node 直接 import 并断言的纯函数：不碰 DOM，也不 import 其它
  * estate 模块，数据一律由调用方从 catalog 快照取好再传进来。

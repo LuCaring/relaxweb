@@ -29,13 +29,15 @@ body.estate-active .game-container { width: 100%; max-width: none; height: 100dv
   background: linear-gradient(#fff8dc, #eed39a); border: 4px solid #714b31;
   box-shadow: inset 0 0 0 2px #fff3c7, 0 5px 0 #382b29, 0 10px 24px #1d312844; border-radius: 10px;
 }
-.estate-back, .estate-button, .estate-audio-open {
+.estate-back, .estate-button, .estate-audio-open, .estate-visit-open, .estate-visit-return {
   border: 2px solid #60422f; border-radius: 7px; color: #fff8dd; background: #558650;
   box-shadow: inset 0 -3px #315b3c, 0 2px #473428; font-weight: 800; cursor: pointer;
   padding: 10px 13px; transition: transform .1s, filter .1s;
 }
+.estate-visit-open, .estate-visit-return { padding: 9px 11px; white-space: nowrap; }
+.estate-search { flex: 1; min-width: 160px; padding: 10px 12px; border: 2px solid #8a633d; border-radius: 7px; background: #fff8df; color: #4d3527; font: inherit; }
 .estate-audio-open { flex: none; width: 38px; height: 38px; padding: 0; font-size: 16px; }
-.estate-back:hover, .estate-button:hover { filter: brightness(1.08); transform: translateY(-1px); }
+.estate-back:hover, .estate-button:hover, .estate-visit-open:hover, .estate-visit-return:hover { filter: brightness(1.08); transform: translateY(-1px); }
 .estate-button:disabled { cursor: not-allowed; filter: grayscale(.65); opacity: .55; transform: none; }
 .estate-brand { margin-right: auto; display: grid; line-height: 1; }
 .estate-brand span { font-family: Georgia, "Microsoft YaHei", serif; font-weight: 900; font-size: 21px; color: #74462c; text-shadow: 0 1px #fff1bc, 1px 2px #c6a064; }

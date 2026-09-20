@@ -15,8 +15,8 @@ export function openFishingGame(root, session, options = {}) {
   const layer = document.createElement("div");
   layer.className = "estate-minigame fishing-game";
   layer.innerHTML = `
-    <canvas aria-label="小胖湖钓鱼"></canvas>
-    <div class="minigame-title"><b>小胖湖钓场</b><span>按住收线 · 松开卸力</span></div>
+    <canvas aria-label="静谧湖钓鱼"></canvas>
+    <div class="minigame-title"><b>静谧湖钓场</b><span>按住收线 · 松开卸力</span></div>
     <div class="fishing-meters">
       <label>捕获进度<i><span data-catch></span></i></label>
       <label>鱼线张力<i class="tension"><span data-tension></span></i></label>
@@ -28,7 +28,7 @@ export function openFishingGame(root, session, options = {}) {
       <div class="fishing-catch-rarity"></div>
       <div class="fishing-catch-portrait"><span class="catch-tail"></span><span class="catch-body"><i></i></span><b>🐟</b><img data-catch-art alt=""></div>
       <h2></h2><p></p>
-      <div class="fishing-result-actions"><button class="estate-button estate-button-gold" data-fish-again>继续钓鱼</button><button class="estate-button" data-fish-back>返回小胖钓场</button></div>
+      <div class="fishing-result-actions"><button class="estate-button estate-button-gold" data-fish-again>继续钓鱼</button><button class="estate-button" data-fish-back>返回静谧湖钓场</button></div>
     </section>`;
   root.append(layer);
   const canvas = layer.querySelector("canvas");
@@ -92,7 +92,7 @@ export function openFishingGame(root, session, options = {}) {
     card.querySelector(".fishing-catch-portrait > b").textContent = collectible ? "🎁" : caught ? "🐟" : "🌊";
     card.querySelector("h2").textContent = caught ? (result.catch_name || result.fish_name) : result.outcome === "snapped" ? "鱼线断了" : "鱼儿逃走了";
     card.querySelector("p").textContent = caught
-      ? `已放入小胖谷仓 · 获得 ${result.xp_awarded} 经验`
+      ? `已放入仓库 · 获得 ${result.xp_awarded} 经验`
       : "鱼饵和耐久已经消耗，控制张力后再试一次。";
     card.hidden = false;
   }

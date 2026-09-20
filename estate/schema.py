@@ -1,4 +1,4 @@
-"""小胖庄园 SQLite 表结构。"""
+"""休闲庄园 SQLite 表结构。"""
 
 
 def init_estate(conn):
@@ -103,3 +103,30 @@ def init_estate(conn):
     if "reserved_slots" not in mining_columns:
         conn.execute("ALTER TABLE estate_mining_runs ADD COLUMN reserved_slots INTEGER NOT NULL DEFAULT 12")
     conn.execute("CREATE INDEX IF NOT EXISTS idx_mining_user ON estate_mining_runs(username,status)")
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS estate_thefts (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            owner_username TEXT NOT NULL COLLATE NOCASE,
+            visitor_username TEXT NOT NULL COLLATE NOCASE,
+            plot_index INTEGER NOT NULL CHECK(plot_index >= 0),
+            crop_id TEXT NOT NULL,
+            quantity INTEGER NOT NULL CHECK(quantity > 0),
+            steal_day TEXT NOT NULL,
+            created_at INTEGER NOT NULL,
+            read_at INTEGER,
+            request_id TEXT NOT NULL,
+            UNIQUE(visitor_username, request_id)
+        )
+    """)
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_estate_thefts_owner_day "
+        "ON estate_thefts(owner_username, steal_day)"
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_estate_thefts_pair_day "
+        "ON estate_thefts(visitor_username, owner_username, steal_day)"
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_estate_thefts_unread "
+        "ON estate_thefts(owner_username, read_at, created_at)"
+    )

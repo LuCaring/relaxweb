@@ -6,7 +6,7 @@ import { createEstateInput } from "./input.js";
 import { openFishingGame } from "./fishing.js";
 import { createEstateMap } from "./map.js";
 import { openMiningGame } from "./mining.js";
-import { requestEstate } from "./protocol.js";
+import { estateCommand, leaveEstateVisit, requestEstate, sendEstatePosition } from "./protocol.js";
 import { createEstateUI } from "./ui.js";
 import { estateStore, subscribeEstate } from "./state.js";
 
@@ -14,10 +14,12 @@ let cleanup = null;
 
 /** 庄园视图骨架；HUD 由 ui.js 渲染，地图画在 canvas 上，其余是手机端控件。 */
 const ESTATE_MARKUP = `
-    <canvas class="estate-canvas" aria-label="小胖庄园地图"></canvas>
+    <canvas class="estate-canvas" aria-label="休闲庄园地图"></canvas>
     <div class="estate-topbar">
       <button class="estate-back" type="button">← 游戏厅</button>
-      <div class="estate-brand"><span>小胖庄园</span><small>田野 · 湖泊 · 矿脉</small></div>
+      <button class="estate-visit-open" type="button">拜访</button>
+      <button class="estate-visit-return" type="button" hidden>返回我的庄园</button>
+      <div class="estate-brand"><span>休闲庄园</span><small>田野 · 湖泊 · 矿脉</small></div>
       <div class="estate-hud-item"><small>金币</small><b data-estate-coins>--</b></div>
       <div class="estate-hud-item"><small>仓库</small><b data-estate-warehouse>--</b></div>
       <div class="estate-level"><b data-estate-level>Lv.1</b><span><i class="estate-xp-fill"></i></span></div>
@@ -52,12 +54,26 @@ function renderEstate() {
     ui.interact(target);
   }, (target) => {
     hint.hidden = !target; hint.querySelector("span").textContent = target ? target.label : "";
-  });
+  }, sendEstatePosition);
+  const visitButton = root.querySelector(".estate-visit-open");
+  const returnButton = root.querySelector(".estate-visit-return");
+  const brand = root.querySelector(".estate-brand span");
+  let notificationsShown = false;
+  visitButton.addEventListener("click", () => ui.openVisits());
+  returnButton.addEventListener("click", async () => { await leaveEstateVisit(); });
   const unsubscribe = subscribeEstate((snapshot) => {
     root.querySelector(".estate-loading").hidden = Boolean(snapshot);
+    const visiting = Boolean(estateStore.visit);
+    brand.textContent = visiting ? `${estateStore.visit.owner_username} 的庄园` : "休闲庄园";
+    visitButton.hidden = visiting || Number(snapshot?.profile?.level || 0) < 3;
+    returnButton.hidden = !visiting;
     ui.render();
+    if (!visiting && !notificationsShown && estateStore.notifications.some((row) => !row.read)) {
+      notificationsShown = true; ui.openNotifications();
+    }
   });
   root.querySelector(".estate-back").addEventListener("click", () => {
+    estateCommand("estate_leave_visit");
     state.hallPage = null; state.currentGameId = null; renderGameView();
   });
   if (estateStore.snapshot) ui.render(); else requestEstate();

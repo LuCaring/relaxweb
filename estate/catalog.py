@@ -1,4 +1,4 @@
-"""小胖庄园服务端权威目录。
+"""休闲庄园服务端权威目录。
 
 数值集中在这里，前端只消费 ``public_catalog`` 的输出，不能提交价格、
 成熟时间、产量或经验。首版经济基线与复核方式见 docs/estate-economy.md。
@@ -7,7 +7,7 @@ import math
 
 
 INITIAL_PLOTS = 4
-MAX_PLOTS = 8
+MAX_PLOTS = 12
 BALANCE_VERSION = "v1"
 FISH_RARITY_WEIGHTS = {1: 100, 2: 22, 3: 4, 4: .6, 5: .08, 6: .006}
 
@@ -89,8 +89,8 @@ CROPS = {
     "onion": _crop("洋葱", 530, 2593, 750, 400, 5, "🧅", "#d3a5bb"),
     "garlic": _crop("大蒜", 620, 3095, 900, 480, 5, "🧄", "#e7d9b1"),
     "sunflower": _crop("向日葵", 760, 4000, 1080, 540, 6, "🌻", "#f3c84d"),
-    "xiaopang_grass": _crop("小胖草", 1100, 5420, 1440, 720, 6, "🌿", "#64c987"),
-    "xiaopang_flower": _crop("小胖花", 1800, 8820, 2160, 1080, 7, "🌸", "#f28fc2"),
+    "xiaopang_grass": _crop("神奇草", 1100, 5420, 1440, 720, 6, "🌿", "#64c987"),
+    "xiaopang_flower": _crop("奇迹花", 1800, 8820, 2160, 1080, 7, "🌸", "#f28fc2"),
     "starlight_berry": _crop("星露果", 3200, 13280, 2880, 1440, 8, "✨", "#8dd9df"),
 }
 
@@ -105,6 +105,10 @@ PLOT_UNLOCKS = {
     5: {"price": 900.0, "unlock_level": 3},
     6: {"price": 1600.0, "unlock_level": 4},
     7: {"price": 2600.0, "unlock_level": 5},
+    8: {"price": 5000.0, "unlock_level": 10},
+    9: {"price": 8000.0, "unlock_level": 12},
+    10: {"price": 12000.0, "unlock_level": 15},
+    11: {"price": 20000.0, "unlock_level": 20},
 }
 
 WAREHOUSE_LEVELS = {
@@ -174,25 +178,25 @@ FISH = {
     "tuna": _fish("蓝鳍金枪鱼", 760, 5, 76, .78, "远海"),
     "crystal_fish": _fish("玻璃鱼", 680, 5, 70, .74, "清澈湖泊"),
     "cloudfin": _fish("云鳍鱼", 1200, 6, 105, .84, "雨后云影"),
-    "xiaopang_fish": _fish("小胖鱼", 1680, 6, 135, .9, "小胖湖深处"),
+    "xiaopang_fish": _fish("神秘鱼", 1680, 6, 135, .9, "静谧湖深处"),
 }
 
 
 FISHING_TREASURES = {
     "xiaopang_bottle": {
-        "name": "小胖漂流瓶", "rarity": 5, "xp": 45, "difficulty": .68,
+        "name": "神秘漂流瓶", "rarity": 5, "xp": 45, "difficulty": .68,
         "required_rod_level": 2, "weight": 5.0, "balance_status": BALANCE_VERSION,
     },
     "xiaopang_button": {
-        "name": "小胖的金纽扣", "rarity": 6, "xp": 70, "difficulty": .76,
+        "name": "遗失的金纽扣", "rarity": 6, "xp": 70, "difficulty": .76,
         "required_rod_level": 2, "weight": 2.4, "balance_status": BALANCE_VERSION,
     },
     "xiaopang_watch": {
-        "name": "小胖旧怀表", "rarity": 7, "xp": 110, "difficulty": .84,
+        "name": "古旧怀表", "rarity": 7, "xp": 110, "difficulty": .84,
         "required_rod_level": 3, "weight": .8, "balance_status": BALANCE_VERSION,
     },
     "xiaopang_underwear": {
-        "name": "小胖的内裤", "rarity": 8, "xp": 180, "difficulty": .92,
+        "name": "一条不知道是谁的内裤", "rarity": 8, "xp": 180, "difficulty": .92,
         "required_rod_level": 3, "weight": .18, "balance_status": BALANCE_VERSION,
     },
 }
