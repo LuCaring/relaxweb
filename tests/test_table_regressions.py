@@ -99,7 +99,12 @@ class TableState(unittest.IsolatedAsyncioTestCase):
         wild = card(8, 1)
         actual = resolve_combo(
             [card(3, 0), card(7, 0), card(3, 1), card(7, 2), wild], 8, {8})
-        self.assertEqual([item["r"] for item in actual["cards"]], [7, 7, 8, 3, 3])
+        self.assertEqual([item["r"] for item in actual["cards"]], [8, 7, 7, 3, 3])
+
+        actual = resolve_combo(
+            [card(3, 0), card(3, 1), card(3, 2), card(14, 0), card(2, 1)],
+            2, {2})
+        self.assertEqual([item["r"] for item in actual["cards"]], [3, 3, 3, 2, 14])
 
     async def test_casual_game_views_include_player_avatars(self):
         for game in ("guandan", "mahjong"):

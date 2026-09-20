@@ -46,8 +46,8 @@
 .gcard.small .gc-suit { font-size: 11px; margin-top: 2px; }
 .gcard.small .gc-joker-icon { font-size: 22px; }
 .gcard.small .gc-joker-label { font-size: 8px; margin-top: 1px; }
-.gcard.wild { border-color: #f7b934; }
-.gcard.wild::after { content: '配'; position: absolute; right: 3px; bottom: 4px; color: #ab7210; font-size: 10px; }
+.gcard.wild { border-color: #f59e0b; background: linear-gradient(135deg, #fffaf0, #ffedd5); color: #e8750b; }
+.gcard.wild::after { content: '配'; position: absolute; right: 3px; bottom: 4px; color: #b45309; font-size: 10px; }
 .gd-dock .dock-head { order: 0; }
 .gd-dock-action { display: none; }
 .gd-dock > .countdown { order: 1; }

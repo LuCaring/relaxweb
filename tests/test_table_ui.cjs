@@ -82,6 +82,9 @@ for (const [cards, expected] of [
 ]) {
   assert.deepEqual(Array.from(context.rules.resolveCombo(cards,null,[2]).cards,c=>c.r),expected);
 }
+assert.deepEqual(Array.from(context.rules.resolveCombo(
+ [{r:3,s:0},{r:3,s:1},{r:3,s:2},{r:14,s:0},{r:2,s:1}],2,[2]).cards,c=>c.r),
+ [3,3,3,2,14]);
 console.log(`PASS Python/JavaScript parity for ${fixtures.cases.length} hands and standing combinations`);
 
 (async()=>{
@@ -141,14 +144,19 @@ console.log(`PASS Python/JavaScript parity for ${fixtures.cases.length} hands an
   }),false,'player status must not overlap played cards');
 
   await setRoom('guandan', {
-   levels:[8,8],
-   standing:{by:'p3',type:'triple_pair',tier:0,main:[2,7],len:5,label:'三带二 7',
-    cards:[{r:7,s:0},{r:7,s:2},{r:8,s:1},{r:3,s:0},{r:3,s:1}]},
+   levels:[2,2],
+   your_hand:[{r:3,s:0},{r:3,s:1},{r:3,s:2},{r:14,s:0},{r:2,s:1}],
+   standing:{by:'p3',type:'triple_pair',tier:0,main:[1,3],len:5,label:'三带二 3',
+    cards:[{r:3,s:0},{r:3,s:1},{r:3,s:2},{r:2,s:1},{r:14,s:0}]},
   });
   assert.deepEqual(await page.locator('.gd-standing-cards .gcard').evaluateAll(cards=>
-    cards.map(card=>Number(card.dataset.rank))),[7,7,8,3,3]);
+    cards.map(card=>Number(card.dataset.rank))),[3,3,3,2,14]);
   assert.equal(await page.locator('.gd-standing-cards .gcard.wild').count(),1,
     'played wild card remains marked inside its represented group');
+  assert.equal(await page.locator('.gd-hand .gcard.wild').count(),1,
+    'wild card in hand uses the same visual treatment');
+  assert.equal(await page.locator('.gd-hand .gcard.wild').evaluate(card=>getComputedStyle(card).color),
+    'rgb(232, 117, 11)');
   if(process.env.TABLE_SCREENSHOT_DIR) await page.screenshot({
    path:path.join(process.env.TABLE_SCREENSHOT_DIR,'guandan-triple-pair.png'),fullPage:true,
   });

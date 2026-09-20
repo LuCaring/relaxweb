@@ -247,11 +247,12 @@ def _realize(shape, nats, wild_cards, levels):
         need = shape["needs"][rank]
         key = rank if shape["suit"] is None else (rank, shape["suit"])
         natural = sorted(pool.get(key, [])[:need], key=lambda c: (c["s"], c["r"]))
-        picked.extend(natural)
         short = need - len(natural)
         if wild_index + short > len(wild_cards):
             return None
+        # 白搭按所代点数归组，并在该组的自然牌之前展示。
         picked.extend(wild_cards[wild_index:wild_index + short])
+        picked.extend(natural)
         wild_index += short
 
     # 万能牌单出时 needs 为空，仍需把这张牌放进结果。

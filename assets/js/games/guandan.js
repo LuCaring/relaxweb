@@ -217,10 +217,11 @@ function realizeShape(shape, cards, wildRank) {
     const key = shape.suit === null ? rank : `${rank}:${shape.suit}`;
     const naturalCards = (pool.get(key) || []).slice(0, need)
       .sort((a, b) => a.s - b.s || a.r - b.r);
-    picked.push(...naturalCards);
     const short = need - naturalCards.length;
     if (wildIndex + short > wildCards.length) return null;
+    // 白搭按所代点数归组，并在该组的自然牌之前展示。
     picked.push(...wildCards.slice(wildIndex, wildIndex + short));
+    picked.push(...naturalCards);
     wildIndex += short;
   }
   const remaining = shape.len - picked.length;
