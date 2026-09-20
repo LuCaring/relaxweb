@@ -6,9 +6,14 @@ import copy
 import hashlib
 import json
 import mimetypes
+import os
 import random
+import select
+import signal
+import socket
 import sys
 import threading
+import time
 import webbrowser
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -22,6 +27,94 @@ from games.base import create_room  # noqa: E402
 
 GAMES = ("guandan", "mahjong", "holdem", "uno")
 SCENES = ("normal", "dense", "waiting", "paused")
+
+
+def is_previous_preview(pid):
+    """Match the actual Python script and repository, never just a port or name."""
+    if pid == os.getpid():
+        return False
+    process = Path('/proc') / str(pid)
+    try:
+        if process.stat().st_uid != os.getuid():
+            return False
+        if not process.joinpath('exe').resolve().name.startswith('python'):
+            return False
+        args = process.joinpath('cmdline').read_bytes().decode().strip('\0').split('\0')
+        # -c/-m are not script invocations; arguments to another script must not match.
+        for arg in args[1:]:
+            if arg in ('-c', '-m', '-W', '-X'):
+                return False
+            if arg.startswith('-'):
+                continue
+            script = (process.joinpath('cwd').resolve() / arg).resolve()
+            return script == Path(__file__).resolve()
+    except (OSError, UnicodeError):
+        pass
+    return False
+
+
+def stop_previous_previews():
+    """Linux process discovery also recognises previews started before this feature."""
+    if not Path('/proc').is_dir():
+        raise RuntimeError('自动替换进程需要 Linux /proc；其他系统请使用 --no-replace 并手动停止旧预览。')
+    def started(pid):
+        return int(Path(f'/proc/{pid}/stat').read_text().rsplit(')', 1)[1].split()[19]), pid
+    current_start = started(os.getpid())
+    for process in Path('/proc').iterdir():
+        if not process.name.isdigit() or not is_previous_preview(int(process.name)):
+            continue
+        pid = int(process.name)
+        # A pidfd keeps the signal attached to this process even if its PID is reused.
+        fd = None
+        try:
+            if started(pid) >= current_start:
+                continue  # A concurrent newer launch should replace us, not vice versa.
+            if hasattr(os, 'pidfd_open') and hasattr(signal, 'pidfd_send_signal'):
+                fd = os.pidfd_open(pid)
+            if not is_previous_preview(pid):
+                continue
+            def terminate(sig):
+                if fd is not None:
+                    signal.pidfd_send_signal(fd, sig)
+                elif is_previous_preview(pid):
+                    os.kill(pid, sig)
+            def exited():
+                if fd is not None:
+                    return bool(select.select([fd], [], [], 0)[0])
+                try:
+                    return process.joinpath('stat').read_text().rsplit(')', 1)[1].split()[0] in ('Z', 'X')
+                except FileNotFoundError:
+                    return True
+            terminate(signal.SIGTERM)
+            deadline = time.monotonic() + 3
+            while not exited() and time.monotonic() < deadline:
+                time.sleep(.05)
+            if not exited():
+                terminate(signal.SIGKILL)
+                deadline = time.monotonic() + 1
+                while not exited() and time.monotonic() < deadline:
+                    time.sleep(.05)
+                if not exited():
+                    raise RuntimeError(f'旧预览进程 {pid} 未退出')
+            print(f'已停止旧预览进程：{pid}', flush=True)
+        except (ProcessLookupError, FileNotFoundError):
+            pass
+        finally:
+            if fd is not None:
+                os.close(fd)
+
+
+def lan_addresses():
+    addresses = set()
+    try:
+        addresses.update(socket.gethostbyname_ex(socket.gethostname())[2])
+        # UDP connect only selects a route; no packet or external request is sent.
+        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as probe:
+            probe.connect(('192.0.2.1', 9))
+            addresses.add(probe.getsockname()[0])
+    except OSError:
+        pass
+    return sorted(ip for ip in addresses if not ip.startswith('127.') and ip != '0.0.0.0')
 
 
 def avatar(index):
@@ -97,6 +190,8 @@ async def make_fixtures():
             dense["last_discard"] = {"by": "p3", "tile": dense["discards"]["p3"][-1]}
             dense["players"][1]["melds"] += [{"type": "angang", "tiles": [8, 8, 8, 8]}]
             dense["players"][1]["concealed"] = 7
+            dense["your_flowers"] = [34, 35, 36, 37]
+            dense["tenpai"] = {"waits": [24, 27, 30], "remaining": {24: 3, 27: 2, 30: 1}}
         elif game == "uno":
             dense["your_hand"] = (dense["your_hand"] * 3)[:20]
             dense["players"][0]["cards"] = 20
@@ -164,14 +259,33 @@ def main():
     parser.add_argument("--scene", choices=SCENES, default="normal")
     parser.add_argument("--port", type=int, default=8010, help="本地端口，0 表示自动选择空闲端口")
     parser.add_argument("--no-open", action="store_true", help="不自动打开系统浏览器")
+    parser.add_argument("--no-replace", action="store_true", help="保留旧预览进程（用于独立自动化测试）")
+    parser.add_argument("--lan", action="store_true", help="允许同一局域网的手机访问，并打印手机地址")
+    sizes = parser.add_mutually_exclusive_group()
+    sizes.add_argument("--mobile", dest="size", action="store_const", const="390x844", help="启动手机竖屏预览")
+    sizes.add_argument("--landscape", dest="size", action="store_const", const="844x390", help="启动手机横屏预览")
+    sizes.add_argument("--size", choices=("auto", "1440x900", "1024x768", "390x844", "320x568", "844x390"))
+    parser.set_defaults(size="auto")
     args = parser.parse_args()
+    if not 0 <= args.port <= 65535:
+        parser.error('端口必须介于 0 和 65535 之间')
+    fixtures = asyncio.run(make_fixtures())
+    if not args.no_replace:
+        try:
+            stop_previous_previews()
+        except (OSError, RuntimeError) as error:
+            parser.exit(1, f'无法替换旧预览：{error}\n')
     try:
-        server = ThreadingHTTPServer(("127.0.0.1", args.port), PreviewHandler)
+        server = ThreadingHTTPServer(("0.0.0.0" if args.lan else "127.0.0.1", args.port), PreviewHandler)
     except OSError as error:
         parser.exit(1, f"无法启动端口 {args.port}：{error}。可用 --port 0 自动选择空闲端口。\n")
-    server.fixtures = asyncio.run(make_fixtures())
-    url = f"http://127.0.0.1:{server.server_port}/?game={args.game}&scene={args.scene}"
+    server.fixtures = fixtures
+    query = f"game={args.game}&scene={args.scene}"
+    url = f"http://127.0.0.1:{server.server_port}/?{query}&size={args.size}"
     print(f"本地 UI 预览：{url}\n修改前端文件后自动刷新；Ctrl+C 停止。", flush=True)
+    if args.lan:
+        for ip in lan_addresses():
+            print(f'手机访问（同一局域网）：http://{ip}:{server.server_port}/game.html?{query}', flush=True)
     if not args.no_open:
         threading.Thread(target=webbrowser.open, args=(url,), daemon=True).start()
     try:

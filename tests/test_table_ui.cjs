@@ -227,10 +227,11 @@ console.log(`PASS Python/JavaScript parity for ${fixtures.cases.length} hands an
   assert.equal(await page.locator('.mj-act:enabled').count(),0);
   await setRoom('mahjong', {phase:'claim',paused:true,your_options:{claim:{peng:true,hu:true}}});
   assert.equal(await page.locator('.mj-act:enabled,.mj-hand-card:enabled').count(),0);
-  for(const [width,height] of [[320,568],[1440,900]]) {
+  for(const [width,height] of [[320,568],[1024,768],[1366,768],[1440,900],[1920,1080]]) {
    await page.setViewportSize({width,height});
    await setRoom('mahjong');
    await setRoom('mahjong', {phase:'claim',to_act:null,claim:{by:'p3',tile:1,waiting:['p0']},
+    your_flowers:[34,35,36,37,38,39,40,41], tenpai:{waits:[24,27,30],remaining:{24:3,27:2,30:1}},
     your_options:{claim:{chi:[[0,2],[2,3]],peng:true,gang:true,hu:true}}});
    await page.locator('.mj-self-controls').getByRole('button',{name:'吃',exact:true}).click();
    assert.equal(await page.locator('.mj-self-controls .mj-chip:not(.cancel)').count(),2);
@@ -240,6 +241,11 @@ console.log(`PASS Python/JavaScript parity for ${fixtures.cases.length} hands an
      const r=button.getBoundingClientRect();return r.left>=avatar.right&&r.right<=innerWidth;
     });
    }),`${width}px all claim controls and chi choices remain right of our avatar`);
+   if(width>=1024) {
+    const size=await page.evaluate(()=>({height:innerHeight,scroll:document.documentElement.scrollHeight}));
+    if(process.env.TABLE_SCREENSHOT_DIR) await page.screenshot({path:path.join(process.env.TABLE_SCREENSHOT_DIR,`mahjong-claim-${width}.png`),fullPage:true});
+    assert.ok(size.scroll<=size.height+1,`${width}px expanded chi choices fit the screen: ${JSON.stringify(size)}`);
+   }
    await page.locator('.mj-self-controls .mj-chip:not(.cancel)').first().click();
    assert.deepEqual(await actions(),[{type:'poker_action',action:'claim',kind:'chi',tiles:[0,2]}]);
    assert.equal(await page.locator('.mj-self-controls button:enabled,.mj-hand-card:enabled').count(),0);
@@ -333,7 +339,7 @@ console.log(`PASS Python/JavaScript parity for ${fixtures.cases.length} hands an
   for (const game of ['mahjong', 'guandan']) {
    // The four rivers must surround the hub, including long late-game rivers.
    if (game === 'mahjong') {
-    for (const [width, height] of [[320,568], [390,844], [844,390], [1024,768], [1440,900]]) {
+    for (const [width, height] of [[320,568], [390,844], [844,390], [1024,768], [1366,768], [1440,900], [1920,1080]]) {
      await page.setViewportSize({width,height});
      const room = structuredClone(fixtures.rooms.mahjong);
      room.discards = Object.fromEntries(room.players.map(p =>
@@ -347,7 +353,8 @@ console.log(`PASS Python/JavaScript parity for ${fixtures.cases.length} hands an
      room.players[3].melds = [{type:'gang',tiles:[27,27,27,27]}];
      room.players[3].concealed = 10;
      room.your_hand = [0,1,2,9,10,11,27,27];
-     room.tenpai = {waits:[27],remaining:{27:2}};
+     room.your_flowers = [34,35,36,37,38,39,40,41];
+     room.tenpai = {waits:[24,27,30],remaining:{24:3,27:2,30:1}};
      await setRoom('mahjong', room);
      const layout = await page.evaluate(() => {
       const rect = s => document.querySelector(s).getBoundingClientRect();
@@ -360,6 +367,7 @@ console.log(`PASS Python/JavaScript parity for ${fixtures.cases.length} hands an
        directions: rect('.river-top').bottom < hub.top && rect('.river-bottom').top > hub.bottom
         && rect('.river-left').right < hub.left && rect('.river-right').left > hub.right,
        overlap: rivers.some(e=>overlap(e.getBoundingClientRect(),hub)
+        || rivers.some(other=>other!==e&&overlap(e.getBoundingClientRect(),other.getBoundingClientRect()))
         || seats.some(s=>overlap(e.getBoundingClientRect(),s.getBoundingClientRect()))),
        latest: rivers.every(e=>Math.abs(e.scrollHeight-e.clientHeight-e.scrollTop)<2),
        chatOverlap: chat && [...seats,...document.querySelectorAll('.mj-actions,.mj-my-melds,.mj-hand')]
@@ -382,7 +390,7 @@ console.log(`PASS Python/JavaScript parity for ${fixtures.cases.length} hands an
       const heads = [...document.querySelectorAll('.mj-player-head')].map(e=>e.getBoundingClientRect());
       const rivers = [...document.querySelectorAll('.mj-river')].map(e=>e.getBoundingClientRect());
       const chat = document.querySelector('#desktopRoomChat')?.getBoundingClientRect();
-      const size = [...document.querySelectorAll('.mj-player-rack .mj-tile,.mj-river .mj-tile')].map(e=>{
+      const size = [...document.querySelectorAll('.mj-player-rack .mj-tile,.mj-river .mj-tile,.mj-corner .mj-tile')].map(e=>{
        const r=e.getBoundingClientRect(); return [Math.min(r.width,r.height),Math.max(r.width,r.height)];
       });
       return {
@@ -390,6 +398,7 @@ console.log(`PASS Python/JavaScript parity for ${fixtures.cases.length} hands an
         && Math.abs(midY(rect('.rack-left'))-midY(hub))<1 && Math.abs(midY(rect('.rack-right'))-midY(hub))<1,
        uniform: size.every(s=>Math.abs(s[0]-size[0][0])<.2&&Math.abs(s[1]-size[0][1])<.2),
        overlap: rackRects.some(r=>overlap(r,hub)||rivers.some(b=>overlap(r,b))||heads.some(b=>overlap(r,b)))
+        ||rackRects.some((r,i)=>rackRects.slice(i+1).some(b=>overlap(r,b)))
         ||heads.some((r,i)=>heads.slice(i+1).some(b=>overlap(r,b))),
        chatOverlap: chat&&rackRects.some(r=>overlap(r,chat)),
        orientations: ['top','left','right'].map(pos=>{
@@ -407,13 +416,20 @@ console.log(`PASS Python/JavaScript parity for ${fixtures.cases.length} hands an
       const page=document.querySelector('.mj-page').getBoundingClientRect();
       const stage=document.querySelector('.mj-stage').getBoundingClientRect();
       const controls=document.querySelector('.mj-dock').getBoundingClientRect();
+      const footer=document.querySelector('.mj-footer').getBoundingClientRect();
+      const flowers=document.querySelector('.mj-my-flowers').getBoundingClientRect();
+      const tenpai=document.querySelector('.mj-tenpai').getBoundingClientRect();
       const selfRow=document.querySelector('.mj-self-row').getBoundingClientRect();
       const avatar=document.querySelector('.mj-me').getBoundingClientRect();
       const actions=document.querySelector('.mj-actions').getBoundingClientRect();
       const chat=document.querySelector('#desktopRoomChat')?.getBoundingClientRect();
       return {
-       noFooter: !document.querySelector('.mj-page > .mj-dock') && page.bottom-selfRow.bottom<22,
-       controlsAbove: controls.bottom<=stage.top,
+       noFooter: !document.querySelector('.mj-page > .mj-dock') && page.bottom-footer.bottom<22,
+       controlsByActions: controls.top>=actions.bottom && controls.left>=avatar.right,
+       corners: flowers.left<selfRow.left && tenpai.right>selfRow.right,
+       fitsScreen: document.documentElement.scrollHeight<=innerHeight+1,
+       extent: {scroll:document.documentElement.scrollHeight, height:innerHeight, pageBottom:page.bottom, footerHeight:footer.height, top:page.top},
+       compactHub: document.querySelector(".mj-center").getBoundingClientRect().width < document.querySelector(".river-bottom").getBoundingClientRect().width * .75,
        actionsBesideAvatar: actions.left>=avatar.right && actions.top<avatar.bottom && actions.bottom>avatar.top
         && actions.right<=page.right && selfRow.top>=stage.bottom,
        separateSidebar: chat&&chat.left>=page.right&&chat.height>=innerHeight-110,
@@ -421,11 +437,14 @@ console.log(`PASS Python/JavaScript parity for ${fixtures.cases.length} hands an
       };
      });
      assert.ok(workspace.noFooter,`${width}px no obsolete hand area below the table`);
-     assert.ok(workspace.controlsAbove,`${width}px turn information stays in the table header`);
+     assert.ok(workspace.controlsByActions,`${width}px turn information stays with the action buttons`);
      assert.ok(workspace.actionsBesideAvatar,`${width}px action buttons sit to the right of our avatar, below the hand`);
      if(width>=1024) {
       assert.ok(workspace.separateSidebar,`${width}px full-height chat is a separate right column`);
-      assert.ok(workspace.tileWidth>=(width>=1440?36:28),`${width}px desktop tiles are enlarged`);
+      assert.ok(workspace.tileWidth>=(height>=900?30:22),`${width}px desktop tiles remain readable`);
+      assert.ok(workspace.corners,`${width}px flowers and waits occupy the bottom corners`);
+      assert.ok(workspace.fitsScreen,`${width}px the whole table fits the desktop viewport: ${JSON.stringify(workspace.extent)}`);
+      assert.ok(workspace.compactHub,`${width}px central round panel is smaller than a river`);
      }
      assert.equal(await page.locator('.mj-player-backs img:not([src$="/back.png"])').count(),0);
      assert.equal(await page.locator('.mj-opp .meld-angang .back').count(),4);
@@ -436,8 +455,18 @@ console.log(`PASS Python/JavaScript parity for ${fixtures.cases.length} hands an
     await setRoom('mahjong');
     assert.equal(await page.locator('.mj-center-seat.active').count(),1);
     assert.ok(await page.locator('.center-bottom').evaluate(e=>e.classList.contains('active')));
+    await page.emulateMedia({reducedMotion:'no-preference'});
+    assert.equal(await page.locator('.mj-me .mj-player-head').evaluate(e=>getComputedStyle(e).animationName),'mjSeatPulse');
+    await setRoom('mahjong',{to_act:'p1'});
+    assert.equal(await page.locator('.mj-opp-right .mj-player-head').evaluate(e=>getComputedStyle(e).animationName),'mjSeatPulse');
+    assert.equal(await page.locator('.mj-me .mj-player-head').evaluate(e=>getComputedStyle(e).animationName),'none');
+    await page.emulateMedia({reducedMotion:'reduce'});
+    assert.equal(await page.locator('.mj-opp-right .mj-player-head').evaluate(e=>getComputedStyle(e).animationName),'none');
+    await page.emulateMedia({reducedMotion:'no-preference'});
     await setRoom('mahjong',{paused:true});
     assert.equal(await page.locator('.mj-center-seat.active').count(),0);
+    assert.ok(await page.locator('.mj-player-head').evaluateAll(heads=>heads.every(e=>getComputedStyle(e).animationName==='none')));
+    await page.emulateMedia({reducedMotion:'reduce'});
    }
    for (const [width, height] of [[320,568], [844,390], [1440,900]]) {
     await page.setViewportSize({width,height});
@@ -470,6 +499,6 @@ console.log(`PASS Python/JavaScript parity for ${fixtures.cases.length} hands an
   await page.getByRole('button',{name:'✕ 关闭',exact:true}).click();
   assert.equal(await page.locator('.mj-river-overlay').count(),0);
   assert.deepEqual(errors,[]);
-  console.log('PASS real engine views, follow/play/hints, single selection, double-click, locks, pause, scroll, timers and 5 responsive viewports');
+  console.log('PASS real engine views, follow/play/hints, single selection, double-click, locks, pause, scroll, timers and responsive viewports (including 7 Mahjong sizes)');
  } finally { await browser.close(); }
 })().catch(error=>{console.error(error);process.exit(1);});

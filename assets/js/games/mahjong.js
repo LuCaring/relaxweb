@@ -216,7 +216,7 @@ function topbarNode() {
   chatToggle.setAttribute("aria-label", "打开聊天");
   chatToggle.addEventListener("click", openChatOverlay);
   right.append(riverBtn, chatToggle);
-  bar.append(left, right);
+  bar.append(left, statusNode(), right);
   return bar;
 }
 
@@ -269,6 +269,7 @@ function statusNode() {
   status.textContent = la ? `${la.nickname} ${la.text}`
     : room.claim ? `${displayNameOf(room.claim.by)} 打出 ${tileLabel(room.claim.tile)}，等待响应…`
       : room.to_act ? `等待 ${displayNameOf(room.to_act)} 出牌…` : "发牌中…";
+  status.title = status.textContent;
   return status;
 }
 
@@ -391,8 +392,12 @@ function tenpaiNode() {
   node.className = "mj-tenpai";
   const label = document.createElement("span");
   label.className = "mj-tenpai-label";
-  label.textContent = "听";
-  node.append(label);
+  label.textContent = `听 ${tenpai.waits.length} 种`;
+  const tiles = document.createElement("div");
+  tiles.className = "mj-corner-tiles";
+  tiles.tabIndex = 0;
+  tiles.setAttribute("aria-label", "听牌列表，可左右滚动");
+  node.append(label, tiles);
   for (const code of tenpai.waits) {
     const chip = document.createElement("span");
     chip.className = "mj-tenpai-chip";
@@ -401,7 +406,7 @@ function tenpaiNode() {
     const remaining = tenpai.remaining?.[code];
     count.textContent = remaining != null ? `×${remaining}` : "";
     chip.append(count);
-    node.append(chip);
+    tiles.append(chip);
   }
   return node;
 }
@@ -571,11 +576,13 @@ function actionsNode() {
   const myDiscardTurn = isMyTurn() && room.phase === "discard" && !room.paused;
   const canDiscard = myDiscardTurn && selected.size === 1;
 
-  bar.append(actionButton(
+  const discard = actionButton(
     canDiscard ? `打出 ${tileLabel(room.your_hand[[...selected][0]])}` : "打出",
     "primary", canDiscard,
     () => mjAct({ action: "discard", index: [...selected][0] }),
-    "先点选一张手牌，再点打出"));
+    "先点选一张手牌，再点打出");
+  discard.hidden = room.phase === "claim";
+  bar.append(discard);
 
   const chis = chiOptions();
   bar.append(actionButton(
@@ -693,7 +700,7 @@ function renderMahjongTable() {
 
   const table = document.createElement("div");
   table.className = "mj-table";
-  table.append(topbarNode(), statusNode());
+  table.append(topbarNode());
   const stage = document.createElement("div");
   stage.className = "mj-stage";
   table.append(stage);
@@ -767,8 +774,15 @@ function renderMahjongTable() {
   dockHead.append(countdown);
   dock.append(dockHead);
 
-  const tenpai = tenpaiNode();
-  if (tenpai) dock.append(tenpai);
+  const footer = document.createElement("div");
+  footer.className = "mj-footer";
+  const flowers = document.createElement("div");
+  flowers.className = "mj-my-flowers mj-corner";
+  flowers.setAttribute("aria-label", "我的花牌");
+  const tenpai = tenpaiNode() || document.createElement("div");
+  tenpai.classList.add("mj-tenpai", "mj-corner");
+  tenpai.setAttribute("aria-label", "听牌及剩余张数");
+  footer.append(flowers, selfRow, tenpai);
 
   const myRack = document.createElement("div");
   myRack.className = "mj-player-rack rack-bottom";
@@ -783,14 +797,15 @@ function renderMahjongTable() {
   }
 
   if ((room.your_flowers || []).length) {
-    const flowers = document.createElement("div");
-    flowers.className = "mj-my-flowers";
     const flabel = document.createElement("span");
     flabel.className = "my-cards-label";
-    flabel.textContent = "花牌";
-    flowers.append(flabel);
-    for (const code of room.your_flowers) flowers.append(mjTileNode(code, { small: true }));
-    dock.append(flowers);
+    flabel.textContent = `花牌 · ${room.your_flowers.length} 张`;
+    const flowerTiles = document.createElement("div");
+    flowerTiles.className = "mj-corner-tiles";
+    flowerTiles.tabIndex = 0;
+    flowerTiles.setAttribute("aria-label", "花牌列表，可左右滚动");
+    flowers.append(flabel, flowerTiles);
+    for (const code of room.your_flowers) flowerTiles.append(mjTileNode(code, { small: true }));
   }
 
   const chips = optionChipsNode();
@@ -844,9 +859,9 @@ function renderMahjongTable() {
     const remaining = (turnDeadline - Date.now()) / 1000;
     if (remaining > 0) startHallTicker(fill, remaining);
   }
-  // Keep turn information above the table and actions next to our avatar.
-  table.insertBefore(dock, stage);
-  table.append(selfRow);
+  // Keep the hint with the actions; reserve the two bottom corners for tile information.
+  selfControls.append(dock);
+  table.append(footer);
 
   // Long rivers retain all tiles; keep the latest rows visible on each update.
   for (const river of rivers.querySelectorAll(".mj-river")) {

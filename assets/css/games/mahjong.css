@@ -21,12 +21,13 @@
     --tile-h: calc(var(--table-tile-w) * 10 / 7);
     --river-gap: 3px;
     --river-offset: 10px;
-    --rack-gap: 18px;
-    --head-space: 60px;
+    --rack-gap: 8px;
+    --head-space: 58px;
     --side-head-space: 100px;
-    --hub-size: calc(6 * var(--river-tile-w) + 5 * var(--river-gap));
+    --river-span: calc(6 * var(--river-tile-w) + 5 * var(--river-gap));
+    --hub-size: calc(4 * var(--table-tile-w));
     --river-depth: calc(3 * var(--tile-h) + 2 * var(--river-gap) + 4px);
-    --board-span: calc(var(--hub-size) + 2 * var(--river-depth) + 2 * var(--river-offset) + 2 * var(--tile-h) + 2 * var(--rack-gap));
+    --board-span: max(calc(var(--hub-size) + 2 * var(--river-depth) + 2 * var(--river-offset) + 2 * var(--tile-h) + 2 * var(--rack-gap)), calc(15 * var(--table-tile-w) + 44px + 2 * var(--tile-h) + 2 * var(--rack-gap)));
     --scene-muted: #b6cec9;
     --scene-gold: #f6d28e;
     height: auto;
@@ -42,7 +43,7 @@
 .mj-topbar-right { display: flex; gap: 8px; align-items: center; flex: none; }
 .mj-river-toggle { min-height: 34px; padding: 5px 14px; border-radius: 6px; border: 1px solid #b7d2c333; background: #092a304a; color: #e2ede6; font-size: 12px; cursor: pointer; }
 .mj-page .mj-chat-toggle { border-radius: 6px; background: #092a304a; }
-.mj-status { min-height: 22px; margin: 4px 0; color: #b6cec9; font-size: 11px; line-height: 1.6; text-align: center; overflow-wrap: anywhere; }
+.mj-status { flex: 1; min-width: 0; color: #b6cec9; font-size: 11px; line-height: 1.6; text-align: center; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .mj-stage { position: relative; width: min(100%, calc(var(--board-span) + 2 * var(--side-head-space))); height: calc(var(--board-span) + var(--head-space)); margin: 0 auto; }
 .mj-seat-row { position: absolute; inset: 0; pointer-events: none; }
 .mj-opp { display: contents; }
@@ -61,7 +62,14 @@
 .mj-player-head .rating-badge { display: none; }
 .mj-player-flowers { grid-column: 2; color: #e9cc8d; font-size: 10px; }
 .mj-player-stack { grid-column: 3; color: #f0d49a; font-size: 13px; font-weight: 700; font-variant-numeric: tabular-nums; }
-.mj-page .active .mj-player-head { border-color: #e9c57e; box-shadow: 0 0 18px #edcb7b20; }
+@keyframes mjSeatPulse {
+    0%, 100% { background-color: #173a39; box-shadow: 0 0 0 1px #e9c57e40; }
+    50% { background-color: #75633a; box-shadow: 0 0 18px #edcb7b60; }
+}
+.mj-page .active .mj-player-head { border-color: #e9c57e; background-image: none; animation: mjSeatPulse 1.15s ease-in-out infinite; }
+@media (prefers-reduced-motion: reduce) {
+    .mj-page .active .mj-player-head { animation: none; background-color: #655735; }
+}
 .mj-player-rack { position: absolute; display: flex; align-items: flex-end; justify-content: center; gap: 12px; width: max-content; height: var(--tile-h); pointer-events: auto; }
 .rack-top { top: var(--head-space); left: 50%; transform: translateX(-50%) rotate(180deg); }
 .rack-left { left: calc(var(--side-head-space) + var(--tile-h) / 2); top: calc(50% + var(--head-space) / 2); transform: translate(-50%, -50%) rotate(90deg); }
@@ -72,35 +80,40 @@
 .mj-backs-pics { display: flex; gap: 2px; }
 .mj-player-rack .mj-tile { --tw: var(--table-tile-w); }
 .mj-rivers { position: absolute; left: 50%; top: calc(50% + var(--head-space) / 2); width: var(--hub-size); height: var(--hub-size); transform: translate(-50%, -50%); }
-.mj-river { position: absolute; display: grid; grid-template-columns: repeat(6, var(--river-tile-w)); grid-auto-rows: var(--tile-h); align-content: start; gap: var(--river-gap); width: var(--hub-size); height: var(--river-depth); overflow: auto; scrollbar-width: none; }
+.mj-river { position: absolute; display: grid; grid-template-columns: repeat(6, var(--river-tile-w)); grid-auto-rows: var(--tile-h); align-content: start; gap: var(--river-gap); width: var(--river-span); height: var(--river-depth); overflow: auto; scrollbar-width: none; }
+/* Offset the rivers clockwise so six-tile rows clear the smaller centre and one another. */
 .river-bottom { top: calc(100% + var(--river-offset)); left: 0; }
-.river-top { bottom: calc(100% + var(--river-offset)); left: 0; transform: rotate(180deg); }
+.river-top { bottom: calc(100% + var(--river-offset)); right: 0; transform: rotate(180deg); }
 .river-right { left: calc(100% + var(--river-offset)); top: 100%; transform-origin: top left; transform: rotate(-90deg); }
-.river-left { right: calc(100% + var(--river-offset)); top: 100%; transform-origin: top right; transform: rotate(90deg); }
-.mj-self-row { display: flex; align-items: flex-start; justify-content: center; gap: 12px; width: max-content; max-width: 100%; margin: 12px auto 0; }
+.river-left { right: calc(100% + var(--river-offset)); top: calc(100% - var(--hub-size) + var(--river-span)); transform-origin: top right; transform: rotate(90deg); }
+.mj-self-row { display: flex; align-items: flex-start; justify-content: center; gap: 12px; width: max-content; max-width: 100%; margin: 0 auto; }
 .mj-me { position: relative; flex: none; width: 170px; height: 54px; }
-.mj-me .mj-player-head { inset: 0; }
+.mj-me .mj-player-head { inset: 0; width: 100%; }
+.mj-me .mj-player-flowers { display: none; }
+.mj-me .mj-player-stack { grid-column: 2 / -1; }
 .mj-self-controls { min-width: 0; padding: 0; gap: 6px; }
 .mj-self-controls .mj-actions, .mj-self-controls .mj-chips { justify-content: flex-start; }
-.mj-dock { gap: 8px; padding: 0; margin: 0 0 12px; border: 0; background: none; }
-.mj-dock-head { justify-content: center; gap: 16px; }
-.mj-dock-head .countdown { margin: 0; width: 100px; }
+.mj-dock { gap: 0; padding: 0; margin: 0; border: 0; background: none; }
+.mj-dock-head { justify-content: flex-start; gap: 8px; min-height: 20px; flex-wrap: wrap; }
+.mj-dock-head .my-cards-label { font-size: 11px; }
+.mj-dock-head .countdown { margin: 0; width: 60px; }
 .mj-actions { justify-content: center; gap: 8px; }
 .mj-hand { display: flex; align-items: flex-end; gap: 2px; min-width: 0; padding: 0; overflow-x: auto; overflow-y: clip; scrollbar-width: thin; }
 /* The extra selection space does not change the tiles' alignment with the other racks. */
 .rack-bottom .mj-hand { padding-top: 12px; margin-top: -12px; }
 .mj-center { position: absolute; inset: 0; border: 2px solid #a1b4a347; border-radius: 12px; background: linear-gradient(145deg, #213b3d, #10282d); box-shadow: 0 5px 0 #0a2428, 0 10px 25px #051a2538, inset 0 0 0 5px #ffffff04; }
-.mj-center-info { position: absolute; inset: 30px; display: flex; flex-direction: column; justify-content: center; align-items: center; gap: 3px; border: 1px solid #a6c3b51c; border-radius: 5px; background: #091e252b; }
-.mj-round { color: #f3dfb8; font-size: 19px; font-weight: 600; letter-spacing: .1em; }
+.mj-center-info { position: absolute; inset: 18px; display: flex; flex-direction: column; justify-content: center; align-items: center; gap: 3px; border: 1px solid #a6c3b51c; border-radius: 5px; background: #091e252b; }
+.mj-round { color: #f3dfb8; font-size: clamp(12px, 1.1vw, 16px); font-weight: 600; white-space: nowrap; }
 .mj-round-hand { color: #95afa5; font-size: 10px; }
 .mj-center-wall { color: #9eb9ad; font-size: 10px; white-space: nowrap; }
-.mj-center-wall b { color: #f8dc9e; font-size: 22px; font-weight: 500; font-variant-numeric: tabular-nums; }
-.mj-center-seat { position: absolute; display: flex; align-items: center; justify-content: center; gap: 7px; height: 24px; width: calc(100% - 12px); color: #c3d6c9; font-size: 12px; font-variant-numeric: tabular-nums; border-radius: 3px; }
+.mj-center-wall b { color: #f8dc9e; font-size: 18px; font-weight: 500; font-variant-numeric: tabular-nums; }
+.mj-center-seat { position: absolute; display: flex; align-items: center; justify-content: center; gap: 7px; height: 16px; width: calc(100% - 12px); color: #c3d6c9; font-size: 12px; font-variant-numeric: tabular-nums; border-radius: 3px; }
 .center-bottom { bottom: 3px; left: 6px; }
 .center-top { top: 3px; left: 6px; transform: rotate(180deg); }
-.center-left { left: 3px; top: calc(50% - 12px); transform: translateX(-50%) rotate(90deg) translateY(-12px); }
-.center-right { right: 3px; top: calc(50% - 12px); transform: translateX(50%) rotate(-90deg) translateY(-12px); }
+.center-left { left: 3px; top: calc(50% - 8px); transform: translateX(-50%) rotate(90deg) translateY(-8px); }
+.center-right { right: 3px; top: calc(50% - 8px); transform: translateX(50%) rotate(-90deg) translateY(-8px); }
 .mj-center-seat.active { color: #ffe0a0; background: #efcc7c17; box-shadow: inset 0 -2px #e6c37d; }
+.mj-center-seat > span:not(.mj-center-wind) { display: none; }
 .mj-center-wind { color: #8baca0; }
 .mj-center-wind.dealer { color: #f2d18a; }
 .mj-center-seat.active .mj-center-wind { color: #ffe4a2; }
@@ -120,24 +133,42 @@
 .mj-chip { min-height: 40px; padding: 7px 14px; background: #2d5550; border: 1px solid #bed3b955; border-radius: 6px; color: #edf4e9; font-size: 12px; cursor: pointer; }
 .mj-tenpai { order: 3; display: flex; justify-content: center; flex-wrap: wrap; align-items: center; gap: 6px; }
 .mj-tenpai-label { color: #ffda82; font-weight: 750; font-size: 12px; }
-.mj-tenpai-chip { display: inline-flex; align-items: center; gap: 4px; color: #c1d5cb; font-size: 11px; }
-.mj-tenpai-chip .mj-tile { --tw: 16px; }
+.mj-tenpai-chip { position: relative; display: inline-flex; flex: none; color: #fff2cb; font-size: 11px; }
+.mj-tenpai-chip > span:last-child:not(.mj-tile) { position: absolute; right: -2px; bottom: -3px; padding: 1px 3px; border-radius: 4px; background: #173934; box-shadow: 0 0 0 1px #bda76c; line-height: 1.2; }
+.mj-corner-tiles { display: flex; gap: 5px; max-width: 100%; min-width: 0; overflow-x: auto; padding: 2px 2px 6px 0; scrollbar-width: thin; scrollbar-color: #b7c7a866 transparent; }
+.mj-corner-tiles:focus-visible { outline: 2px solid #f6d28e; outline-offset: 2px; }
+.mj-corner .mj-tile { --tw: var(--table-tile-w); }
+.mj-footer { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); align-items: start; gap: 12px; margin-top: 12px; }
+.mj-footer .mj-corner { display: flex; flex-wrap: wrap; align-content: flex-start; gap: 5px; min-width: 0; }
+.mj-footer .mj-my-flowers { justify-content: flex-start; }
+.mj-footer .mj-tenpai { justify-content: flex-end; }
+.mj-corner > .my-cards-label, .mj-corner > .mj-tenpai-label { flex-basis: 100%; color: #f6d28e; font-size: 11px; line-height: 16px; }
+.mj-tenpai-label { text-align: right; }
 .mj-my-melds, .mj-player-melds { display: flex; flex: none; align-items: flex-end; gap: 8px; }
 .mj-my-flowers { display: flex; justify-content: center; gap: 4px; align-items: center; flex-wrap: wrap; }
+/* 320px reserves the headers, profiles, controls and gaps. Each tile adds at most
+   19.3px of total vertical space per pixel of width (racks, rivers and flower strip). */
 /* The table and the full-height chat are independent desktop grid columns. */
 @media (min-width: 1024px) {
-    .game-in-room:has(.mj-page) .game-workspace { display: grid; grid-template-columns: minmax(0, 1fr) clamp(280px, 22vw, 360px); gap: 16px; align-items: start; width: calc(100% - 32px); margin: 16px auto; }
-    .mj-page { padding: 12px 16px 16px; border: 1px solid #668e8044; border-radius: 16px; }
+    .game-in-room:has(.mj-page) .game-workspace { display: grid; grid-template-columns: minmax(0, 1fr) clamp(280px, 22vw, 360px); gap: 16px; align-items: start; width: calc(100% - 32px); margin: 12px auto 8px; }
+    .mj-page { --table-tile-w: clamp(20px, min(2.6vw, calc((100dvh - 320px - var(--option-space, 0px)) / 19.3)), 40px); padding: 8px 12px 10px; border: 1px solid #668e8044; border-radius: 16px; }
     .game-in-room:has(.mj-page) .desktop-room-chat { position: sticky; top: 84px; height: calc(100dvh - 100px); min-height: 0; }
     .game-in-room:has(.mj-page) .desktop-room-chat .chat-input { color: #233246; caret-color: #233246; }
     .game-in-room:has(.mj-page) .desktop-room-chat .chat-input::placeholder { color: #5b6675; }
     .game-in-room .mj-page .mj-chat-toggle { display: none; }
     .mj-dock { display: grid; grid-template-columns: minmax(0, 1fr); }
     .mj-dock-head { grid-column: 1; grid-row: 1; }
-    .mj-tenpai, .mj-chips, .mj-my-flowers { grid-column: 1 / -1; }
+    .mj-self-row { gap: 8px; }
+    .mj-page:has(.mj-chips) { --option-space: 46px; }
+    .mj-me { width: 136px; }
+    .mj-act { min-width: 44px; padding-inline: 12px; }
+    .mj-act.primary { min-width: 100px; }
+    .mj-act.hu { min-width: 44px; }
 }
 @media (max-width: 1023px) {
     .mj-page { --table-tile-w: clamp(20px, 3.1vw, 28px); }
+    .mj-footer { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+    .mj-footer .mj-self-row { grid-column: 1 / -1; grid-row: 2; }
 }
 @media (max-width: 1199px) {
     .mj-page { --side-head-space: 0px; }
@@ -149,7 +180,7 @@
     .mj-opp-left .mj-player-flowers, .mj-opp-right .mj-player-flowers { grid-column: 2; }
 }
 @media (max-width: 650px) {
-    .mj-page { --table-tile-w: clamp(12px, 3.75vw, 23px); --river-gap: 2px; --river-offset: 6px; --rack-gap: 10px; --head-space: 62px; padding: 8px 8px 12px; }
+    .mj-page { --table-tile-w: clamp(12px, 3.75vw, 23px); --river-gap: 2px; --river-offset: 6px; --rack-gap: 10px; --head-space: 52px; --hub-size: max(82px, calc(4 * var(--table-tile-w))); padding: 8px 8px 12px; }
     .mj-player-head, .mj-opp-left .mj-player-head, .mj-opp-right .mj-player-head { width: 88px; grid-template-columns: 26px 14px minmax(0, 1fr); gap: 2px; padding: 4px; }
     .mj-player-head .casual-avatar { width: 25px; height: 30px; font-size: 14px; border-radius: 5px; }
     .mj-player-name { font-size: 10px; }
@@ -166,7 +197,9 @@
     .mj-topbar-info { letter-spacing: 0; }
     .mj-topbar-right { gap: 4px; }
     .mj-river-toggle { padding-inline: 8px; }
-    .mj-status { font-size: 10px; }
+    .mj-topbar { flex-wrap: wrap; }
+    .mj-topbar-info { flex: 1; }
+    .mj-status { order: 1; flex-basis: 100%; font-size: 10px; text-align: left; }
     .mj-center { border-radius: 7px; border-width: 1px; }
     .mj-center-info { inset: 18px; gap: 1px; }
     .mj-round { font-size: 12px; letter-spacing: 0; }
@@ -181,6 +214,7 @@
     .mj-dock-head { gap: 6px; }
     .mj-dock-head .my-cards-label { font-size: 10px; }
     .mj-dock-head .countdown { width: 50px; flex: none; }
+    .mj-footer { gap: 8px; }
     .mj-actions { gap: 5px; }
     .mj-act { min-width: 38px; padding: 8px 12px; font-size: 13px; }
     .mj-act.primary, .mj-act.hu { min-width: 88px; }

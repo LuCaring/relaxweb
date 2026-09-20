@@ -9,7 +9,7 @@ const root = path.resolve(__dirname, '..');
 
 (async () => {
   const server = spawn(process.env.PYTHON || 'python3',
-    ['scripts/preview_ui.py', '--no-open', '--port', '0'], {cwd: root, stdio: ['ignore', 'pipe', 'pipe']});
+    ['scripts/preview_ui.py', '--no-open', '--no-replace', '--mobile', '--port', '0'], {cwd: root, stdio: ['ignore', 'pipe', 'pipe']});
   let browser;
   const marker = path.join(root, 'scripts/ui_preview', `.reload-test-${process.pid}`);
   try {
@@ -45,9 +45,15 @@ const root = path.resolve(__dirname, '..');
       return frame;
     }
     let frame = await table('guandan');
+    assert.equal(await page.locator('#size').inputValue(), '390x844');
+    assert.equal(await page.locator('#table').evaluate(el => el.contentWindow.innerWidth), 390);
+    assert.equal(await page.locator('#table').evaluate(el => el.contentWindow.innerHeight), 844);
     assert.ok(await frame.locator('.gd-seat.me .casual-avatar img').isVisible());
     await frame.locator('.joker-big img').first().evaluate(image => image.decode());
-    await page.locator('#size').selectOption('390x844');
+    await page.locator('#rotate').click();
+    assert.equal(await page.locator('#table').evaluate(el => el.contentWindow.innerWidth), 844);
+    assert.equal(await page.locator('#table').evaluate(el => el.contentWindow.innerHeight), 390);
+    await page.locator('#mobile').click();
     assert.equal(await page.locator('#table').evaluate(el => el.contentWindow.innerWidth), 390);
     await page.locator('#size').selectOption('1440x900');
     await page.locator('#bubbles').click();

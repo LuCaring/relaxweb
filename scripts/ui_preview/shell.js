@@ -21,6 +21,14 @@ function load() {
 }
 for (const id of ["game", "scene"]) $(id).addEventListener("change", load);
 $("size").addEventListener("change", () => { updateURL(); resize(); });
+$("mobile").addEventListener("click", () => {
+  $("size").value = "390x844";
+  updateURL(); resize();
+});
+$("rotate").addEventListener("click", () => {
+  $("size").value = $("size").value === "844x390" ? "390x844" : "844x390";
+  updateURL(); resize();
+});
 $("reset").addEventListener("click", load);
 $("bubbles").addEventListener("click", () => $("table").contentWindow.postMessage({type: "preview-bubbles"}, location.origin));
 window.addEventListener("resize", resize);

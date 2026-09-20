@@ -13,6 +13,9 @@ python3 scripts/preview_ui.py
 ```
 
 会启动本地服务并自动打开浏览器，直接进入掼蛋牌桌，无需登录或凑齐玩家。
+在 Linux 上启动时会自动终止**同一仓库**之前的 `preview_ui.py` 进程，换端口启动也会替换；
+不会终止其他占用端口的服务或其他仓库的预览。自动化测试并行运行时可传 `--no-replace` 保留旧实例。
+其他系统可使用 `--no-replace` 并手动停止旧预览。
 工具栏可以切换掼蛋、麻将、德扑、UNO，以及普通牌桌、长昵称/拥挤牌面、等待开局、暂停场景；
 也可以切换桌面/手机/横屏尺寸、显示聊天气泡、重置场景或单独打开牌桌。
 修改 `assets/`、`game.html` 或预览工具页面后自动刷新，保留当前游戏、场景与尺寸。
@@ -21,17 +24,24 @@ python3 scripts/preview_ui.py
 python3 scripts/preview_ui.py --game mahjong             # 直接预览麻将
 python3 scripts/preview_ui.py --game guandan --scene dense # 长昵称和长手牌
 python3 scripts/preview_ui.py --port 0 --no-open          # 自动选空闲端口，只打印地址
+python3 scripts/preview_ui.py --game mahjong --mobile    # 直接查看手机竖屏 UI
+python3 scripts/preview_ui.py --game mahjong --landscape # 直接查看手机横屏 UI
+python3 scripts/preview_ui.py --game mahjong --lan       # 同一 Wi-Fi 下用真机访问
 ```
 
 默认地址为 `http://127.0.0.1:8010/`，按 `Ctrl+C` 停止。没有桌面浏览器的环境可手动打开终端打印的地址。
 这是使用真实前端和游戏引擎视图生成的**布局样例**：选牌、提示、聊天、暂停可以测试，出牌等操作会显示记录并解除按钮锁，
 不推进完整对局。倒计时延长至一天，便于持续观察。修改 Python 样例生成逻辑后需重启脚本。
-服务只绑定本机地址，屏蔽真实 WebSocket，不读取账号数据库，也不连接生产服务。
+工具栏提供「手机预览」「横竖屏切换」，桌面浏览器中按真实 CSS 视口尺寸检查布局；
+触摸、软键盘和移动浏览器差异请用真机验证。`--lan` 会监听局域网并打印手机访问地址，
+手机与电脑连接同一网络后打开该地址即可；真机页面按手机自身宽高显示牌桌。
+默认只绑定本机地址，屏蔽真实 WebSocket，不读取账号数据库，也不连接生产服务。
 
 预览工具回归测试（需要本地 Playwright 和 Chrome，可设置 `NODE_PATH`、`CHROME_PATH`）：
 
 ```bash
 node tests/test_ui_preview.cjs
+python3 tests/test_preview_startup.py # 进程替换、端口复用与局域网监听
 ```
 
 ## 功能
