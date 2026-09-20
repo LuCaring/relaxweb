@@ -91,6 +91,7 @@ const coinKinds = {
   bet_result: "竞猜结果",
   game_result: "游戏结算",
   lottery_win: "签到抽奖",
+  holdem_daily_reward: "每日德扑流水奖励",
 };
 const profiles = new Map();
 const pendingProfiles = new Set();
@@ -480,6 +481,7 @@ const messageHandlers = {
   daily_rewards(data) { rewardsPanel.handle(data); },
   checkin_result(data) { rewardsPanel.handle(data); },
   lottery_result(data) { rewardsPanel.handle(data); },
+  holdem_reward_result(data) { rewardsPanel.handle(data); },
   rewards_error(data) { rewardsPanel.handle(data); },
   transfer_success(data) {
     if (currentUser) currentUser.coins = data.coins;

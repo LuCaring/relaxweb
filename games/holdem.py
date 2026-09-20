@@ -646,7 +646,7 @@ class HoldemRoom(BaseRoom):
         payouts = distribute_pots(pots, hands) if hands else {alive[0]: pot}
         endings = {name: round(member["stack"] + payouts.get(name, 0), 2)
                    for name, member in self.members.items()}
-        ratings = self.settle_ratings(endings)
+        ratings = self.settle_ratings(endings, stakes=stakes)
         for name, amount in payouts.items():
             if amount > 0 and name in self.members:
                 self.members[name]["stack"] = round(self.members[name]["stack"] + amount, 2)

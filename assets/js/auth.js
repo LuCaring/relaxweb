@@ -17,6 +17,7 @@ const coinKinds = {
   bet_result: "竞猜结果",
   game_result: "游戏结算",
   lottery_win: "签到抽奖",
+  holdem_daily_reward: "每日德扑流水奖励",
 };
 
 export function setAuthMode(mode) {
@@ -199,7 +200,7 @@ onMessage("auth_expired", () => {
 onMessage("auth_error", (data) => { void alertDialog(data.message); });
 
 onMessage("finance", (data) => { renderFinance(data); });
-for (const type of ["daily_rewards", "checkin_result", "lottery_result", "rewards_error"]) {
+for (const type of ["daily_rewards", "checkin_result", "lottery_result", "holdem_reward_result", "rewards_error"]) {
   onMessage(type, (data) => rewardsPanel.handle(data));
 }
 

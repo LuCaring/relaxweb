@@ -149,7 +149,7 @@ def _holdem_room(room_id, names, blind=5):
     room.broadcast_payload = noop
     room.on_rooms_changed = noop
     room.player_rating = lambda username: {"score": 1000, "tier": "白银"}
-    room.record_ratings = lambda hand_id, starts, endings: {
+    room.record_ratings = lambda hand_id, starts, endings, stakes=None: {
         name: {"delta": 5, "initial": starts[name], "final": endings[name]}
         for name in endings
     }

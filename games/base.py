@@ -62,7 +62,7 @@ class BaseRoom:
         display_name(username)       用户名 -> 展示昵称
         set_escrow(username, amount) 筹码变动后同步托管（宿主写数据库）
         player_rating(username)     读取公开段位
-        record_ratings(id, starts, endings) 同步提交积分及已结算筹码，返回逐人明细
+        record_ratings(id, starts, endings, stakes) 同步提交积分、筹码与可选德扑下注流水
         on_dissolve_requested(reason)    async，房间解散（含结算解散、流局）
         on_rebuy_requested()             async，对局结束「再来一局」：按买入额重新买入，
                                          余额不足者由宿主负责离桌退币
@@ -92,7 +92,7 @@ class BaseRoom:
         self.display_name = lambda username: username
         self.set_escrow = lambda username, amount: None
         self.player_rating = lambda username: None
-        self.record_ratings = lambda hand_id, starts, endings: {}
+        self.record_ratings = lambda hand_id, starts, endings, stakes=None: {}
         self.rating_hand_id = None
         self.rating_starts = {}
         self.rating_results = {}
@@ -104,14 +104,15 @@ class BaseRoom:
         self.rating_starts = {name: self.members[name]["stack"] for name in names}
         self.rating_results = {}
 
-    def settle_ratings(self, endings=None):
-        """正常结束结算全员；提前离桌仅结算离开者，同一手每人最多一次。"""
+    def settle_ratings(self, endings=None, stakes=None):
+        """正常结束结算全员；提前离桌仅结算离开者。stakes 只在德扑整手结束时提供。"""
         if endings is None:
             endings = {name: member["stack"] for name, member in self.members.items()}
         pending = {name: amount for name, amount in endings.items()
                    if name in self.rating_starts and name not in self.rating_results}
-        if pending:
-            fresh = self.record_ratings(self.rating_hand_id, self.rating_starts, pending)
+        if pending or stakes is not None:
+            fresh = self.record_ratings(
+                self.rating_hand_id, self.rating_starts, pending, stakes)
             self.rating_results.update(fresh)
             for name, info in fresh.items():
                 self.match_rating_delta[name] = (
