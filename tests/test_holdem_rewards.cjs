@@ -76,11 +76,20 @@ const assert = require('node:assert/strict');
         for (let i = 0; i < 4; i++) {
           const box = await target.boundingBox();
           if (box.y >= bounds.y && box.y + box.height <= bounds.y + bounds.height) break;
-          await cdp.send('Input.synthesizeScrollGesture', {
-            x: Math.round(bounds.x + bounds.width / 2),
-            y: Math.round(bounds.y + bounds.height - 35),
-            yDistance: -220, speed: 500, gestureSourceType: 'touch',
+          const x = Math.round(bounds.x + bounds.width / 2);
+          const startY = Math.round(bounds.y + bounds.height - 35);
+          await cdp.send('Input.dispatchTouchEvent', {
+            type: 'touchStart', touchPoints: [{x, y: startY}],
           });
+          for (let step = 1; step <= 8; step++) {
+            await cdp.send('Input.dispatchTouchEvent', {
+              type: 'touchMove',
+              touchPoints: [{x, y: startY - Math.round(220 * step / 8)}],
+            });
+            await page.evaluate(() => new Promise(requestAnimationFrame));
+          }
+          await cdp.send('Input.dispatchTouchEvent', {type: 'touchEnd', touchPoints: []});
+          await page.evaluate(() => new Promise(requestAnimationFrame));
         }
         const box = await target.boundingBox();
         assert.ok(box.y >= bounds.y && box.y + box.height <= bounds.y + bounds.height,

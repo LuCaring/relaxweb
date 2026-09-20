@@ -106,6 +106,7 @@ const summaries = [
 
     await page.setViewportSize({width: 1440, height: 900});
     await showRoom(room('guandan', 3));
+    await page.evaluate(async () => (await import('/assets/js/room-chat.js')).openChatOverlay());
     await page.evaluate(() => {
       window.existingSeat = document.querySelector('#gameMain [data-username="p0"]');
       window.chatInput = document.getElementById('roomChatInput');
@@ -129,6 +130,7 @@ const summaries = [
     assert.equal(await page.locator('.waiting-seat[data-username="p1"] .seat-bubble').innerText(), '大家好');
     await updateRoom(room('guandan', 4));
     assert.equal(await page.locator('.waiting-seat[data-username="p1"] .seat-bubble').innerText(), '大家好');
+    await page.evaluate(async () => (await import('/assets/js/room-chat.js')).closeChatOverlay());
     await page.getByRole('button', {name: '开始游戏', exact: true}).click();
     assert.deepEqual(await page.evaluate(() => sent.at(-1)), {type: 'start_game'});
     await showRoom({...room('guandan', 4), owner: 'p1'});
