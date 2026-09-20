@@ -32,12 +32,45 @@
 .rating-place[data-podium="2"] { color: #566577; background: #e9eef5; }
 .rating-place[data-podium="3"] { color: #915c37; background: #f6e6d8; }
 .rating-player { min-width: 0; overflow-wrap: anywhere; font-size: 14px; }
-.rating-ranking-score { text-align: right; }
+.rating-ranking-score { min-width: 0; text-align: right; }
+.rating-ranking-score .rating-badge { max-width: 100%; box-sizing: border-box; }
+.rating-holdem-stats { grid-column: 1 / -1; min-width: 0; width: 100%; box-sizing: border-box; color: #333b44; }
+.rating-own-rank .rating-holdem-stats { flex-basis: 100%; }
+.rating-stats-heading { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; font-size: 12px; }
+.rating-sample-note { color: #8a6323; font-size: 11px; }
+.rating-stats-grid { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 12px; margin: 12px 0; }
+.rating-metric { min-width: 0; overflow-wrap: anywhere; }
+.rating-metric dt { color: #5a646e; font-size: 12px; line-height: 1.6; }
+.rating-metric dd { margin: 3px 0 0; }
+.rating-metric-value { display: block; font-size: 15px; line-height: 1.6; font-variant-numeric: tabular-nums; }
+.rating-metric small { display: block; margin-top: 3px; font-size: 11px; }
+.rating-stats-more { border-top: 1px dashed #dce4e0; padding-top: 8px; }
+.rating-stats-more summary { width: fit-content; max-width: 100%; cursor: pointer; color: #426c59; font-size: 12px; line-height: 1.8; }
+.rating-stats-more summary:focus-visible, .rating-pagination button:focus-visible { outline: 2px solid #287d5b; outline-offset: 3px; }
+.rating-stats-extra { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.rating-stats-more > p { margin-bottom: 0; }
+.rating-stats-scope { margin-bottom: 18px; }
+.rating-pagination { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 8px; margin: 14px 0; }
+.rating-pagination button { cursor: pointer; flex-shrink: 0; }
+.rating-pagination button:disabled { opacity: .45; cursor: default; }
+.rating-page-number { text-align: center; }
+@media (max-width: 900px) {
+    .rating-stats-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+    .rating-stats-extra { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
 @media (max-width: 600px) {
     .rating-result-row { align-items: flex-start; }
     .rating-outcome { flex-direction: column; align-items: flex-end; flex-shrink: 0; gap: 4px; }
     .rating-ranking-button { margin-left: 0; }
     .rating-tier-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
-    .rating-ranking-row { grid-template-columns: 30px minmax(0, 1fr) auto; gap: 8px; padding: 12px 0; }
+    .rating-toolbar { gap: 10px; }
+    .rating-toolbar h1 { flex-basis: calc(100% - 110px); font-size: 17px; }
+    .rating-ranking-row { grid-template-columns: 30px minmax(0, 1fr); gap: 8px; padding: 14px 0; }
+    .rating-ranking-score { grid-column: 2; text-align: left; }
     .rating-place { width: 28px; height: 28px; }
+    .rating-own-rank { padding: 12px; }
+    .rating-stats-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px 10px; }
+    .rating-metric-value { font-size: 14px; }
+    .rating-page-number { order: -1; flex-basis: 100%; }
+    .rating-pagination button { font-size: 12px; }
 }
