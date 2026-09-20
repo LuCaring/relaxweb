@@ -256,6 +256,39 @@ console.log(`PASS Python/JavaScript parity for ${fixtures.cases.length} hands an
     if(process.env.TABLE_SCREENSHOT_DIR) await page.screenshot({path:path.join(process.env.TABLE_SCREENSHOT_DIR,`${game}-${width}.png`),fullPage:true});
    }
   }
+  // Chat bubbles must size independently of narrow seats and stay on the table.
+  for (const game of ['mahjong', 'guandan']) {
+   for (const [width,height] of [[1440,900],[1024,768],[390,844],[320,568],[844,390]]) {
+    await page.setViewportSize({width,height});
+    await setRoom(game);
+    await page.evaluate(() => {
+     core.state.myRoom.players.forEach((p,i)=>core.handleServerMessage({
+      type:'room_chat',room_id:core.state.myRoom.room_id,username:p.username,nickname:p.nickname,time:'12:00',
+      text:i===0?'这张牌先留着，等下一轮看看大家怎么出。':i===1?'AReallyLongUnbrokenMessageThatStillNeedsToStayInsideTheBubble':'这局打得不错，我们慢慢来，下一轮再看看。',
+     }));
+    });
+    const bubbles=await page.evaluate(()=>[...document.querySelectorAll('.seat-bubble')].map(node=>{
+     const r=node.getBoundingClientRect(),style=getComputedStyle(node);
+     const table=node.closest('.casual-page').getBoundingClientRect();
+     return {visible:!node.hidden,left:r.left,right:r.right,top:r.top,
+      minTop:Math.max(8,table.top+8),width:r.width,fontSize:parseFloat(style.fontSize),
+      overflow:node.scrollWidth>node.clientWidth,breakAll:style.wordBreak==='break-all'};
+    }));
+    assert.equal(bubbles.length,4);
+    for(const b of bubbles.filter(b=>b.visible)) {
+     assert.ok(b.left>=15&&b.right<=width-15&&b.top>=b.minTop-2,`${game} ${width}px bubble stays on table: ${JSON.stringify(b)}`);
+     assert.ok(b.width>=200&&b.fontSize>=14,`${game} ${width}px readable bubble: ${JSON.stringify(b)}`);
+     assert.ok(!b.overflow&&!b.breakAll,`${game} ${width}px natural wrapping`);
+    }
+    if(process.env.TABLE_SCREENSHOT_DIR) await page.screenshot({path:path.join(process.env.TABLE_SCREENSHOT_DIR,`${game}-bubbles-${width}.png`),fullPage:true});
+    await page.evaluate(()=>core.renderGameView());
+    assert.equal(await page.locator('.seat-bubble').count(),4,'table redraw restores each active bubble once');
+    await page.evaluate(async()=>{
+     (await import('/assets/js/room-chat.js')).clearSeatBubbles();
+    });
+    assert.equal(await page.locator('.seat-bubble').count(),0,'clearing room chat removes floating bubbles');
+   }
+  }
   for (const game of ['mahjong', 'guandan']) {
    // The four rivers must surround the hub, including long late-game rivers.
    if (game === 'mahjong') {

@@ -84,15 +84,14 @@ export function chatOpenButton() {
 
 function showSeatBubble(username, text) {
   if (!state.myRoom) return;
+  removeSeatBubble(username);
   seatBubbles.set(username, { text: text.length > 60 ? `${text.slice(0, 60)}…` : text, until: Date.now() + 3000 });
   applySeatBubble(username);
   window.setTimeout(() => {
     const bubble = seatBubbles.get(username);
     if (bubble && bubble.until <= Date.now()) {
+      removeSeatBubble(username);
       seatBubbles.delete(username);
-      if (!state.myRoom) return;
-      const idx = state.myRoom.players.findIndex((p) => p.username === username);
-      if (idx >= 0) removeSeatBubble(seatNodeByIndex(idx));
     }
   }, 3100);
 }
@@ -103,17 +102,47 @@ function applySeatBubble(username) {
   if (index < 0) return;
   const seat = seatNodeByIndex(index);
   if (!seat) return;
-  removeSeatBubble(seat);
+  removeSeatBubble(username);
   const bubble = seatBubbles.get(username);
   if (!bubble || bubble.until <= Date.now()) return;
   const node = document.createElement("div");
   node.className = "seat-bubble";
   node.textContent = bubble.text;
-  seat.append(node);
+  node.dataset.username = username;
+  // Seat transforms create stacking contexts. Render above those contexts so
+  // neighboring avatars cannot paint over a wider message.
+  const table = seat.closest(".casual-page, .uno-table, .poker-table, .waiting-table") || seat;
+  table.append(node);
+  bubble.node = node;
+  positionSeatBubble(node, seat, table);
 }
 
-function removeSeatBubble(seat) {
-  seat?.querySelector(".seat-bubble")?.remove();
+function positionSeatBubble(node, seat, table) {
+  const anchor = seat.getBoundingClientRect();
+  node.hidden = !anchor.width || !anchor.height;
+  if (node.hidden) return;
+  const bounds = table.getBoundingClientRect();
+  const left = Math.max(16, bounds.left + 8);
+  const right = Math.min(document.documentElement.clientWidth - 16,
+    bounds.right - 8);
+  node.style.setProperty("--bubble-available-width", `${Math.max(0, right - left)}px`);
+  const width = node.offsetWidth;
+  const naturalLeft = anchor.left + anchor.width / 2 - width / 2;
+  const shift = Math.max(left, Math.min(naturalLeft, right - width)) - naturalLeft;
+  node.style.left = `${anchor.left + anchor.width / 2 - bounds.left - table.clientLeft}px`;
+  node.style.setProperty("--bubble-shift", `${shift}px`);
+  node.style.setProperty("--bubble-tail-x", `${Math.max(16, Math.min(width - 16, width / 2 - shift))}px`);
+  // Top seats have little space above them; place their message inside the table.
+  let top = anchor.top - node.offsetHeight - 10;
+  if (top < Math.max(8, bounds.top + 8)) {
+    node.dataset.placement = "below";
+    top = anchor.bottom + 10;
+  }
+  node.style.top = `${top - bounds.top - table.clientTop}px`;
+}
+
+function removeSeatBubble(username) {
+  seatBubbles.get(username)?.node?.remove();
 }
 
 export function openChatOverlay() {
@@ -195,7 +224,12 @@ export function reapplySeatBubbles() {
   for (const username of seatBubbles.keys()) applySeatBubble(username);
 }
 
-export function clearSeatBubbles() { seatBubbles.clear(); }
+window.addEventListener("resize", reapplySeatBubbles);
+
+export function clearSeatBubbles() {
+  for (const username of seatBubbles.keys()) removeSeatBubble(username);
+  seatBubbles.clear();
+}
 
 export function resetRoomChat() {
   state.roomChat = [];

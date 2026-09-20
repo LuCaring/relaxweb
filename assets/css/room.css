@@ -494,66 +494,59 @@
 
 .seat-bubble {
     position: absolute;
-
-    bottom: calc(100% + 6px);
-
-    left: 50%;
-
-    transform: translateX(-50%);
-
-    z-index: 6;
-
-    max-width: 150px;
-
-    padding: 5px 9px;
-
-    border-radius: 9px;
-
-    background: rgba(29,29,31,.92);
-
-    color: white;
-
-    font-size: 11px;
-
-    line-height: 1.35;
-
-    text-align: center;
-
-    word-break: break-all;
-
+    top: 0;
+    left: 0;
+    transform: translateX(calc(-50% + var(--bubble-shift, 0px)));
+    z-index: 40;
+    box-sizing: border-box;
+    width: max-content;
+    max-width: min(320px, calc(100vw - 32px), var(--bubble-available-width, 100vw));
+    padding: 12px 16px;
+    border: 1px solid #dbe7dc;
+    border-radius: 14px;
+    background: #f5f8f4;
+    box-shadow: 0 6px 20px #051b3330;
+    color: #1a3434;
+    font-size: 16px;
+    font-weight: 500;
+    line-height: 1.6;
+    text-align: left;
+    white-space: pre-wrap;
+    word-break: normal;
+    overflow-wrap: anywhere;
     pointer-events: none;
-
     animation: bubble-in .18s ease both;
 }
 
 .seat-bubble::after {
     content: "";
-
     position: absolute;
-
     top: 100%;
-
-    left: 50%;
-
+    left: var(--bubble-tail-x, 50%);
     transform: translateX(-50%);
-
-    border: 5px solid transparent;
-
-    border-top-color: rgba(29,29,31,.92);
+    border: 7px solid transparent;
+    border-top-color: #f5f8f4;
 }
+
+.seat-bubble[data-placement="below"]::after { top: auto; bottom: 100%; border-top-color: transparent; border-bottom-color: #f5f8f4; }
 
 @keyframes bubble-in {
     from {
         opacity: 0;
-
-        transform: translate(-50%, 5px);
+        transform: translate(calc(-50% + var(--bubble-shift, 0px)), 5px);
     }
-
     to {
         opacity: 1;
-
-        transform: translate(-50%, 0);
+        transform: translate(calc(-50% + var(--bubble-shift, 0px)), 0);
     }
+}
+
+@media (max-width: 650px) {
+    .seat-bubble { max-width: min(260px, calc(100vw - 32px), var(--bubble-available-width, 100vw)); padding: 10px 13px; font-size: 14px; border-radius: 12px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .seat-bubble { animation: none; }
 }
 
 
