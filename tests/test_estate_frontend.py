@@ -75,8 +75,11 @@ class EstateFrontendTests(unittest.TestCase):
         self.assertIn('const ROOT = "assets/estate/xiaopang"', assets)
         for function in ("cropAsset", "catchAsset", "mineralAsset", "toolAsset", "inventoryAsset", "drawPlayerAsset"):
             self.assertIn(f"function {function}", assets)
-        for direction in ('down:', 'up:', 'right:'):
-            self.assertIn(direction, assets)
+        self.assertIn('drawCharacterSkin', assets)
+        characters = self.read('assets/js/estate/characters.js')
+        self.assertIn('characterFrame', characters)
+        self.assertIn('imageSmoothingEnabled = false', characters)
+        self.assertIn('profile.skin_id', self.read('assets/js/estate/map.js'))
 
     def test_cc0_pixel_atlases_are_local_and_documented(self):
         attribution = self.read("assets/estate/ATTRIBUTION.md")

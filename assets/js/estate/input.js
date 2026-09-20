@@ -17,8 +17,10 @@ export function createEstateInput(root) {
     vector.y = Number(keys.has("ArrowDown") || keys.has("KeyS")) - Number(keys.has("ArrowUp") || keys.has("KeyW"));
   };
   const keydown = (event) => {
-    if (!root.querySelector(".estate-sheet")?.hidden || !document.getElementById("gameAudioSettingsModal")?.hidden) return;
+    if (document.body.dataset.dialogOpen === "true" || root.querySelector(".estate-sheet:not([hidden])")
+        || document.querySelector("#gameAudioSettingsModal:not([hidden])")) return;
     if (["INPUT", "SELECT", "TEXTAREA"].includes(document.activeElement?.tagName)) return;
+    if (document.activeElement?.tagName === "BUTTON" && ["Space", "Enter"].includes(event.code)) return;
     if (["KeyE", "Space"].includes(event.code) && !event.repeat) actionPressed = true;
     keys.add(event.code);
     recalc();

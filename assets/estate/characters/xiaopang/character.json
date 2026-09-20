@@ -1,0 +1,50 @@
+{
+  "id": "xiaopang",
+  "name": "小胖庄园主",
+  "image": "character.png",
+  "frameWidth": 36,
+  "frameHeight": 48,
+  "anchorX": 18,
+  "anchorY": 46,
+  "spacing": 1,
+  "columns": 8,
+  "collision": {
+    "width": 14,
+    "height": 10
+  },
+  "animations": {
+    "idle_down": {
+      "row": 0,
+      "frames": 2,
+      "fps": 2.5
+    },
+    "idle_up": {
+      "row": 1,
+      "frames": 2,
+      "fps": 2.5
+    },
+    "idle_right": {
+      "row": 2,
+      "frames": 2,
+      "fps": 2.5
+    },
+    "walk_down": {
+      "row": 3,
+      "frames": 4,
+      "fps": 8
+    },
+    "walk_up": {
+      "row": 4,
+      "frames": 4,
+      "fps": 8
+    },
+    "walk_right": {
+      "row": 5,
+      "frames": 4,
+      "fps": 8
+    }
+  },
+  "fallbacks": {
+    "run": "walk"
+  }
+}

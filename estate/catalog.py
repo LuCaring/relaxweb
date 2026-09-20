@@ -11,6 +11,13 @@ MAX_PLOTS = 8
 BALANCE_VERSION = "v1"
 FISH_RARITY_WEIGHTS = {1: 100, 2: 22, 3: 4, 4: .6, 5: .08, 6: .006}
 
+# 所有皮肤免费开放；稳定 ID 写入账号存档，外观素材由客户端提供。
+SKINS = {
+    "berry": {"name": "经典莓果", "description": "莓果色长发，陪你照料每一寸田野。"},
+    "xiaopang": {"name": "小胖庄园主", "description": "黑色棉服与圆框眼镜，庄园的暖心主人。"},
+    "rose_mage": {"name": "粉樱礼帽", "description": "粉樱双马尾与小礼帽，把日常过成魔法。"},
+}
+
 # --------------------------------------------------------------------------
 # 钓鱼与矿场的规则常量
 # --------------------------------------------------------------------------
@@ -281,6 +288,7 @@ def item_info(item_id):
 def public_catalog():
     return {
         "balance_version": BALANCE_VERSION,
+        "skins": {key: {"id": key, **value} for key, value in SKINS.items()},
         "crops": {
             crop_id: {
                 "id": crop_id,

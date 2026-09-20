@@ -2,9 +2,10 @@
 
 ## 小胖庄园人物原画
 
-- `xiaopang/player/character-sheet.png`：用户提供的人物透明图集。
-- 游戏按原稿中的正面、背面与侧面行走帧实时裁切；向左行走由侧面帧镜像生成。
-- 原稿的红色像素描边属于角色设计的一部分，未作二次涂改。
+- [经典莓果原稿](xiaopang/player/character-sheet.png)、[小胖庄园主原稿](characters/sources/xiaopang.png)、[粉樱礼帽原稿](characters/sources/rose_mage.png)：均由用户提供，原始文件保持不变。
+- 游戏改用 [characters](characters/) 下的规范化派生素材：36×48 帧、脚底锚点 (18,46)、8 列、1px 透明间隔；每个角色含三方向 idle / walk 共 18 帧，左向默认镜像右向。
+- 转换做了最近邻缩放、逐动画行尺寸校准、超宽发型横向适配、24 色共享调色板与二值透明处理；去掉红色生成边缘和低透明度杂点，未作平滑或羽化。不是重新手绘的完整动作集。
+- 可用 [转换脚本](../../tools/build_estate_characters.py) 重建。完整规则、运行时回退和后续扩展说明见 [皮肤系统文档](../../docs/estate-skins.md)。
 
 ## Kenney Tiny Farm
 
