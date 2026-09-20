@@ -106,6 +106,35 @@ console.log(`PASS Python/JavaScript parity for ${fixtures.cases.length} hands an
    }, {...fixtures.rooms[game], ...patch});
   }
   const actions = () => page.evaluate(()=>window.sent.filter(m=>m.type==='poker_action'));
+  async function assertChatReadable(label) {
+   const contrast = await page.locator('#roomChatInput').evaluate(input => {
+    const rgb = value => value.match(/[\d.]+/g).map(Number);
+    const blend = (fg,bg) => fg.slice(0,3).map((c,i)=>c*(fg[3]??1)+bg[i]*(1-(fg[3]??1)));
+    const chain=[];
+    for(let el=input;el;el=el.parentElement) chain.unshift(el);
+    const background=chain.reduce((bg,el)=>blend(rgb(getComputedStyle(el).backgroundColor),bg),[255,255,255]);
+    const luminance = color => color.map(c=>c/255).map(c=>c<=.04045?c/12.92:((c+.055)/1.055)**2.4)
+     .reduce((sum,c,i)=>sum+c*[.2126,.7152,.0722][i],0);
+    const ratio = color => {
+     const a=luminance(blend(rgb(color),background)),b=luminance(background);
+     return (Math.max(a,b)+.05)/(Math.min(a,b)+.05);
+    };
+    const style=getComputedStyle(input);
+    return {text:ratio(style.color),caret:ratio(style.caretColor),placeholder:ratio(getComputedStyle(input,'::placeholder').color),
+     color:style.color,background};
+   });
+   assert.ok(contrast.text>=4.5 && contrast.caret>=3 && contrast.placeholder>=4.5,
+    `${label}: typed text, caret and placeholder must be readable: ${JSON.stringify(contrast)}`);
+  }
+  for(const game of ['mahjong','guandan']) {
+   await setRoom(game);
+   await assertChatReadable(`${game} unfocused chat`);
+   await page.locator('#roomChatInput').fill('测试聊天文字 Chat 123');
+   await assertChatReadable(`${game} focused chat`);
+   assert.equal(await page.locator('#roomChatInput').inputValue(),'测试聊天文字 Chat 123');
+   await page.locator('#roomChatInput').fill('');
+   await page.locator('#roomChatInput').blur();
+  }
   await setRoom('guandan');
   assert.equal(await page.locator('#desktopRoomChat.compact-room-chat').count(), 1);
   assert.equal(await page.locator('.gd-seat .casual-avatar img').count(), 4);
@@ -228,6 +257,49 @@ console.log(`PASS Python/JavaScript parity for ${fixtures.cases.length} hands an
    }
   }
   for (const game of ['mahjong', 'guandan']) {
+   // The four rivers must surround the hub, including long late-game rivers.
+   if (game === 'mahjong') {
+    for (const [width, height] of [[320,568], [390,844], [844,390], [1024,768], [1440,900]]) {
+     await page.setViewportSize({width,height});
+     const room = structuredClone(fixtures.rooms.mahjong);
+     room.discards = Object.fromEntries(room.players.map(p =>
+      [p.username, Array.from({length:24}, (_, i) => i % 34)]));
+     room.last_discard = {by:'p3',tile:23};
+     room.players[0].melds = [{type:'peng',tiles:[4,4,4]}, {type:'angang',tiles:[8,8,8,8]}];
+     room.your_hand = [0,1,2,9,10,11,27,27];
+     room.tenpai = {waits:[27],remaining:{27:2}};
+     await setRoom('mahjong', room);
+     const layout = await page.evaluate(() => {
+      const rect = s => document.querySelector(s).getBoundingClientRect();
+      const hub = rect('.mj-center');
+      const rivers = [...document.querySelectorAll('.mj-river')];
+      const overlap = (a,b) => a.left < b.right && a.right > b.left && a.top < b.bottom && a.bottom > b.top;
+      const seats = [...document.querySelectorAll('.mj-player-head')].filter(e=>e.getBoundingClientRect().width);
+      const chat = document.querySelector('#desktopRoomChat')?.getBoundingClientRect();
+      return {
+       directions: rect('.river-top').bottom < hub.top && rect('.river-bottom').top > hub.bottom
+        && rect('.river-left').right < hub.left && rect('.river-right').left > hub.right,
+       overlap: rivers.some(e=>overlap(e.getBoundingClientRect(),hub)
+        || seats.some(s=>overlap(e.getBoundingClientRect(),s.getBoundingClientRect()))),
+       latest: rivers.every(e=>Math.abs(e.scrollHeight-e.clientHeight-e.scrollTop)<2),
+       chatOverlap: chat && [...seats,...document.querySelectorAll('.mj-actions,.mj-my-melds,.mj-hand')]
+        .some(e=>overlap(chat,e.getBoundingClientRect())),
+       clipped: rect('.mj-my-flowers').bottom > rect('.mj-page').bottom,
+      };
+     });
+     assert.ok(layout.directions, `${width}px rivers face their seats`);
+     assert.equal(layout.overlap, false, `${width}px dense rivers clear hub and player information`);
+     assert.ok(layout.latest, `${width}px late-game rivers show newest tiles`);
+     assert.ok(!layout.chatOverlap, `${width}px chat clears players and controls`);
+     assert.equal(layout.clipped, false, `${width}px expanded dock remains inside table page`);
+     assert.equal(await page.locator('.mj-my-melds .mj-meld').count(),2);
+    }
+    await setRoom('mahjong');
+    assert.equal(await page.locator('.mj-center-seat.active').count(),1);
+    assert.ok(await page.locator('.center-bottom').evaluate(e=>e.classList.contains('active')));
+    await setRoom('mahjong',{paused:true});
+    assert.equal(await page.locator('.mj-center-seat.active').count(),0);
+   }
    for (const [width, height] of [[320,568], [844,390], [1440,900]]) {
     await page.setViewportSize({width,height});
     await setRoom(game + '_aborted');

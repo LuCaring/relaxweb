@@ -1,4 +1,4 @@
-/* 国标麻将场景：四家位置、独立牌河网格、底部手牌与操作条、
+/* 国标麻将场景：四向牌河、中央局况盘、底部手牌与操作条、
    mahjim 国标牌面图（assets/tiles/mahjim/），常驻操作条
    （打出/吃/碰/杠，可胡时显示胡），手机端通过「牌河」二级菜单查看
    全部打出的牌。起和判定与番种计算以服务器为准。 */
@@ -194,14 +194,12 @@ function topbarNode() {
   const left = document.createElement("span");
   left.className = "mj-topbar-info";
   const rules = room.rules || {};
-  left.textContent = `第 ${room.hand_no || "-"} 局 · ${room.round_wind || "东"}风圈 · 庄家 ${displayNameOf(room.dealer)} · 底注 ${room.blind} · 起和${rules.min_fan ?? 8}番`
+  left.textContent = `国标麻将 · ${rules.min_fan ?? 8}番起和 · 底注 ${room.blind}`;
+  left.title = `庄家 ${displayNameOf(room.dealer)}`
     + (rules.flowers ? " · 花牌开" : " · 花牌关")
     + (rules.chow ? " · 吃开" : " · 吃关");
   const right = document.createElement("div");
   right.className = "mj-topbar-right";
-  const wall = document.createElement("span");
-  wall.className = "mj-wall-count";
-  wall.textContent = `牌墙 ${room.wall_count ?? 0}`;
   const riverBtn = document.createElement("button");
   riverBtn.type = "button";
   riverBtn.className = "mj-river-toggle";
@@ -217,9 +215,50 @@ function topbarNode() {
   chatToggle.textContent = "💬";
   chatToggle.setAttribute("aria-label", "打开聊天");
   chatToggle.addEventListener("click", openChatOverlay);
-  right.append(wall, riverBtn, chatToggle);
+  right.append(riverBtn, chatToggle);
   bar.append(left, right);
   return bar;
+}
+
+/** 局况集中在桌心；方位跟随本家座位，显示真实筹码和行动状态。 */
+function centerNode(posMap) {
+  const room = state.myRoom;
+  const center = document.createElement("div");
+  center.className = "mj-center";
+  center.setAttribute("aria-label", "本局局况");
+  const info = document.createElement("div");
+  info.className = "mj-center-info";
+  const round = document.createElement("strong");
+  round.className = "mj-round";
+  round.textContent = `${room.round_wind || "东"}风圈`;
+  const hand = document.createElement("span");
+  hand.className = "mj-round-hand";
+  hand.textContent = `第 ${room.hand_no || 1} 局`;
+  const wall = document.createElement("span");
+  wall.className = "mj-center-wall";
+  wall.append("余 ");
+  const count = document.createElement("b");
+  count.textContent = room.wall_count ?? 0;
+  wall.append(count, " 张");
+  info.append(round, hand, wall);
+  center.append(info);
+  for (const [position, p] of posMap) {
+    const marker = document.createElement("div");
+    marker.className = `mj-center-seat center-${position}`;
+    const active = !room.paused && ((room.phase === "discard" && room.to_act === p.username)
+      || room.claim?.waiting?.includes(p.username));
+    marker.classList.toggle("active", Boolean(active));
+    const wind = document.createElement("span");
+    wind.className = "mj-center-wind";
+    wind.classList.toggle("dealer", Boolean(p.is_dealer));
+    wind.textContent = p.seat_wind;
+    const stack = document.createElement("span");
+    stack.textContent = formatCoins(p.stack);
+    marker.append(wind, stack);
+    marker.title = `${p.nickname || p.username} · ${p.seat_wind}家 · 筹码 ${formatCoins(p.stack)}${active ? " · 等待操作" : ""}`;
+    center.append(marker);
+  }
+  return center;
 }
 
 function statusNode() {
@@ -262,7 +301,7 @@ function playerHeadNode(p, isMe) {
   flowers.textContent = flowerCount ? `🌸${flowerCount}` : "";
   flowers.title = `花牌 ${flowerCount} 张`;
   head.append(flowers);
-  if (!isMe) {
+  if (p) {
     const stack = document.createElement("span");
     stack.className = "mj-player-stack";
     stack.textContent = formatCoins(p.stack);
@@ -297,6 +336,7 @@ function opponentNode(p, position) {
     backs.append(count);
     const pics = document.createElement("span");
     pics.className = "mj-backs-pics";
+    pics.setAttribute("aria-hidden", "true");
     for (let i = 0; i < p.concealed; i += 1) pics.append(mjBackNode({ mini: true }));
     backs.append(pics);
     seat.append(backs);
@@ -316,13 +356,6 @@ function myAreaNode() {
   area.dataset.username = state.currentUser?.username;
   area.dataset.seat = me;
   area.append(playerHeadNode(room.players?.[me] || null, true));
-  const melds = room.players?.[me]?.melds || [];
-  if (melds.length) {
-    const box = document.createElement("div");
-    box.className = "mj-player-melds";
-    for (const meld of melds) box.append(meldNode(meld, { mini: true }));
-    area.append(box);
-  }
   return area;
 }
 
@@ -334,6 +367,8 @@ function riverNode(username, position) {
   const tiles = room.discards?.[username] || [];
   const positions = { top: "对家", right: "右家", left: "左家", bottom: "本家" };
   river.dataset.label = `${positions[position]} · ${tiles.length} 张`;
+  river.setAttribute("aria-label", river.dataset.label);
+  river.title = river.dataset.label;
   tiles.forEach((code, index) => {
     const node = mjTileNode(code, { mini: true });
     const isLast = room.last_discard && room.last_discard.by === username
@@ -654,6 +689,9 @@ function renderMahjongTable() {
   const table = document.createElement("div");
   table.className = "mj-table";
   table.append(topbarNode(), statusNode());
+  const stage = document.createElement("div");
+  stage.className = "mj-stage";
+  table.append(stage);
 
   const players = room.players;
   const me = mySeatIndex();
@@ -667,7 +705,7 @@ function renderMahjongTable() {
     const p = posMap.get(pos);
     if (p) seatRow.append(opponentNode(p, pos));
   }
-  table.append(seatRow);
+  stage.append(seatRow);
 
   const rivers = document.createElement("div");
   rivers.className = "mj-rivers";
@@ -675,9 +713,10 @@ function renderMahjongTable() {
     const p = posMap.get(pos);
     if (p) rivers.append(riverNode(p.username, pos));
   }
-  table.append(rivers);
+  rivers.append(centerNode(posMap));
+  stage.append(rivers);
 
-  table.append(myAreaNode());
+  stage.append(myAreaNode());
 
   if (room.result) table.append(resultNode(room.result));
   if (room.paused) {
@@ -719,6 +758,15 @@ function renderMahjongTable() {
 
   const tenpai = tenpaiNode();
   if (tenpai) dock.append(tenpai);
+
+  const myMelds = room.players?.[me]?.melds || [];
+  if (myMelds.length) {
+    const melds = document.createElement("div");
+    melds.className = "mj-my-melds";
+    melds.setAttribute("aria-label", "我的副露");
+    for (const meld of myMelds) melds.append(meldNode(meld, { small: true }));
+    dock.append(melds);
+  }
 
   if ((room.your_flowers || []).length) {
     const flowers = document.createElement("div");
@@ -782,6 +830,11 @@ function renderMahjongTable() {
     if (remaining > 0) startHallTicker(fill, remaining);
   }
   wrap.append(dock);
+
+  // Long rivers retain all tiles; keep the latest rows visible on each update.
+  for (const river of rivers.querySelectorAll(".mj-river")) {
+    river.scrollTop = river.scrollHeight;
+  }
 
   reapplySeatBubbles();
 }

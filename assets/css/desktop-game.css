@@ -92,8 +92,12 @@
     .compact-room-chat .rc-name { color: #ffdc8b; }
     .compact-room-chat .rc-time { color: #8ea8c6; }
     .compact-room-chat .rc-text { color: #edf4ff; }
-    .compact-room-chat .chat-overlay-composer { padding: 9px; border-color: #ffffff18; }
-    .compact-room-chat .chat-input { padding: 8px 10px; border-color: #ffffff22; background: #ffffff12; color: #fff; }
+    /* The shared overlay composer is light; compact chats need an opaque dark
+       surface, including focus, so white input text never lands on white. */
+    .compact-room-chat .chat-overlay-composer { padding: 9px; border-color: #ffffff18; background: #102d4d; }
+    .desktop-room-chat.compact-room-chat .chat-input { padding: 8px 10px; border-color: #ffffff38; background: #203f58; color: #fff; caret-color: #ffda82; }
+    .desktop-room-chat.compact-room-chat .chat-input::placeholder { color: #b9cde6; opacity: 1; }
+    .desktop-room-chat.compact-room-chat .chat-input:focus { background: #203f58; border-color: #ffda82; outline: 2px solid #ffda8240; outline-offset: 1px; }
     .compact-room-chat .send-button { padding-inline: 11px; background: #3e7baa; }
     .game-in-room .chat-open-row,
     .game-in-room .dock-chat-toggle { display: none; }
