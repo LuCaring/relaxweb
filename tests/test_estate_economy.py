@@ -6,7 +6,7 @@ import unittest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from estate.activities import _make_board, _pick_fishing_catch
+from estate.activities import make_board, pick_fishing_catch
 from estate.catalog import BAITS, CROPS, MINERALS, TOOLS
 
 SAMPLES = 20000
@@ -14,7 +14,7 @@ SAMPLES = 20000
 
 def fishing_audit(level, bait_id):
     rng = random.Random(190926 + level)
-    catches = [_pick_fishing_catch(rng, BAITS[bait_id], {"level": level})[1]
+    catches = [pick_fishing_catch(rng, BAITS[bait_id], {"level": level})[1]
                for _ in range(SAMPLES)]
     mean_sale = sum(c.get("sell_price", 0) for c in catches) / SAMPLES
     rod = TOOLS["rod"][level]
@@ -29,7 +29,7 @@ def mining_audit(level):
     rule = TOOLS["pickaxe"][level]
     cost = rule["repair_price"] / rule["max_durability"]
     for seed in range(SAMPLES):
-        board = _make_board(seed, level)
+        board = make_board(seed, level)
         strikes, value = rule["strikes"], 0
         for cell in board:  # 隐藏棋盘的固定点击顺序，不窥视选择矿物。
             if strikes <= 0:

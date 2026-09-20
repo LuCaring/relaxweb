@@ -1,5 +1,8 @@
 "use strict";
 
+/** 摇杆最大位移相对控件半径的比例。 */
+const STICK_RADIUS_RATIO = .3;
+
 export function createEstateInput(root) {
   const keys = new Set();
   const vector = { x: 0, y: 0 };
@@ -33,7 +36,7 @@ export function createEstateInput(root) {
     const dx = event.clientX - (box.left + box.width / 2);
     const dy = event.clientY - (box.top + box.height / 2);
     const distance = Math.hypot(dx, dy) || 1;
-    const radius = box.width * .3;
+    const radius = box.width * STICK_RADIUS_RATIO;
     const scale = Math.min(1, radius / distance);
     const px = dx * scale;
     const py = dy * scale;
@@ -49,17 +52,22 @@ export function createEstateInput(root) {
   const stickUp = (event) => { if (event.pointerId === stickPointer) resetStick(); };
   const actionDown = (event) => { event.preventDefault(); actionPressed = true; };
   const clear = () => { keys.clear(); resetStick(); actionPressed = false; };
-  const clearForAudioSettings = () => clear();
 
-  window.addEventListener("keydown", keydown, { passive: false });
-  window.addEventListener("keyup", keyup);
-  window.addEventListener("blur", clear);
-  document.addEventListener("gameaudiosettingsopen", clearForAudioSettings);
-  stick.addEventListener("pointerdown", stickDown);
-  stick.addEventListener("pointermove", moveStick);
-  stick.addEventListener("pointerup", stickUp);
-  stick.addEventListener("pointercancel", stickUp);
-  action.addEventListener("pointerdown", actionDown);
+  // 绑定与解绑共用同一张表，避免 destroy 漏删或多删。
+  const bindings = [
+    [window, "keydown", keydown, { passive: false }],
+    [window, "keyup", keyup],
+    [window, "blur", clear],
+    [document, "gameaudiosettingsopen", clear],
+    [stick, "pointerdown", stickDown],
+    [stick, "pointermove", moveStick],
+    [stick, "pointerup", stickUp],
+    [stick, "pointercancel", stickUp],
+    [action, "pointerdown", actionDown],
+  ];
+  for (const [target, type, handler, options] of bindings) {
+    target.addEventListener(type, handler, options);
+  }
 
   return {
     vector,
@@ -67,15 +75,7 @@ export function createEstateInput(root) {
     consumeAction() { const value = actionPressed; actionPressed = false; return value; },
     clear,
     destroy() {
-      window.removeEventListener("keydown", keydown);
-      window.removeEventListener("keyup", keyup);
-      window.removeEventListener("blur", clear);
-      document.removeEventListener("gameaudiosettingsopen", clearForAudioSettings);
-      stick.removeEventListener("pointerdown", stickDown);
-      stick.removeEventListener("pointermove", moveStick);
-      stick.removeEventListener("pointerup", stickUp);
-      stick.removeEventListener("pointercancel", stickUp);
-      action.removeEventListener("pointerdown", actionDown);
+      for (const [target, type, handler] of bindings) target.removeEventListener(type, handler);
     },
   };
 }

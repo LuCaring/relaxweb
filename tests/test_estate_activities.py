@@ -9,12 +9,13 @@ from unittest.mock import patch
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from estate.activities import (
-    _make_board, _pick_fishing_catch, buy_tool, finish_fishing, finish_mining, mine_cell, repair_tool,
+    make_board, pick_fishing_catch, buy_tool, finish_fishing, finish_mining, mine_cell, repair_tool,
     start_fishing, start_mining, upgrade_tool,
 )
 from estate.catalog import FISHING_TREASURES, MINERALS, bait_item
+from estate.farming import buy
 from estate.schema import init_estate
-from estate.service import EstateError, buy, estate_state
+from estate.store import EstateError, estate_state
 
 NOW = 2_000_000_000
 
@@ -133,7 +134,7 @@ class ActivityTests(unittest.TestCase):
         self.assertEqual(error.exception.code, "warehouse_full")
         self.conn.execute("UPDATE estate_inventory SET quantity=84 WHERE username='alice'")
         self.conn.commit()
-        with patch("estate.activities._make_board", return_value=["extra", "extra"] + ["copper"] * 23):
+        with patch("estate.activities.make_board", return_value=["extra", "extra"] + ["copper"] * 23):
             started = self.call(start_mining, "alice", "max-start-01", 3, NOW)
         self.assertEqual(self.call(estate_state, "alice", NOW)["profile"]["warehouse_used"], 100)
         for index in range(18):
@@ -157,7 +158,7 @@ class ActivityTests(unittest.TestCase):
             def choices(items, weights, k):
                 return [items[-1]]
 
-        catch_id, catch = _pick_fishing_catch(
+        catch_id, catch = pick_fishing_catch(
             TreasureRng(), {"rarity_bonus": 1}, {"level": 3},
         )
         self.assertEqual(catch_id, "treasure:xiaopang_underwear")
@@ -167,7 +168,7 @@ class ActivityTests(unittest.TestCase):
         self.call(buy_tool, "alice", "buy-rod-rare", "rod", NOW, adjust_coins)
         self.call(buy, "alice", "buy-bait-rare", "bait", "worm", 1, NOW, adjust_coins)
         rare = FISHING_TREASURES["xiaopang_underwear"]
-        with patch("estate.activities._pick_fishing_catch",
+        with patch("estate.activities.pick_fishing_catch",
                    return_value=("treasure:xiaopang_underwear", rare)):
             started = self.call(start_fishing, "alice", "fish-start-rare", "worm", NOW)
         result = self.call(
@@ -198,14 +199,14 @@ class ActivityTests(unittest.TestCase):
 
     def test_deeper_mines_have_more_bombs(self):
         for level, expected in ((1, 1), (2, 2), (3, 3)):
-            board = _make_board(1200 + level, level)
+            board = make_board(1200 + level, level)
             self.assertEqual(board.count("bomb"), expected)
             self.assertEqual(len(board), 25)
 
     def test_bomb_ends_run_and_keeps_existing_loot(self):
         self.call(buy_tool, "alice", "buy-pick-bomb", "pickaxe", NOW, adjust_coins)
         board = ["copper", "bomb"] + ["empty"] * 23
-        with patch("estate.activities._make_board", return_value=board):
+        with patch("estate.activities.make_board", return_value=board):
             started = self.call(start_mining, "alice", "mine-start-bomb", 1, NOW)
         first = self.call(mine_cell, "alice", "mine-safe-bomb", started["run_id"], 0, NOW)
         self.assertEqual(first["loot"], {"copper": 1})

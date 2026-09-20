@@ -5,6 +5,7 @@ import {
   PIXEL, drawBuilding, drawBush, drawCharacter, drawCrate, drawFence, drawGroundDetails,
   drawSignpost, drawTree, drawWater, pixelRect,
 } from "./art.js";
+import { cropAsset, cropStage, drawAsset, drawPlayerAsset } from "./assets.js";
 import { drawSprite, stableSprite } from "./sprites.js";
 
 const WORLD = { width: 960, height: 600 };
@@ -25,6 +26,17 @@ const ZONES = [
   { kind: "fishing", label: "小胖湖钓场", x: 650, y: 430 },
   { kind: "mining", label: "小胖矿洞", x: 140, y: 500 },
 ];
+
+// 角色与交互参数：数值本身就是手感，集中命名便于调整。
+const PLAYER_BOX = 12;              // 角色碰撞盒的半边长
+const SPRINT_SPEED = 190;           // 按住左 Shift 的移动速度（像素/秒）
+const WALK_SPEED = 125;
+const SPRINT_STEP_RATE = 18;        // 行走动画推进速度
+const WALK_STEP_RATE = 12;
+const INTERACT_RADIUS = 78;         // 与目标中心的距离小于它才能互动
+const EDGE = { left: 18, top: 24, right: 18, bottom: 18 };
+// 作物成熟时从农场图集里挑的精灵编号，按作物 ID 稳定散列。
+const CROP_SPRITES = [4, 5, 6, 8, 17, 18, 20, 29, 30, 32, 41, 42, 44, 53, 54, 56, 65, 66, 68, 80, 81, 83];
 
 function drawPathSurface(ctx, x, y, w, h, orientation) {
   pixelRect(ctx, x, y, w, h, "#b28b50");
@@ -95,14 +107,16 @@ function drawPlot(ctx, plot) {
     pixelRect(ctx, x + 61, y + 48, 5, 3, "#d7a06a");
     return;
   }
-  const mature = Number(plot.ready_at) <= estateNow();
-  const progress = mature ? 1 : Math.max(.12, (estateNow() - plot.planted_at) / (plot.ready_at - plot.planted_at));
+  const now = estateNow();
+  const mature = Number(plot.ready_at) <= now;
+  const progress = mature ? 1 : Math.max(.12, (now - plot.planted_at) / (plot.ready_at - plot.planted_at));
   const color = estateStore.snapshot?.catalog?.crops?.[plot.crop_id]?.color || "#e6cb63";
-  const cropSprites = [4, 5, 6, 8, 17, 18, 20, 29, 30, 32, 41, 42, 44, 53, 54, 56, 65, 66, 68, 80, 81, 83];
-  const cropSprite = stableSprite(plot.crop_id, cropSprites);
-  for (let row = 0; row < 3; row += 1) {
-    for (let col = 0; col < 4; col += 1) {
-      const px = x + 13 + col * 17; const py = y + 17 + row * 18;
+  const cropSprite = stableSprite(plot.crop_id, CROP_SPRITES);
+  const custom = cropAsset(plot.crop_id, cropStage(plot, now));
+  for (let row = 0; row < 2; row += 1) {
+    for (let col = 0; col < 3; col += 1) {
+      const px = x + 7 + col * 24; const py = y + 10 + row * 25;
+      if (drawAsset(ctx, custom, px, py, 24, 24)) continue;
       if (progress < .25) pixelRect(ctx, px + 4, py + 7, 4, 5, "#86b752");
       else {
         pixelRect(ctx, px + 4, py, 3, 13, "#378446");
@@ -127,15 +141,16 @@ function nearTarget(player, snapshot) {
   }
   for (const zone of candidates) {
     const distance = Math.hypot(player.x - zone.x, player.y - zone.y);
-    if (distance < 78 && (!best || distance < best.distance)) best = { ...zone, distance };
+    if (distance < INTERACT_RADIUS && (!best || distance < best.distance)) best = { ...zone, distance };
   }
   return best;
 }
 
 function collides(x, y) {
-  const size = 12;
-  if (x < 18 || y < 24 || x > WORLD.width - 18 || y > WORLD.height - 18) return true;
-  return BLOCKS.some((block) => x + size > block.x && x - size < block.x + block.w && y + size > block.y && y - size < block.y + block.h);
+  if (x < EDGE.left || y < EDGE.top
+    || x > WORLD.width - EDGE.right || y > WORLD.height - EDGE.bottom) return true;
+  return BLOCKS.some((block) => x + PLAYER_BOX > block.x && x - PLAYER_BOX < block.x + block.w
+    && y + PLAYER_BOX > block.y && y - PLAYER_BOX < block.y + block.h);
 }
 
 export function createEstateMap(canvas, input, onInteract, onTarget) {
@@ -192,20 +207,20 @@ export function createEstateMap(canvas, input, onInteract, onTarget) {
       ctx.strokeStyle = "#fff4a8"; ctx.lineWidth = 3; ctx.setLineDash([6, 4]);
       ctx.strokeRect(target.x - 24, target.y - 24, 48, 48); ctx.setLineDash([]);
     }
-    drawCharacter(ctx, player, performance.now());
+    if (!drawPlayerAsset(ctx, player, performance.now())) drawCharacter(ctx, player, performance.now());
     ctx.setTransform(1, 0, 0, 1, 0, 0);
   }
 
   function tick(now) {
     const dt = Math.min(.05, (now - last) / 1000); last = now;
     const length = Math.hypot(input.vector.x, input.vector.y) || 1;
-    const speed = input.sprinting ? 190 : 125;
+    const speed = input.sprinting ? SPRINT_SPEED : WALK_SPEED;
     const dx = input.vector.x / length * speed * dt;
     const dy = input.vector.y / length * speed * dt;
     if (dx && !collides(player.x + dx, player.y)) player.x += dx;
     if (dy && !collides(player.x, player.y + dy)) player.y += dy;
     if (dx || dy) {
-      player.walking += dt * (input.sprinting ? 18 : 12); player.lastMove = now;
+      player.walking += dt * (input.sprinting ? SPRINT_STEP_RATE : WALK_STEP_RATE); player.lastMove = now;
       if (Math.abs(dx) > Math.abs(dy)) {
         player.facing = Math.sign(dx); player.direction = dx < 0 ? "left" : "right";
       } else player.direction = dy < 0 ? "up" : "down";

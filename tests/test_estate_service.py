@@ -8,10 +8,9 @@ import unittest
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from estate.catalog import CROPS, crop_item, grow_seconds, seed_item
+from estate.farming import buy, harvest, plant, sell, sell_all
 from estate.schema import init_estate
-from estate.service import (
-    EstateError, buy, ensure_estate, estate_state, harvest, plant, sell, sell_all,
-)
+from estate.store import EstateError, ensure_estate, estate_state
 
 
 NOW = 2_000_000_000

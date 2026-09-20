@@ -12,15 +12,8 @@ import { estateStore, subscribeEstate } from "./state.js";
 
 let cleanup = null;
 
-function destroyEstateView() {
-  cleanup?.(); cleanup = null;
-}
-
-function renderEstate() {
-  destroyEstateView();
-  document.body.classList.add("estate-active");
-  const root = document.createElement("section"); root.className = "estate-root";
-  root.innerHTML = `
+/** 庄园视图骨架；HUD 由 ui.js 渲染，地图画在 canvas 上，其余是手机端控件。 */
+const ESTATE_MARKUP = `
     <canvas class="estate-canvas" aria-label="小胖庄园地图"></canvas>
     <div class="estate-topbar">
       <button class="estate-back" type="button">← 游戏厅</button>
@@ -36,6 +29,16 @@ function renderEstate() {
     <button class="estate-action" type="button"><span>✦</span><small>操作</small></button>
     <div class="estate-help">WASD / 方向键移动 · 左 Shift 疾跑 · E / 空格互动</div>
     <div class="estate-sheet" hidden><section><header><h2 class="estate-sheet-title"></h2><button class="estate-sheet-close" type="button">×</button></header><div class="estate-sheet-body"></div></section></div>`;
+
+function destroyEstateView() {
+  cleanup?.(); cleanup = null;
+}
+
+function renderEstate() {
+  destroyEstateView();
+  document.body.classList.add("estate-active");
+  const root = document.createElement("section"); root.className = "estate-root";
+  root.innerHTML = ESTATE_MARKUP;
   elements.gameMain.replaceChildren(root);
   const input = createEstateInput(root);
   let ui;

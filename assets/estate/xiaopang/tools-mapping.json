@@ -1,0 +1,57 @@
+{
+  "status": {
+    "rods": "game_ready",
+    "character_sheet": "reference_only_requires_frame_export",
+    "pickaxes_baits_mining": "reference_only_requires_individual_transparent_pngs"
+  },
+  "tools": [
+    {
+      "id": "rod_1_held",
+      "file": "game-ready/tools/rod_1_held.png",
+      "size": [
+        16,
+        32
+      ]
+    },
+    {
+      "id": "rod_1_icon",
+      "file": "game-ready/tools/rod_1_icon.png",
+      "size": [
+        32,
+        32
+      ]
+    },
+    {
+      "id": "rod_2_held",
+      "file": "game-ready/tools/rod_2_held.png",
+      "size": [
+        16,
+        32
+      ]
+    },
+    {
+      "id": "rod_2_icon",
+      "file": "game-ready/tools/rod_2_icon.png",
+      "size": [
+        32,
+        32
+      ]
+    },
+    {
+      "id": "rod_3_held",
+      "file": "game-ready/tools/rod_3_held.png",
+      "size": [
+        16,
+        32
+      ]
+    },
+    {
+      "id": "rod_3_icon",
+      "file": "game-ready/tools/rod_3_icon.png",
+      "size": [
+        32,
+        32
+      ]
+    }
+  ]
+}

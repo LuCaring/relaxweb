@@ -11,6 +11,52 @@ MAX_PLOTS = 8
 BALANCE_VERSION = "v1"
 FISH_RARITY_WEIGHTS = {1: 100, 2: 22, 3: 4, 4: .6, 5: .08, 6: .006}
 
+# --------------------------------------------------------------------------
+# 钓鱼与矿场的规则常量
+# --------------------------------------------------------------------------
+# 这些数值同时被服务端结算、客户端表现和经济模拟使用，集中在此命名，
+# 避免同一个数字在多个模块里各写一遍。改动需同步 docs/estate-economy.md。
+
+FISHING_STEPS = 36              # 每局收线操作数，同时是下发给客户端的操作上限
+FISHING_STEPS_PER_FRAME = 10    # 每 10 次操作推进一个张力采样点
+FISHING_TIMEOUT_SECONDS = 90    # 超过该秒数未收线即判过期
+TRACE_MIN_STEPS = 20            # 客户端回传操作序列的长度下限
+TRACE_MAX_STEPS = 400           # 客户端回传操作序列的长度上限
+
+# 张力曲线初始值与每次操作的增减系数。
+TENSION_START = .18
+PROGRESS_START = .08
+HOLD_TENSION_GAIN = .026        # 按住时张力上升
+HOLD_TENSION_FORCE_BASE = .68   # 目标挣扎强度的影响
+HOLD_PROGRESS_GAIN = .013       # 按住时进度上升
+HOLD_PROGRESS_BASE = 1.12
+HOLD_PROGRESS_FORCE_SCALE = .3
+RELEASE_TENSION_DROP = .045     # 松开时张力下降
+RELEASE_PROGRESS_DROP = .0035   # 松开时进度回落
+RELEASE_PROGRESS_FORCE_BASE = .5
+TENSION_SNAPPED_AT = 1.0        # 张力达到该值即断线
+PROGRESS_CAUGHT_AT = 1.0        # 进度达到该值即入护
+
+# 每局生成的挣扎强度采样范围。
+PATTERN_MIN = .08
+PATTERN_MAX = .95
+PATTERN_SPAN = .55              # 随机部分占比，其余由鱼的难度决定
+PATTERN_DIFFICULTY_WEIGHT = .45
+
+# 鱼获抽取：可达稀有度上限，以及鱼饵与鱼竿对稀有度和权重的加成。
+CATCH_RARITY_BASE = 2
+CATCH_TREASURE_RARITY_BASE = 4
+CATCH_TREASURE_CHANCE = .006
+CATCH_TREASURE_BAIT_BONUS = .012
+CATCH_TREASURE_ROD_BONUS = .009
+CATCH_BOOST_PER_ROD_LEVEL = .35
+
+MINE_CELLS = 25                 # 矿壁总格数
+MINE_BOARD_SIZE = 5             # 矿壁边长，下发客户端用于布局
+MINE_EXTRA_CELLS = 2            # 每局固定的 +2 敲击格数量
+MINE_EMPTY_WEIGHT = 24          # 空格在矿壁权重表中的权重
+MINE_LEGACY_RESERVED_SLOTS = 12  # 旧存档矿局的预留仓位，仅供迁移默认值使用
+
 def _crop(name, seed_price, sell_price, grow_minutes, xp, unlock_level, icon, color):
     """所有收益与成长规则集中定义，保留稳定存档 ID。"""
     return {
@@ -170,28 +216,34 @@ MINING_LEVELS = {
 }
 
 
+def item_id(kind, key):
+    """物品 ID 统一为 ``<kind>:<key>``，解析见 :func:`item_info`。"""
+    return f"{kind}:{key}"
+
+
+# 具名包装让调用点更易读，同时保持测试直接导入的历史名字可用。
 def seed_item(crop_id):
-    return f"seed:{crop_id}"
+    return item_id("seed", crop_id)
 
 
 def crop_item(crop_id):
-    return f"crop:{crop_id}"
+    return item_id("crop", crop_id)
 
 
 def bait_item(bait_id):
-    return f"bait:{bait_id}"
+    return item_id("bait", bait_id)
 
 
 def fish_item(fish_id):
-    return f"fish:{fish_id}"
+    return item_id("fish", fish_id)
 
 
 def collectible_item(collectible_id):
-    return f"collectible:{collectible_id}"
+    return item_id("collectible", collectible_id)
 
 
 def mineral_item(mineral_id):
-    return f"mineral:{mineral_id}"
+    return item_id("mineral", mineral_id)
 
 
 def xp_for_next(level):
@@ -254,6 +306,29 @@ def public_catalog():
         "minerals": {key: {"id": key, "item_id": mineral_item(key), **value}
                      for key, value in MINERALS.items()},
         "mining_levels": MINING_LEVELS,
+        # 客户端要用它推进钓鱼进度条并预判结局；不下发就会各自硬编码一份。
+        "fishing_rules": {
+            "steps": FISHING_STEPS,
+            "steps_per_frame": FISHING_STEPS_PER_FRAME,
+            "tension_start": TENSION_START,
+            "progress_start": PROGRESS_START,
+            "hold_tension_gain": HOLD_TENSION_GAIN,
+            "hold_tension_force_base": HOLD_TENSION_FORCE_BASE,
+            "hold_progress_gain": HOLD_PROGRESS_GAIN,
+            "hold_progress_base": HOLD_PROGRESS_BASE,
+            "hold_progress_force_scale": HOLD_PROGRESS_FORCE_SCALE,
+            "release_tension_drop": RELEASE_TENSION_DROP,
+            "release_progress_drop": RELEASE_PROGRESS_DROP,
+            "release_progress_force_base": RELEASE_PROGRESS_FORCE_BASE,
+            "snapped_at": TENSION_SNAPPED_AT,
+            "caught_at": PROGRESS_CAUGHT_AT,
+        },
+        # 矿场格数与预留格：避免客户端各自写死 25 与 +2。
+        "mining_rules": {
+            "cells": MINE_CELLS,
+            "board_size": MINE_BOARD_SIZE,
+            "extra_cells": MINE_EXTRA_CELLS,
+        },
         "initial_plots": INITIAL_PLOTS,
         "max_plots": MAX_PLOTS,
     }

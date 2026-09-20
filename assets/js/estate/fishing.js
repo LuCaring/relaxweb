@@ -1,8 +1,17 @@
 "use strict";
 
 import { estateRequest } from "./protocol.js";
+import { estateStore } from "./state.js";
+import { catchAsset, drawAsset, toolAsset } from "./assets.js";
+import { rodFactor, tensionStep } from "./rules.js";
+
+/** 张力条转警示色的阈值：纯客户端表现，不参与结算。 */
+const DANGER_TENSION = .78;
 
 export function openFishingGame(root, session, options = {}) {
+  const catalog = estateStore.snapshot?.catalog;
+  const rules = catalog?.fishing_rules;
+  const factor = rodFactor(catalog, session.rod_level);
   const layer = document.createElement("div");
   layer.className = "estate-minigame fishing-game";
   layer.innerHTML = `
@@ -17,7 +26,7 @@ export function openFishingGame(root, session, options = {}) {
     <section class="fishing-catch-card" hidden>
       <div class="fishing-catch-rays"></div>
       <div class="fishing-catch-rarity"></div>
-      <div class="fishing-catch-portrait"><span class="catch-tail"></span><span class="catch-body"><i></i></span><b>🐟</b></div>
+      <div class="fishing-catch-portrait"><span class="catch-tail"></span><span class="catch-body"><i></i></span><b>🐟</b><img data-catch-art alt=""></div>
       <h2></h2><p></p>
       <div class="fishing-result-actions"><button class="estate-button estate-button-gold" data-fish-again>继续钓鱼</button><button class="estate-button" data-fish-back>返回小胖钓场</button></div>
     </section>`;
@@ -28,9 +37,8 @@ export function openFishingGame(root, session, options = {}) {
   const catchBar = layer.querySelector("[data-catch]");
   const tensionBar = layer.querySelector("[data-tension]");
   const trace = [];
-  let held = false; let tension = .18; let progress = .08;
+  let held = false; let tension = rules.tension_start; let progress = rules.progress_start;
   let accumulator = 0; let last = performance.now(); let frame = 0; let finished = false;
-  const factor = { 1: 1, 2: .82, 3: .68 }[session.rod_level] || 1;
 
   function resize() {
     const box = canvas.getBoundingClientRect(); const ratio = Math.min(2, globalThis.devicePixelRatio || 1);
@@ -47,30 +55,41 @@ export function openFishingGame(root, session, options = {}) {
     const fishY = h * (.56 + Math.sin(now * .0041) * .08);
     ctx.fillStyle = "rgba(15,70,85,.65)"; ctx.fillRect(fishX - 34, fishY, 58, 14);
     ctx.beginPath(); ctx.moveTo(fishX - 34, fishY + 7); ctx.lineTo(fishX - 55, fishY - 8); ctx.lineTo(fishX - 55, fishY + 22); ctx.fill();
-    ctx.strokeStyle = tension > .78 ? "#ffdf89" : "#edf7d4"; ctx.lineWidth = 3;
+    ctx.strokeStyle = tension > DANGER_TENSION ? "#ffdf89" : "#edf7d4"; ctx.lineWidth = 3;
     ctx.beginPath(); ctx.moveTo(w * .5, 0); ctx.quadraticCurveTo(w * .58, h * .3, fishX, fishY); ctx.stroke();
     ctx.fillStyle = "#ef6951"; ctx.fillRect(w * .5 - 5, h * .25, 10, 22);
     ctx.fillStyle = "#fff0c1"; ctx.fillRect(w * .5 - 5, h * .25, 10, 6);
+    drawAsset(ctx, toolAsset("rod", session.rod_level, true), w * .5 - 42, 0, 48, 96);
   }
   function step() {
-    const force = session.pattern[Math.min(session.pattern.length - 1, Math.floor(trace.length / 10))];
+    const force = session.pattern[Math.min(
+      session.pattern.length - 1, Math.floor(trace.length / rules.steps_per_frame))];
     trace.push(Boolean(held));
-    if (held) { tension += .026 * (.68 + force) * factor; progress += .013 * (1.12 - force * .3); }
-    else { tension = Math.max(0, tension - .045); progress = Math.max(0, progress - .0035 * (.5 + force)); }
+    const next = tensionStep(rules, { tension, progress, held, force, factor });
+    tension = next.tension; progress = next.progress;
     catchBar.style.width = `${Math.min(100, progress * 100)}%`;
     tensionBar.style.width = `${Math.min(100, tension * 100)}%`;
-    tensionBar.dataset.danger = String(tension > .78);
-    if (tension >= 1 || progress >= 1 || trace.length >= session.duration_limit * 10) void finish();
+    tensionBar.dataset.danger = String(tension > DANGER_TENSION);
+    if (next.outcome || trace.length >= session.duration_limit * rules.steps_per_frame) void finish();
   }
   function showCatch(result) {
     const caught = result.outcome === "caught";
     const collectible = result.catch_kind === "collectible";
     const card = layer.querySelector(".fishing-catch-card");
+    const art = card.querySelector("[data-catch-art]");
     const rarity = Math.max(1, Number(result.rarity || 1));
     card.dataset.rarity = String(rarity); card.classList.toggle("is-caught", caught); card.classList.toggle("is-collectible", collectible);
     card.querySelector(".fishing-catch-rarity").textContent = caught
       ? `${"★".repeat(Math.min(5, rarity))}${rarity > 5 ? ` · 稀有度 ${rarity}` : ""}` : "再接再厉";
-    card.querySelector(".fishing-catch-portrait > b").textContent = collectible ? "🎁" : caught ? "" : "🌊";
+    const asset = caught ? catchAsset(result.catch_kind,
+      collectible ? result.collectible_id : result.fish_id) : null;
+    card.classList.remove("has-catch-asset"); art.removeAttribute("src");
+    if (asset) {
+      art.onload = () => card.classList.add("has-catch-asset");
+      art.onerror = () => { art.removeAttribute("src"); };
+      art.src = asset;
+    }
+    card.querySelector(".fishing-catch-portrait > b").textContent = collectible ? "🎁" : caught ? "🐟" : "🌊";
     card.querySelector("h2").textContent = caught ? (result.catch_name || result.fish_name) : result.outcome === "snapped" ? "鱼线断了" : "鱼儿逃走了";
     card.querySelector("p").textContent = caught
       ? `已放入小胖谷仓 · 获得 ${result.xp_awarded} 经验`
