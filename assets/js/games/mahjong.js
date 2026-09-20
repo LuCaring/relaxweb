@@ -131,7 +131,7 @@ function mjAct(payload) {
   if (actionLock) return;
   actionLock = send({ type: "poker_action", ...payload });
   if (actionLock) {
-    document.querySelectorAll(".mj-dock button").forEach((b) => { b.disabled = true; });
+    document.querySelectorAll(".mj-dock button, .mj-self-controls button, .mj-hand button").forEach((b) => { b.disabled = true; });
   }
 }
 
@@ -320,27 +320,32 @@ function opponentNode(p, position) {
   if (!room.paused && ((room.phase === "discard" && room.to_act === p.username)
     || room.claim?.waiting?.includes(p.username))) seat.classList.add("active");
   seat.append(playerHeadNode(p, false));
+  const rack = document.createElement("div");
+  rack.className = `mj-player-rack rack-${position}`;
+  rack.setAttribute("aria-label", `${p.nickname}的手牌和副露`);
   if ((p.melds || []).length) {
     const melds = document.createElement("div");
     melds.className = "mj-player-melds";
-    for (const meld of p.melds) melds.append(meldNode(meld, { tiny: true }));
-    seat.append(melds);
+    melds.setAttribute("aria-label", "公开副露");
+    for (const meld of p.melds) melds.append(meldNode(meld));
+    rack.append(melds);
   }
   if (room.status === "playing" && p.in_hand && p.concealed) {
     const backs = document.createElement("div");
     backs.className = "mj-player-backs";
     const count = document.createElement("span");
     count.className = "mj-back-count";
-    count.textContent = `🀄×${p.concealed}`;
+    count.textContent = `手牌 ${p.concealed} 张`;
     count.title = `手牌 ${p.concealed} 张`;
     backs.append(count);
     const pics = document.createElement("span");
     pics.className = "mj-backs-pics";
     pics.setAttribute("aria-hidden", "true");
-    for (let i = 0; i < p.concealed; i += 1) pics.append(mjBackNode({ mini: true }));
+    for (let i = 0; i < p.concealed; i += 1) pics.append(mjBackNode());
     backs.append(pics);
-    seat.append(backs);
+    rack.append(backs);
   }
+  seat.append(rack);
   return seat;
 }
 
@@ -716,7 +721,13 @@ function renderMahjongTable() {
   rivers.append(centerNode(posMap));
   stage.append(rivers);
 
-  stage.append(myAreaNode());
+  const selfRow = document.createElement("div");
+  selfRow.className = "mj-self-row";
+  selfRow.append(myAreaNode());
+  const selfControls = document.createElement("div");
+  selfControls.className = "casual-dock mj-self-controls";
+  selfControls.setAttribute("aria-label", "我的操作");
+  selfRow.append(selfControls);
 
   if (room.result) table.append(resultNode(room.result));
   if (room.paused) {
@@ -759,13 +770,16 @@ function renderMahjongTable() {
   const tenpai = tenpaiNode();
   if (tenpai) dock.append(tenpai);
 
+  const myRack = document.createElement("div");
+  myRack.className = "mj-player-rack rack-bottom";
+  myRack.setAttribute("aria-label", "我的手牌和副露");
   const myMelds = room.players?.[me]?.melds || [];
   if (myMelds.length) {
     const melds = document.createElement("div");
     melds.className = "mj-my-melds";
     melds.setAttribute("aria-label", "我的副露");
     for (const meld of myMelds) melds.append(meldNode(meld, { small: true }));
-    dock.append(melds);
+    myRack.append(melds);
   }
 
   if ((room.your_flowers || []).length) {
@@ -780,7 +794,7 @@ function renderMahjongTable() {
   }
 
   const chips = optionChipsNode();
-  if (chips.children.length) dock.append(chips);
+  if (chips.children.length) selfControls.append(chips);
 
   const myCards = document.createElement("div");
   myCards.className = "mj-hand";
@@ -821,15 +835,18 @@ function renderMahjongTable() {
     });
     myCards.append(node);
   }
-  dock.append(myCards);
-  dock.append(actionsNode());
+  myRack.append(myCards);
+  stage.append(myRack);
+  selfControls.prepend(actionsNode());
 
   if (!room.paused && room.turn_left > 0
       && ((isMyTurn() && room.phase === "discard") || claimMine)) {
     const remaining = (turnDeadline - Date.now()) / 1000;
     if (remaining > 0) startHallTicker(fill, remaining);
   }
-  wrap.append(dock);
+  // Keep turn information above the table and actions next to our avatar.
+  table.insertBefore(dock, stage);
+  table.append(selfRow);
 
   // Long rivers retain all tiles; keep the latest rows visible on each update.
   for (const river of rivers.querySelectorAll(".mj-river")) {
@@ -844,7 +861,7 @@ function renderMahjongTable() {
 ========================================================= */
 
 registerGame("mahjong", {
-  compactDesktopChat: true,
+  compactDesktopChat: false,
   stakeLabel: "底注",
   blindLabel: "下一局底注",
   waitingHint: "国标麻将需要正好 4 名玩家：吃碰杠胡、八番起和，花牌每张 1 分。等待房主开局，中途退出本局作废、筹码原封退回。",
@@ -860,5 +877,5 @@ registerGame("mahjong", {
     return review;
   },
   seatElement: (index) => document.querySelector(
-    `#gameMain .mj-table [data-seat="${index}"]`),
+    `#gameMain .mj-table [data-seat="${index}"] .mj-player-head`),
 });

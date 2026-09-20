@@ -206,7 +206,7 @@ console.log(`PASS Python/JavaScript parity for ${fixtures.cases.length} hands an
     'guandan waiting room restores full desktop chat');
 
   await setRoom('mahjong');
-  assert.equal(await page.locator('#desktopRoomChat.compact-room-chat').count(), 1);
+  assert.equal(await page.locator('#desktopRoomChat:not(.compact-room-chat)').count(), 1);
   assert.equal(await page.locator('.mj-player-head .casual-avatar img').count(), 4);
   await page.getByRole('button',{name:'9筒',exact:true}).click();
   assert.equal(await page.locator('.mj-act.primary').innerText(), '打出 9筒');
@@ -227,6 +227,23 @@ console.log(`PASS Python/JavaScript parity for ${fixtures.cases.length} hands an
   assert.equal(await page.locator('.mj-act:enabled').count(),0);
   await setRoom('mahjong', {phase:'claim',paused:true,your_options:{claim:{peng:true,hu:true}}});
   assert.equal(await page.locator('.mj-act:enabled,.mj-hand-card:enabled').count(),0);
+  for(const [width,height] of [[320,568],[1440,900]]) {
+   await page.setViewportSize({width,height});
+   await setRoom('mahjong');
+   await setRoom('mahjong', {phase:'claim',to_act:null,claim:{by:'p3',tile:1,waiting:['p0']},
+    your_options:{claim:{chi:[[0,2],[2,3]],peng:true,gang:true,hu:true}}});
+   await page.locator('.mj-self-controls').getByRole('button',{name:'吃',exact:true}).click();
+   assert.equal(await page.locator('.mj-self-controls .mj-chip:not(.cancel)').count(),2);
+   assert.ok(await page.evaluate(()=>{
+    const avatar=document.querySelector('.mj-me').getBoundingClientRect();
+    return [...document.querySelectorAll('.mj-self-controls button:not([hidden])')].every(button=>{
+     const r=button.getBoundingClientRect();return r.left>=avatar.right&&r.right<=innerWidth;
+    });
+   }),`${width}px all claim controls and chi choices remain right of our avatar`);
+   await page.locator('.mj-self-controls .mj-chip:not(.cancel)').first().click();
+   assert.deepEqual(await actions(),[{type:'poker_action',action:'claim',kind:'chi',tiles:[0,2]}]);
+   assert.equal(await page.locator('.mj-self-controls button:enabled,.mj-hand-card:enabled').count(),0);
+  }
   await setRoom('mahjong', {status:'waiting'});
   assert.equal(await page.locator('#desktopRoomChat:not(.compact-room-chat)').count(),1,
     'mahjong waiting room restores full desktop chat');
@@ -248,8 +265,10 @@ console.log(`PASS Python/JavaScript parity for ${fixtures.cases.length} hands an
       return levels.bottom<=status.top&&status.bottom<=arena.top&&status.bottom<=cards.top;
      }),`${width}px long activity text stays above the cards`);
     }
-    assert.equal(await page.locator('#desktopRoomChat.compact-room-chat').count(),width>=1024?1:0,
-      `${game} ${width}px compact chat visibility`);
+    assert.equal(await page.locator('#desktopRoomChat').count(),width>=1024?1:0,
+      `${game} ${width}px desktop chat visibility`);
+    assert.equal(await page.locator('#desktopRoomChat.compact-room-chat').count(),width>=1024&&game==='guandan'?1:0,
+      `${game} ${width}px uses the appropriate chat layout`);
     if(width>=1024) {
      const chatBox=await page.locator('#desktopRoomChat').boundingBox();
      assert.ok(chatBox&&chatBox.x>=0&&chatBox.y>=0&&chatBox.x+chatBox.width<=width
@@ -321,6 +340,12 @@ console.log(`PASS Python/JavaScript parity for ${fixtures.cases.length} hands an
       [p.username, Array.from({length:24}, (_, i) => i % 34)]));
      room.last_discard = {by:'p3',tile:23};
      room.players[0].melds = [{type:'peng',tiles:[4,4,4]}, {type:'angang',tiles:[8,8,8,8]}];
+     room.players[1].melds = [{type:'chi',tiles:[0,1,2]}, {type:'angang',tiles:[8,8,8,8]}];
+     room.players[1].concealed = 7;
+     room.players[2].melds = [{type:'peng',tiles:[13,13,13]}];
+     room.players[2].concealed = 10;
+     room.players[3].melds = [{type:'gang',tiles:[27,27,27,27]}];
+     room.players[3].concealed = 10;
      room.your_hand = [0,1,2,9,10,11,27,27];
      room.tenpai = {waits:[27],remaining:{27:2}};
      await setRoom('mahjong', room);
@@ -348,6 +373,65 @@ console.log(`PASS Python/JavaScript parity for ${fixtures.cases.length} hands an
      assert.ok(!layout.chatOverlap, `${width}px chat clears players and controls`);
      assert.equal(layout.clipped, false, `${width}px expanded dock remains inside table page`);
      assert.equal(await page.locator('.mj-my-melds .mj-meld').count(),2);
+     const racks = await page.evaluate(() => {
+      const rect = selector => document.querySelector(selector).getBoundingClientRect();
+      const hub = rect('.mj-center');
+      const midX = r => r.left + r.width / 2, midY = r => r.top + r.height / 2;
+      const overlap = (a,b) => a.left < b.right && a.right > b.left && a.top < b.bottom && a.bottom > b.top;
+      const rackRects = [...document.querySelectorAll('.mj-player-rack')].map(e=>e.getBoundingClientRect());
+      const heads = [...document.querySelectorAll('.mj-player-head')].map(e=>e.getBoundingClientRect());
+      const rivers = [...document.querySelectorAll('.mj-river')].map(e=>e.getBoundingClientRect());
+      const chat = document.querySelector('#desktopRoomChat')?.getBoundingClientRect();
+      const size = [...document.querySelectorAll('.mj-player-rack .mj-tile,.mj-river .mj-tile')].map(e=>{
+       const r=e.getBoundingClientRect(); return [Math.min(r.width,r.height),Math.max(r.width,r.height)];
+      });
+      return {
+       centered: Math.abs(midX(rect('.rack-top'))-midX(hub))<1 && Math.abs(midX(rect('.rack-bottom'))-midX(hub))<1
+        && Math.abs(midY(rect('.rack-left'))-midY(hub))<1 && Math.abs(midY(rect('.rack-right'))-midY(hub))<1,
+       uniform: size.every(s=>Math.abs(s[0]-size[0][0])<.2&&Math.abs(s[1]-size[0][1])<.2),
+       overlap: rackRects.some(r=>overlap(r,hub)||rivers.some(b=>overlap(r,b))||heads.some(b=>overlap(r,b)))
+        ||heads.some((r,i)=>heads.slice(i+1).some(b=>overlap(r,b))),
+       chatOverlap: chat&&rackRects.some(r=>overlap(r,chat)),
+       orientations: ['top','left','right'].map(pos=>{
+        const m=new DOMMatrix(getComputedStyle(document.querySelector(`.rack-${pos}`)).transform);
+        return [Math.round(m.a),Math.round(m.b),Math.round(m.c),Math.round(m.d)].map(n=>n||0);
+       }),
+      };
+     });
+     assert.ok(racks.centered, `${width}px all four racks align with the centre`);
+     assert.ok(racks.uniform, `${width}px concealed, exposed, river and own tiles share one size`);
+     assert.equal(racks.overlap,false,`${width}px racks, rivers and player labels do not overlap`);
+     assert.ok(!racks.chatOverlap, `${width}px chat stays outside all racks`);
+     assert.deepEqual(racks.orientations,[[-1,0,0,-1],[0,1,-1,0],[0,-1,1,0]]);
+     const workspace = await page.evaluate(() => {
+      const page=document.querySelector('.mj-page').getBoundingClientRect();
+      const stage=document.querySelector('.mj-stage').getBoundingClientRect();
+      const controls=document.querySelector('.mj-dock').getBoundingClientRect();
+      const selfRow=document.querySelector('.mj-self-row').getBoundingClientRect();
+      const avatar=document.querySelector('.mj-me').getBoundingClientRect();
+      const actions=document.querySelector('.mj-actions').getBoundingClientRect();
+      const chat=document.querySelector('#desktopRoomChat')?.getBoundingClientRect();
+      return {
+       noFooter: !document.querySelector('.mj-page > .mj-dock') && page.bottom-selfRow.bottom<22,
+       controlsAbove: controls.bottom<=stage.top,
+       actionsBesideAvatar: actions.left>=avatar.right && actions.top<avatar.bottom && actions.bottom>avatar.top
+        && actions.right<=page.right && selfRow.top>=stage.bottom,
+       separateSidebar: chat&&chat.left>=page.right&&chat.height>=innerHeight-110,
+       tileWidth: document.querySelector('.river-bottom .mj-tile').getBoundingClientRect().width,
+      };
+     });
+     assert.ok(workspace.noFooter,`${width}px no obsolete hand area below the table`);
+     assert.ok(workspace.controlsAbove,`${width}px turn information stays in the table header`);
+     assert.ok(workspace.actionsBesideAvatar,`${width}px action buttons sit to the right of our avatar, below the hand`);
+     if(width>=1024) {
+      assert.ok(workspace.separateSidebar,`${width}px full-height chat is a separate right column`);
+      assert.ok(workspace.tileWidth>=(width>=1440?36:28),`${width}px desktop tiles are enlarged`);
+     }
+     assert.equal(await page.locator('.mj-player-backs img:not([src$="/back.png"])').count(),0);
+     assert.equal(await page.locator('.mj-opp .meld-angang .back').count(),4);
+     assert.equal(await page.locator('.mj-opp .meld-chi img[src$="/0.png"],.mj-opp .meld-chi img[src$="/1.png"],.mj-opp .meld-chi img[src$="/2.png"]').count(),3);
+     assert.equal(await page.locator('.mj-opp .mj-backs-pics .mj-tile').count(),27);
+     if(process.env.TABLE_SCREENSHOT_DIR) await page.screenshot({path:path.join(process.env.TABLE_SCREENSHOT_DIR,`mahjong-racks-${width}.png`),fullPage:true});
     }
     await setRoom('mahjong');
     assert.equal(await page.locator('.mj-center-seat.active').count(),1);

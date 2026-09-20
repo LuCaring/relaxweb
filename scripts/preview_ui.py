@@ -67,6 +67,13 @@ async def make_fixtures():
                 g["last_draw"] = 27
                 g["discards"] = {f"p{i}": [(j * 7 + i) % 34 for j in range(6)] for i in range(4)}
                 g["last_discard"] = {"by": "p3", "tile": g["discards"]["p3"][-1]}
+                for name, meld in zip(("p1", "p2", "p3"), (
+                    {"type": "chi", "tiles": [0, 1, 2], "from": "p0"},
+                    {"type": "peng", "tiles": [13, 13, 13], "from": "p1"},
+                    {"type": "gang", "tiles": [27, 27, 27, 27], "from": "p2"},
+                )):
+                    g["melds"][name] = [meld]
+                    g["hands"][name] = g["hands"][name][:10]
             elif game == "holdem":
                 g["stage"] = "flop"
                 g["board"] = [(10, 0), (11, 1), (12, 2)]
@@ -88,6 +95,8 @@ async def make_fixtures():
         if game == "mahjong":
             dense["discards"] = {f"p{i}": [(j * 7 + i) % 34 for j in range(18)] for i in range(4)}
             dense["last_discard"] = {"by": "p3", "tile": dense["discards"]["p3"][-1]}
+            dense["players"][1]["melds"] += [{"type": "angang", "tiles": [8, 8, 8, 8]}]
+            dense["players"][1]["concealed"] = 7
         elif game == "uno":
             dense["your_hand"] = (dense["your_hand"] * 3)[:20]
             dense["players"][0]["cards"] = 20
