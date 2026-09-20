@@ -19,6 +19,7 @@ from config import get, get_int
 from games.base import ROOM_TYPES, create_room, parse_amount
 from games.holdem import BLIND_PRESETS as GAME_BLIND_PRESETS
 from games.rating import TIERS, rating_change, rating_info
+from holdem_stats import init_holdem_stats, load_holdem_stats, public_holdem_stats, record_holdem_hand
 from rewards import (
     claim_checkin,
     claim_holdem_reward,
@@ -144,6 +145,7 @@ def init_db():
             conn.execute("ALTER TABLE users ADD COLUMN rating_games INTEGER NOT NULL DEFAULT 0")
         init_rewards(conn)
         init_estate(conn)
+        init_holdem_stats(conn)
         conn.execute("""
             CREATE TABLE IF NOT EXISTS rating_history (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -259,14 +261,12 @@ def get_rating(username):
     return rating_info(*row) if row else None
 
 
-def record_hand_ratings(room, hand_id, starts, endings, stakes=None):
-    """评分、德扑下注流水、已结算筹码在同一事务落库，重复结算不会重复累计。"""
+def record_hand_ratings(room, hand_id, starts, endings, stakes=None, statistics=None):
+    """评分、统计、下注流水及结算筹码在同一事务落库，重试不会重复写入。"""
     results = {}
     with database() as conn, conn:
         # 提前取写锁，读分数到更新的整个过程只有一个写者。
         conn.execute("BEGIN IMMEDIATE")
-        if stakes is not None and room.game_type == "holdem":
-            record_holdem_turnover(conn, hand_id, stakes, time.time())
         for username, final in endings.items():
             user = conn.execute(
                 "SELECT id, rating_score, rating_games FROM users WHERE username = ?",
@@ -293,6 +293,9 @@ def record_hand_ratings(room, hand_id, starts, endings, stakes=None):
                     (hand_id, user[0], room.game_type, room.name, room.hand_seq,
                      initial, final, delta, score, games, int(time.time())),
                 )
+                if room.game_type == "holdem" and statistics is not None:
+                    record_holdem_hand(conn, hand_id, user[0], initial, final, delta,
+                                       statistics[username])
                 # 离桌者的托管由离桌流程清除，不能在重试时重新创建。
                 if room.has_member(username):
                     conn.execute(
@@ -302,6 +305,13 @@ def record_hand_ratings(room, hand_id, starts, endings, stakes=None):
             results[username] = {"initial": initial, "final": final,
                                  "return_rate": round((final - initial) / initial, 6),
                                  "delta": delta, "rating": rating_info(score, games)}
+        if stakes is not None and room.game_type == "holdem":
+            # 只认本手结算的稳定用户 ID；离桌后注销/同名重注册不能继承旧手流水。
+            eligible = {row[0] for row in conn.execute(
+                "SELECT u.username FROM users u JOIN rating_history h ON h.user_id = u.id "
+                "WHERE h.hand_id = ?", (hand_id,))}
+            record_holdem_turnover(conn, hand_id,
+                {name: amount for name, amount in stakes.items() if name in eligible}, time.time())
     return results
 
 
@@ -336,29 +346,43 @@ async def handle_get_rating_leaderboard(websocket, state, data):
     user = state.get("user")
     if not user:
         return
-    # 一条查询保证榜单、本人名次和总人数来自同一快照；同分并列，按用户名稳定展示。
     limit = 100
+    requested_offset = data.get("offset", 0)
+    if type(requested_offset) is not int:
+        requested_offset = 0
+    request_id = data.get("request_id")
+    if not isinstance(request_id, str) or len(request_id) > 128:
+        request_id = None
     with database() as conn:
+        # 显式读事务让页码、排名、本人和统计来自同一快照；只批量读取本页汇总。
+        conn.execute("BEGIN")
+        total = conn.execute("SELECT COUNT(*) FROM users").fetchone()[0]
+        last_offset = max(0, (total - 1) // limit * limit)
+        offset = min(max(0, requested_offset // limit * limit), last_offset)
         rows = conn.execute("""
             WITH ranked AS (
-                SELECT username, nickname, rating_score, rating_games,
+                SELECT id, username, nickname, rating_score, rating_games,
                        RANK() OVER (ORDER BY rating_score DESC) AS rank,
-                       ROW_NUMBER() OVER (ORDER BY rating_score DESC, username) AS position,
-                       COUNT(*) OVER () AS total
+                       ROW_NUMBER() OVER (ORDER BY rating_score DESC, username) AS position
                 FROM users
             )
-            SELECT * FROM ranked WHERE position <= ? OR username = ? ORDER BY position
-        """, (limit, user["username"])).fetchall()
+            SELECT * FROM ranked
+            WHERE (position > ? AND position <= ?) OR username = ? ORDER BY position
+        """, (offset, offset + limit, user["username"])).fetchall()
+        stats = load_holdem_stats(conn, [row[0] for row in rows])
+        stats_since = conn.execute("SELECT started_at FROM holdem_stats_metadata WHERE id = 1").fetchone()[0]
     entries, own = [], None
-    for username, nickname, score, games, rank, position, total in rows:
+    for user_id, username, nickname, score, games, rank, position in rows:
         entry = {"username": username, "nickname": nickname, "rank": rank,
-                 "rating": rating_info(score, games)}
-        if position <= limit:
+                 "rating": rating_info(score, games),
+                 "holdem_stats": stats.get(user_id) or public_holdem_stats()}
+        if offset < position <= offset + limit:
             entries.append(entry)
         if username == user["username"]:
             own = entry
     await send_json(websocket, {"type": "rating_leaderboard", "entries": entries,
-        "self": own, "total": rows[0][6] if rows else 0, "limit": limit,
+        "self": own, "total": total, "limit": limit, "offset": offset,
+        "request_id": request_id, "stats_since": stats_since,
         "tiers": [rating_info(floor) for floor, _ in TIERS]})
 
 
@@ -790,8 +814,16 @@ async def handle_delete_account(websocket, state, data):
     if not authenticate_user(user["username"], str(data.get("password", ""))):
         await send_json(websocket, {"type": "account_error", "message": "密码错误"})
         return
+    # 房间仍以用户名标识参局者；禁止删除后同名新账号继承未结算的旧手。
+    # 此检查到同步删除之间不 await，避免另一连接在注销过程中重新入座。
+    if find_user_room(user["username"]):
+        await send_json(websocket, {"type": "account_error", "message": "请先离开或解散游戏房间，再注销账号"})
+        return
     if active_bet and active_bet["creator"] == user["username"]:
         await cancel_active_bet("发起者已注销账号")
+        if find_user_room(user["username"]):
+            await send_json(websocket, {"type": "account_error", "message": "请先离开或解散游戏房间，再注销账号"})
+            return
     with database() as conn, conn:
         conn.execute(
             "DELETE FROM auth_sessions WHERE user_id IN "
@@ -800,6 +832,9 @@ async def handle_delete_account(websocket, state, data):
         )
         conn.execute("DELETE FROM rating_history WHERE user_id = "
                      "(SELECT id FROM users WHERE username = ?)", (user["username"],))
+        for table in ("holdem_hand_stats", "holdem_player_stats"):
+            conn.execute(f"DELETE FROM {table} WHERE user_id = "
+                         "(SELECT id FROM users WHERE username = ?)", (user["username"],))
         conn.execute("DELETE FROM daily_checkins WHERE user_id = "
                      "(SELECT id FROM users WHERE username = ?)", (user["username"],))
         conn.execute("DELETE FROM lottery_draws WHERE user_id = "
@@ -813,8 +848,16 @@ async def handle_delete_account(websocket, state, data):
                      "(SELECT id FROM users WHERE username = ?)", (user["username"],))
         conn.execute("DELETE FROM users WHERE username = ?", (user["username"],))
     state["user"] = None
+    other_sockets = []
+    for socket, client_state in clients.items():
+        if (client_state.get("user") or {}).get("username") == user["username"]:
+            client_state["user"] = None
+            if socket is not websocket:
+                other_sockets.append(socket)
     logger.info("account deleted: %s", user["username"])
     await send_json(websocket, {"type": "account_deleted"})
+    for socket in other_sockets:
+        await send_json(socket, {"type": "account_deleted"})
 
 
 async def handle_get_online(websocket, state, data):
@@ -1673,8 +1716,9 @@ def attach_host(room):
     room.player_rating = get_rating
     room.pending_rating_updates = set()
 
-    def record_ratings(hand_id, starts, endings, stakes=None):
-        results = record_hand_ratings(room, hand_id, starts, endings, stakes)
+    def record_ratings(hand_id, starts, endings, stakes=None, statistics=None):
+        results = record_hand_ratings(room, hand_id, starts, endings,
+                                      stakes=stakes, statistics=statistics)
         room.pending_rating_updates.update(results)
         if stakes is not None and room.game_type == "holdem":
             pending_rewards.update(stakes)
@@ -1728,6 +1772,7 @@ async def broadcast_room_list():
 
 
 async def dissolve_room(room, reason):
+    await room.finish_pending_settlement()
     room.close()
     game_rooms.pop(room.id, None)
     # 手牌进行中解散才是「流局」；打完后的正常解散按「结算」入账
@@ -1745,8 +1790,9 @@ async def dissolve_room(room, reason):
 
 
 async def leave_room_internal(room, username):
+    await room.finish_pending_settlement()
     if room.in_hand() and room.has_member(username):
-        room.settle_ratings({username: room.members[username]["stack"]})
+        room.settle_leaving_rating(username)
     member = room.remove_member(username)
     if not member:
         return

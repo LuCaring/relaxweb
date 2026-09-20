@@ -119,6 +119,24 @@ class AdminTests(unittest.TestCase):
             # bob 不受影响
             self.assertIsNotNone(self.user_row("bob"))
 
+    def test_delete_clears_holdem_details_and_totals_only_for_target_user(self):
+        with server.database() as conn, conn:
+            ids = dict(conn.execute("SELECT username,id FROM users"))
+            for user_id in ids.values():
+                server.record_holdem_hand(conn, "test-hand", user_id, 100, 110, 4,
+                    {"big_blind": 10, "folded": False, "fold_reason": None,
+                     "saw_flop": False, "showdown": False, "vpip": False, "pfr": False,
+                     "aggressive_actions": 0, "call_actions": 0, "settlement_reason": "completed"})
+            server.record_holdem_turnover(conn, "test-hand", {name: 100 for name in ids}, 0)
+            for name in ids:
+                server.claim_holdem_reward(conn, name, 100, "1970-01-01", 0, server.adjust_coins)
+            metadata = conn.execute("SELECT * FROM holdem_stats_metadata").fetchall()
+        self.run_admin("delete", "alice", "-y")
+        with server.database() as conn:
+            for table in ("holdem_hand_stats", "holdem_player_stats", "holdem_turnover", "holdem_reward_claims"):
+                self.assertEqual(conn.execute(f"SELECT user_id FROM {table}").fetchall(), [(ids["bob"],)])
+            self.assertEqual(conn.execute("SELECT * FROM holdem_stats_metadata").fetchall(), metadata)
+
     def test_delete_refused_while_user_in_open_bet(self):
         self.seed_user_data("alice")
         self.add_bet("bob", [("alice", 0, 50)])  # 开放竞猜：bob 发起、alice 参与

@@ -124,6 +124,25 @@ class RatingTests(unittest.IsolatedAsyncioTestCase):
             room.close()
         self.assertEqual(self.count(), 4)
 
+    async def test_holdem_settlement_has_no_fallible_post_commit_escrow_write(self):
+        room = self.room()
+        await room.start()
+        room.game["folded"].add("bob")
+        with patch.object(room, "set_escrow", side_effect=sqlite3.OperationalError("escrow sync")) as sync:
+            await room.end_hand(False)
+            sync.assert_not_called()  # 最终托管只由积分/统计事务原子写入
+        settled = {name: member["stack"] for name, member in room.members.items()}
+        self.assertEqual(sum(settled.values()), 200)
+        self.assertFalse(room.in_hand())
+        await room.end_hand(False)
+        self.assertEqual({name: member["stack"] for name, member in room.members.items()}, settled)
+        self.assertEqual(self.count(), 2)
+        with server.database() as conn:
+            self.assertEqual(conn.execute("SELECT SUM(hands) FROM holdem_player_stats").fetchone()[0], 2)
+            self.assertEqual(dict(conn.execute("SELECT username, amount FROM game_escrows")), settled)
+        await room.restart()
+        self.assertEqual(room.rating_starts, settled)  # 已结算的盲注不能再退款
+
     async def test_mahjong_and_guandan_feed_shared_rating_pool(self):
         with server.database() as conn, conn:
             conn.execute("INSERT INTO users (username, password_hash, salt, created_at, coins) "
@@ -209,6 +228,22 @@ class RatingTests(unittest.IsolatedAsyncioTestCase):
         with server.database() as conn:
             self.assertIsNone(conn.execute("SELECT * FROM game_escrows WHERE username='bob'").fetchone())
 
+    async def test_holdem_same_hand_rejoin_preserves_new_buyin(self):
+        room = self.room(names=("alice", "bob", "carol"))
+        await room.start()
+        await server.leave_room_internal(room, "bob")
+        self.assertEqual(room.rating_results["bob"]["final"], 95)
+        with patch.object(server, "send_json"):
+            await server.handle_join_room(None, {"user": {"username": "bob"}, "last_room_op": -1000}, {"room_id": room.id})
+        self.assertEqual(room.members["bob"]["stack"], 100)
+        await room.perform_action(room.game["to_act"], "fold")
+        self.assertEqual(room.members["bob"]["stack"], 100)
+        self.assertEqual(server.get_rating("bob")["games"], 1)
+        with server.database() as conn:
+            self.assertEqual(conn.execute("SELECT amount FROM game_escrows WHERE username='bob'").fetchone()[0], 100)
+            self.assertEqual(conn.execute("SELECT hands FROM holdem_player_stats WHERE user_id = "
+                                          "(SELECT id FROM users WHERE username='bob')").fetchone()[0], 1)
+
     async def test_uno_departure_keeps_existing_refund_rules(self):
         room = self.room("uno")
         await room.start()
@@ -286,7 +321,9 @@ class RatingTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(data["total"], 3)
         self.assertEqual(data["self"], data["entries"][1])
         for entry in data["entries"]:
-            self.assertEqual(set(entry), {"username", "nickname", "rating", "rank"})
+            self.assertEqual(set(entry), {"username", "nickname", "rating", "rank", "holdem_stats"})
+            self.assertEqual(entry["holdem_stats"]["hands"], 0)
+            self.assertIsNone(entry["holdem_stats"]["win_rate"])
         self.assertEqual([t["floor"] for t in data["tiers"]], [0, 800, 1200, 1600, 2000, 2400])
         self.assertEqual([t["next_score"] for t in data["tiers"]], [800, 1200, 1600, 2000, 2400, None])
 

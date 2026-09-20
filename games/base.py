@@ -62,7 +62,8 @@ class BaseRoom:
         display_name(username)       用户名 -> 展示昵称
         set_escrow(username, amount) 筹码变动后同步托管（宿主写数据库）
         player_rating(username)     读取公开段位
-        record_ratings(id, starts, endings, stakes) 同步提交积分、筹码与可选德扑下注流水
+        record_ratings(id, starts, endings, stakes=None, statistics=None)
+                                    同步提交积分、筹码与可选德扑下注流水/统计
         on_dissolve_requested(reason)    async，房间解散（含结算解散、流局）
         on_rebuy_requested()             async，对局结束「再来一局」：按买入额重新买入，
                                          余额不足者由宿主负责离桌退币
@@ -92,7 +93,7 @@ class BaseRoom:
         self.display_name = lambda username: username
         self.set_escrow = lambda username, amount: None
         self.player_rating = lambda username: None
-        self.record_ratings = lambda hand_id, starts, endings, stakes=None: {}
+        self.record_ratings = lambda hand_id, starts, endings, stakes=None, statistics=None: {}
         self.rating_hand_id = None
         self.rating_starts = {}
         self.rating_results = {}
@@ -104,20 +105,31 @@ class BaseRoom:
         self.rating_starts = {name: self.members[name]["stack"] for name in names}
         self.rating_results = {}
 
-    def settle_ratings(self, endings=None, stakes=None):
-        """正常结束结算全员；提前离桌仅结算离开者。stakes 只在德扑整手结束时提供。"""
+    def settle_ratings(self, endings=None, stakes=None, statistics=None):
+        """积分、可选统计与下注流水同事务提交；stakes 仅在德扑整手结束时提供。"""
         if endings is None:
             endings = {name: member["stack"] for name, member in self.members.items()}
         pending = {name: amount for name, amount in endings.items()
                    if name in self.rating_starts and name not in self.rating_results}
         if pending or stakes is not None:
-            fresh = self.record_ratings(
-                self.rating_hand_id, self.rating_starts, pending, stakes)
+            extra = {}
+            if stakes is not None:
+                extra["stakes"] = stakes
+            if statistics is not None:
+                extra["statistics"] = statistics
+            fresh = self.record_ratings(self.rating_hand_id, self.rating_starts, pending, **extra)
             self.rating_results.update(fresh)
             for name, info in fresh.items():
                 self.match_rating_delta[name] = (
                     self.match_rating_delta.get(name, 0) + int(info.get("delta", 0)))
         return dict(self.rating_results)
+
+    def settle_leaving_rating(self, username):
+        """先结算再移除成员；玩法可覆盖以附加离桌统计摘要。"""
+        return self.settle_ratings({username: self.members[username]["stack"]})
+
+    async def finish_pending_settlement(self):
+        """离桌/解散前完成已结束但尚未持久化的手牌；默认无待重试结算。"""
 
     def reset_match_rating(self):
         """开始新的一局对局时清零累计段位分变化。"""

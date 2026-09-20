@@ -136,7 +136,9 @@ class HoldemRoom(BaseRoom):
 
     def on_resumed(self):
         g = self.game
-        if g and g.get("to_act"):
+        if g and "pending_settlement" in g:
+            self.schedule("settlement", 2, self.retry_settlement)
+        elif g and g.get("to_act"):
             g["deadline"] = time.time() + (self.pause_remaining or TURN_TIMEOUT)
             self.schedule_turn_timer()
         self.pause_remaining = 0.0
@@ -237,6 +239,34 @@ class HoldemRoom(BaseRoom):
         if mid_hand:
             g["folded"].add(username)
         return mid_hand
+
+    def hand_statistics(self, names, *, leaving=False, showdown=False):
+        """构造结算摘要，不修改进行中的状态；数据库失败后可安全重试。"""
+        g = self.game
+        if not g or "stats" not in g:
+            return None  # 旧手工快照无完整行动数据：沿用积分结算，但不推测统计
+        result = {}
+        for name in names:
+            if name not in g["stats"]:
+                continue
+            stats = g["stats"][name]
+            folded = name in g["folded"] or leaving
+            reason = stats["fold_reason"]
+            if folded and reason is None:
+                reason = "leave" if leaving else "manual"
+            result[name] = {
+                **stats,
+                "big_blind": g["big_blind"],
+                "folded": folded,
+                "fold_reason": reason,
+                "showdown": bool(showdown and not folded and stats["saw_flop"]),
+                "settlement_reason": "leave" if leaving else "completed",
+            }
+        return result
+
+    def settle_leaving_rating(self, username):
+        endings = {username: self.members[username]["stack"]}
+        return self.settle_ratings(endings, statistics=self.hand_statistics(endings, leaving=True))
 
     def pending_refunds(self):
         """房间关闭时应退给每人的筹码（含未结手牌中已投入部分）。"""
@@ -473,6 +503,7 @@ class HoldemRoom(BaseRoom):
         return None
 
     async def start_hand(self):
+        await self.finish_pending_settlement()
         self.cancel_timer("settle")
         eligible = self.members_with_chips()
         if len(eligible) < 2:
@@ -510,6 +541,10 @@ class HoldemRoom(BaseRoom):
             "acted": set(),
             "current_bet": big_blind,
             "min_raise": big_blind,
+            "big_blind": big_blind,  # 统计必须使用本手盲注，不能读取后续对局设置
+            "stats": {name: {"vpip": False, "pfr": False, "saw_flop": False,
+                             "fold_reason": None, "aggressive_actions": 0,
+                             "call_actions": 0} for name in order},
             "dealer": dealer_u,
             "to_act": None,
             "deadline": 0,
@@ -535,11 +570,19 @@ class HoldemRoom(BaseRoom):
 
     async def perform_action(self, username, action, data=None, auto=False):
         g = self.game
-        if not g or self.paused or g.get("to_act") != username:
+        if not g or self.paused:
+            return
+        if "pending_settlement" in g:
+            if username in self.members:
+                await self.finish_pending_settlement()
+            return  # 重发操作只重试原结算，不再接受下注或更改弃牌/摊牌口径
+        if g.get("to_act") != username:
             return
         raise_to = parse_amount((data or {}).get("raise_to"))
         options = self.legal_actions(username)
         nickname = self.display_name(username)
+        previous_bet = g["current_bet"]
+        previous_committed = g["street_committed"][username]
         text = ""
         if action == "fold":
             g["folded"].add(username)
@@ -570,6 +613,20 @@ class HoldemRoom(BaseRoom):
             text = f"全下 {target:.2f}" if username in g["allin"] else f"加注到 {target:.2f}"
         else:
             return
+        # 只统计验证成功的行为。raise 按钮也可能实际是短码全下跟注。
+        stats = g["stats"][username]
+        committed = g["street_committed"][username]
+        if action == "fold" and stats["fold_reason"] is None:
+            stats["fold_reason"] = "timeout" if auto else "manual"
+        if committed > previous_committed:
+            raised = committed > previous_bet
+            if g["stage"] == "preflop":
+                stats["vpip"] = True
+                stats["pfr"] = stats["pfr"] or raised
+            elif raised:
+                stats["aggressive_actions"] += 1
+            else:
+                stats["call_actions"] += 1
         g["last_action"] = {
             "username": username,
             "nickname": nickname,
@@ -604,6 +661,9 @@ class HoldemRoom(BaseRoom):
         if g["stage"] == "preflop":
             g["board"].extend([g["deck"].pop() for _ in range(3)])
             g["stage"] = "flop"
+            for name in g["order"]:
+                if name not in g["folded"]:
+                    g["stats"][name]["saw_flop"] = True
         elif g["stage"] == "flop":
             g["board"].append(g["deck"].pop())
             g["stage"] = "turn"
@@ -631,11 +691,27 @@ class HoldemRoom(BaseRoom):
         self.schedule_turn_timer()
         await self.broadcast_views()
 
+    async def finish_pending_settlement(self):
+        if self.game and "pending_settlement" in self.game:
+            await self.end_hand(self.game["pending_settlement"])
+
+    async def retry_settlement(self):
+        if self.paused:
+            return
+        try:
+            await self.finish_pending_settlement()
+        except Exception:
+            # end_hand 已重新安排重试；异常不能成为无人处理的后台任务。
+            logger.exception("poker settlement retry failed in room %s", self.id)
+
     async def end_hand(self, reveal):
         if not self.in_hand():
             return
         self.cancel_timer("turn")
         g = self.game
+        reveal = g.setdefault("pending_settlement", reveal)
+        g["to_act"] = None
+        g["deadline"] = 0
         stakes = dict(g["committed"])
         pot = round(sum(stakes.values()), 2)
         alive = [name for name in g["order"] if name not in g["folded"]]
@@ -646,11 +722,24 @@ class HoldemRoom(BaseRoom):
         payouts = distribute_pots(pots, hands) if hands else {alive[0]: pot}
         endings = {name: round(member["stack"] + payouts.get(name, 0), 2)
                    for name, member in self.members.items()}
-        ratings = self.settle_ratings(endings, stakes=stakes)
+        try:
+            ratings = self.settle_ratings(endings, stakes=stakes,
+                statistics=self.hand_statistics(endings, showdown=reveal))
+        except Exception:
+            # 动作已经消费，冻结牌局并自动重试；离桌/重开/解散也须先完成本次结算。
+            if not self.paused:
+                self.schedule("settlement", 2, self.retry_settlement)
+            raise
+        self.cancel_timer("settlement")
+        g.pop("pending_settlement")
         for name, amount in payouts.items():
             if amount > 0 and name in self.members:
-                self.members[name]["stack"] = round(self.members[name]["stack"] + amount, 2)
-        self.stacks_changed()
+                # 失败重试使用已提交的最终筹码，避免二次发奖。只更新获奖者，
+                # 不能用旧的离桌结算覆写同名玩家在本手期间重新买入的筹码。
+                final = round(self.members[name]["stack"] + amount, 2)
+                self.members[name]["stack"] = ratings.get(name, {}).get("final", final)
+        # 段位/统计事务已写入最终托管；不能再做易失败的重复写库，
+        # 否则已提交的本手仍停在进行中，重开/解散可能再次退还投入。
         g["stage"] = "showdown"
         g["to_act"] = None
         g["deadline"] = 0
@@ -709,6 +798,7 @@ class HoldemRoom(BaseRoom):
 
     async def restart(self):
         """重新开始：本手已投入的筹码退回各家，随后重新发一手。"""
+        await self.finish_pending_settlement()
         g = self.game
         if g:
             for name, amount in g.get("committed", {}).items():
