@@ -133,12 +133,13 @@ def enumerate_shapes(nat, nat_suit, wilds, total, levels, wild_rank=None):
     def add(kind, tier, main, needs, suit=None):
         shapes.append(_shape(kind, tier, main, total, needs, suit))
 
-    # ---- 炸弹/天王炸：纯自然牌，万能牌不能参与 ----
-    if wilds == 0 and 4 <= total <= 8:
-        for rank, count in nat.items():
-            if count == total and 2 <= rank <= ACE:
-                add("bomb", total, rank_value(rank, levels), {rank: count})
-    if wilds == 0 and total == 4 and nat.get(16, 0) == 2 and nat.get(17, 0) == 2:
+    # ---- 炸弹/天王炸：不可代牌，红桃级牌可按本点数使用 ----
+    if 4 <= total <= 8:
+        for rank in range(2, ACE + 1):
+            count = nat.get(rank, 0) + (wilds if rank == wild_rank else 0)
+            if count >= total:
+                add("bomb", total, rank_value(rank, levels), {rank: total})
+    if total == 4 and nat.get(16, 0) == 2 and nat.get(17, 0) == 2:
         add("king_bomb", 99, (4, 0), {16: 2, 17: 2})
 
     # ---- 单张（万能牌单出按本方级牌本身）----
@@ -178,7 +179,7 @@ def enumerate_shapes(nat, nat_suit, wilds, total, levels, wild_rank=None):
             window = list(range(top - STRAIGHT_LEN + 1, top + 1))
             needs = {rank: 1 for rank in window}
             if _check_needs(needs, nat, wilds):
-                add("straight", 0, rank_value(top, levels), needs)
+                add("straight", 0, (1, top), needs)
     if total >= 6 and total % 2 == 0:
         pairs = total // 2
         if pairs >= 3:
@@ -186,7 +187,7 @@ def enumerate_shapes(nat, nat_suit, wilds, total, levels, wild_rank=None):
                 window = list(range(top - pairs + 1, top + 1))
                 needs = {rank: 2 for rank in window}
                 if _check_needs(needs, nat, wilds):
-                    add("pairs_seq", 0, rank_value(top, levels), needs)
+                    add("pairs_seq", 0, (1, top), needs)
     if total >= 6 and total % 3 == 0:
         triples = total // 3
         if triples >= 2:
@@ -194,7 +195,7 @@ def enumerate_shapes(nat, nat_suit, wilds, total, levels, wild_rank=None):
                 window = list(range(top - triples + 1, top + 1))
                 needs = {rank: 3 for rank in window}
                 if _check_needs(needs, nat, wilds):
-                    add("triple_seq", 0, rank_value(top, levels), needs)
+                    add("triple_seq", 0, (1, top), needs)
 
     # ---- 同花顺：5 张同花连顺，大于五张炸弹、小于六张炸弹 ----
     if total == STRAIGHT_LEN:
@@ -212,13 +213,16 @@ def enumerate_shapes(nat, nat_suit, wilds, total, levels, wild_rank=None):
                             ok = False
                             break
                 if ok:
-                    add("flush_straight", 5.5, rank_value(top, levels),
+                    add("flush_straight", 5.5, (1, top),
                         {rank: 1 for rank in window}, suit=suit)
     return shapes
 
 
 def _realize(shape, nats, wild_cards, levels):
     """给 shape 分配具体牌：先自然牌，缺口用万能牌补；凑不齐返回 None。"""
+    if shape["type"] == "bomb":
+        nats = nats + wild_cards
+        wild_cards = []
     pool = {}
     if shape["suit"] is None:
         for card in nats:
@@ -242,14 +246,16 @@ def _realize(shape, nats, wild_cards, levels):
             "len": shape["len"], "label": combo_label(shape), "cards": picked}
 
 
-def resolve_combo(cards, wild_rank, levels):
-    """把选中的牌解析成最强牌型；凑不成牌型时返回 None。"""
+def resolve_combo(cards, wild_rank, levels, standing=None):
+    """解析最强合法牌型；有 standing 时只选能接的牌型，无解返回 None。"""
     wild_cards = [c for c in cards if is_wild(c, wild_rank)]
     nats = [c for c in cards if not is_wild(c, wild_rank)]
     nat = Counter(c["r"] for c in nats)
     nat_suit = Counter((c["r"], c["s"]) for c in nats)
     shapes = enumerate_shapes(nat, nat_suit, len(wild_cards), len(cards), levels,
                               wild_rank)
+    if standing is not None:
+        shapes = [shape for shape in shapes if beats(shape, standing)]
     if not shapes:
         return None
     return _realize(max(shapes, key=shape_sort_key), nats, wild_cards, levels)
@@ -257,10 +263,10 @@ def resolve_combo(cards, wild_rank, levels):
 
 def beats(candidate, standing):
     """candidate 能否压过 standing。"""
-    if candidate["type"] == "king_bomb":
-        return True
     if standing["type"] == "king_bomb":
         return False
+    if candidate["type"] == "king_bomb":
+        return True
     if candidate["tier"] and standing["tier"]:
         if candidate["tier"] != standing["tier"]:
             return candidate["tier"] > standing["tier"]
@@ -292,7 +298,8 @@ def find_moves(hand, wild_rank, levels, standing):
             combo = _realize(shape, nats, wild_cards, levels)
             if combo is None:
                 continue
-            if standing is not None and not beats(combo, standing):
+            combo = resolve_combo(combo["cards"], wild_rank, levels, standing)
+            if combo is None:
                 continue
             key = (combo["type"], combo["main"], combo["len"])
             if key in seen:
@@ -443,6 +450,9 @@ class GuandanRoom(BaseRoom):
                     "standing": None if not standing else {
                         "by": g["standing_by"],
                         "type": standing["type"],
+                        "tier": standing["tier"],
+                        "main": list(standing["main"]),
+                        "len": standing["len"],
                         "label": standing["label"],
                         "cards": [{"r": c["r"], "s": c["s"]}
                                   for c in standing["cards"]],
@@ -479,7 +489,7 @@ class GuandanRoom(BaseRoom):
     def note_leave(self, username):
         """掼蛋是固定 4 人的团体赛，有人中途离桌则本手作废。"""
         g = self.game
-        mid_hand = bool(g and username in g.get("teams", {}))
+        mid_hand = self.in_hand() and username in g.get("teams", {})
         if mid_hand:
             g["broken"] = True
         return mid_hand
@@ -589,12 +599,12 @@ class GuandanRoom(BaseRoom):
     def take_cards(self, username, indices):
         """按手牌下标取牌；任何下标非法或重复时返回 None。"""
         hand = self.game["hands"][username]
+        if not isinstance(indices, list):
+            return None
         picked = []
         seen = set()
         for index in indices:
-            try:
-                index = int(index)
-            except (TypeError, ValueError):
+            if type(index) is not int:
                 return None
             if not 0 <= index < len(hand) or index in seen:
                 return None
@@ -607,7 +617,9 @@ class GuandanRoom(BaseRoom):
         cards = self.take_cards(username, data.get("cards") or [])
         if not cards:
             return
-        combo = resolve_combo(cards, self.wild_rank_for(username), self.level_set())
+        standing = None if g["free_lead"] else g.get("standing")
+        combo = resolve_combo(cards, self.wild_rank_for(username), self.level_set(),
+                              standing)
         if combo is None:
             return
         standing = g.get("standing")
@@ -628,14 +640,14 @@ class GuandanRoom(BaseRoom):
         }
         logger.info("guandan %s@%s: %s %s",
                     username, self.id, combo["type"], combo["label"])
-        if not g["hands"][username]:
-            await self.on_finish(username, auto)
-            return
         if combo["type"] == "king_bomb":
             # 天王炸：本局立即结束，出牌者头游、对家二游
             partner = next(name for name, team in g["teams"].items()
                            if team == g["teams"][username] and name != username)
             await self.on_finish(username, auto, king_partner=partner)
+            return
+        if not g["hands"][username]:
+            await self.on_finish(username, auto)
             return
         await self.advance_turn(username)
 
@@ -686,6 +698,8 @@ class GuandanRoom(BaseRoom):
     async def on_finish(self, username, auto, king_partner=None):
         """有人出完：记录名次；双上/三游定局则收尾。"""
         g = self.game
+        if king_partner is not None:
+            g["finish"] = []
         g["finish"].append(username)
         role_name = ROLE_NAMES.get(len(g["finish"]), "")
         g["last_action"] = {
@@ -797,6 +811,8 @@ class GuandanRoom(BaseRoom):
             return
         self.cancel_timer("turn")
         g = self.game
+        self.paused = False
+        self.pause_remaining = 0.0
         g["stage"] = "showdown"
         g["to_act"] = None
         g["deadline"] = 0
@@ -881,12 +897,12 @@ class GuandanRoom(BaseRoom):
             "guandan hand #%d done in room %s, aborted=%s, payouts=%s",
             g["hand_no"], self.id, aborted, payouts,
         )
+        self.enter_settlement()
         await self.broadcast_payload(
             {"type": "hand_result", "room_id": self.id, **g["result"]}
         )
         await self.broadcast_views()
         await self.on_rooms_changed()
-        self.enter_settlement()
 
     async def restart(self):
         """重新开始：收回本局手牌重新发牌（级数保留）。"""

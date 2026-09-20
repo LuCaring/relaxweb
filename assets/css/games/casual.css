@@ -1,0 +1,176 @@
+/* 斗地主式场景：对手在场景中，操作悬浮在底部手牌上方。 */
+.game-in-room:has(.casual-page) {
+    background: #183a68;
+}
+.game-in-room:has(.casual-page) .game-workspace {
+    display: block;
+    width: 100%;
+    margin: 0;
+}
+.game-in-room:has(.casual-page) .game-container {
+    width: 100%;
+    max-width: none;
+    margin: 0;
+}
+.game-in-room:has(.casual-page) .game-header {
+    background: #142f55;
+    border-bottom: 1px solid #ffffff12;
+    color: #f5e9c7;
+    box-shadow: none;
+}
+.game-in-room:has(.casual-page) .room-topbar-name { color: #f5e9c7; }
+.game-in-room:has(.casual-page) .room-topbar { background: #142f55; }
+.game-in-room .casual-page .dock-chat-toggle { display: inline-flex; }
+.casual-page {
+    --scene-text: #e9f2ff;
+    --scene-muted: #b9cde6;
+    --scene-gold: #ffda82;
+    position: relative;
+    isolation: isolate;
+    display: flex;
+    flex-direction: column;
+    min-height: 650px;
+    height: calc(100dvh - 68px);
+    padding: 14px clamp(12px, 3vw, 48px) max(14px, env(safe-area-inset-bottom));
+    color: var(--scene-text);
+    background:
+        radial-gradient(ellipse at 50% 10%, #4b78a8 0, transparent 65%),
+        radial-gradient(ellipse at 0% 80%, #487a8c66 0, transparent 45%),
+        linear-gradient(165deg, #244d7b, #17385f 68%, #102c51);
+    overflow: hidden;
+}
+.casual-page::before, .casual-page::after {
+    content: "";
+    position: absolute;
+    z-index: -1;
+    pointer-events: none;
+    width: 70%;
+    height: 40%;
+    bottom: 5%;
+    border-radius: 50%;
+    background: #7cadbd08;
+    transform: rotate(-18deg);
+}
+.casual-page::before { left: -25%; }
+.casual-page::after { right: -25%; transform: rotate(18deg); }
+.casual-dock {
+    position: relative;
+    flex: none;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    min-width: 0;
+    padding: 8px 0 0;
+    z-index: 5;
+}
+.casual-dock .my-cards-label { color: var(--scene-muted); font-size: 12px; }
+.casual-dock.is-my-turn .my-cards-label { color: var(--scene-gold); }
+.casual-dock .dock-head, .mj-dock-head {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+    min-height: 28px;
+}
+.casual-dock .dock-chat-toggle, .casual-page .mj-chat-toggle {
+    color: #edf4ff;
+    background: #ffffff16;
+    border: 1px solid #ffffff25;
+    border-radius: 20px;
+    padding: 6px 12px;
+    min-height: 32px;
+}
+.casual-page .countdown {
+    width: min(200px, 35%);
+    height: 3px;
+    margin: 0 auto;
+    background: #ffffff18;
+    border-radius: 9px;
+    overflow: hidden;
+}
+.casual-page .countdown-fill { height: 100%; background: #ffce70; }
+.casual-avatar {
+    display: grid;
+    place-items: center;
+    width: 64px;
+    height: 64px;
+    margin: 0 auto 6px;
+    border: 2px solid #c5d7f080;
+    border-radius: 20px;
+    background: linear-gradient(140deg, #809ec3, #345783);
+    color: #fff;
+    box-shadow: 0 5px 16px #061d3833;
+    font-size: 26px;
+    font-weight: 800;
+}
+.casual-page .active .casual-avatar {
+    border-color: #ffda82;
+    box-shadow: 0 0 0 3px #ffda8220, 0 0 24px #ffcc6040;
+}
+.casual-dock .action-bar, .mj-actions {
+    display: flex;
+    justify-content: center;
+    flex-wrap: wrap;
+    gap: 12px;
+    margin: 0;
+}
+.casual-dock .action-btn, .mj-act {
+    min-height: 44px;
+    min-width: 76px;
+    padding: 10px 20px;
+    border: 1px solid #cce2ff55;
+    border-radius: 999px;
+    background: linear-gradient(#6c95c4, #426d9f);
+    box-shadow: 0 4px 0 #0b25443d;
+    color: #fff;
+    font-size: 14px;
+    font-weight: 750;
+    cursor: pointer;
+}
+.casual-dock .action-btn.primary, .mj-act.primary, .mj-act.hu {
+    min-width: 140px;
+    background: linear-gradient(#ffe8a1, #ffc757);
+    border-color: #ffebae;
+    color: #684006;
+    box-shadow: 0 4px 0 #8e560755, 0 4px 20px #ffda8210;
+}
+.casual-dock .action-btn.primary:disabled, .mj-act.primary:disabled { color: #684006; }
+.casual-dock .action-btn.danger, .mj-act.pass {
+    background: #ffffff12;
+    border-color: #ffffff38;
+    color: #d4e1f2;
+}
+.casual-dock button:disabled { opacity: .42; cursor: default; box-shadow: none; }
+.casual-dock button:focus-visible, .casual-page .mj-river-toggle:focus-visible {
+    outline: 3px solid #ffdf89;
+    outline-offset: 3px;
+}
+.casual-page .paused-overlay {
+    position: absolute;
+    inset: 0;
+    z-index: 20;
+    display: grid;
+    place-items: center;
+    padding: 20px;
+    background: #0c254caf;
+    backdrop-filter: blur(3px);
+    color: white;
+    text-align: center;
+}
+@media (max-width: 650px) {
+    .casual-page { height: calc(100dvh - 54px); min-height: 610px; padding: 10px 12px 16px; }
+    .casual-avatar { width: 44px; height: 44px; border-radius: 14px; font-size: 20px; }
+    .casual-dock .action-btn, .mj-act { min-width: 56px; padding: 10px 14px; font-size: 13px; }
+    .casual-dock .action-btn.primary, .mj-act.primary, .mj-act.hu { min-width: 108px; }
+    .casual-dock .action-bar, .mj-actions { gap: 8px; }
+}
+@media (orientation: landscape) and (max-height: 540px) {
+    .casual-page { height: calc(100dvh - 48px); min-height: 330px; padding: 4px 18px 6px; }
+    .casual-dock { gap: 4px; padding-top: 2px; }
+    .casual-avatar { width: 38px; height: 38px; border-radius: 12px; font-size: 19px; margin-bottom: 3px; }
+    .casual-dock .action-btn, .mj-act { min-height: 36px; padding: 6px 18px; font-size: 12px; }
+    .casual-page .countdown { height: 2px; }
+}
+@media (prefers-reduced-motion: reduce) {
+    .casual-page *, .casual-page *::before { animation: none !important; transition: none !important; }
+}

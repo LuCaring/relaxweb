@@ -180,6 +180,10 @@ python3 deploy/serve.py        # http://localhost:8000
 ```bash
 python3 tests/test_games.py            # 引擎纯逻辑（不需要起服务）
 python3 tests/test_frontend.py         # 前端模块静态检查（import/导出、state 前缀、禁用原生弹窗、页面资源）
+python3 tests/test_mahjong.py          # 麻将牌型、吃碰杠胡与结算
+python3 tests/test_guandan.py          # 掼蛋牌型、组队升级与结算
+python3 tests/test_table_regressions.py # 选牌比较、抢杠、绝张、声明状态与非法下标
+python3 tests/test_table_leave_protocol.py # 临时库与真实 WebSocket：非房主退出、暂停、声明窗、多页面通知和退款
 python3 tests/test_ratings.py          # 段位公式、结算、迁移、幂等、排行榜/并列/前100与真实协议（需 websockets）
 python3 tests/test_rewards.py          # 签到日期/概率、累计机会、并发去重、扣次入账原子性
 python3 tests/test_rewards_protocol.py # 临时数据库 + 真实 WebSocket 签到/抽奖联调
@@ -201,6 +205,11 @@ python3 tests/test_uno_challenge_protocol.py # 本地真实 WebSocket 质疑联�
 和 `node tests/test_mobile_settlement.cjs`。
 手机结算回归使用触摸滑动和坐标点击，验证长结算页底部的继续/解散按钮可达。
 可通过 `NODE_PATH` 指定 Playwright 包路径、`CHROME_PATH` 指定 Chrome 可执行文件。
+
+`node tests/test_table_ui.cjs` 覆盖麻将和掼蛋的实际选牌、出牌、提示、双击、聊天弹层、
+离桌结算按钮，以及 320/390/844/1024/1440 像素布局；同时对比 Python 与 JavaScript
+牌型判定。使用服务端生成的视图和模拟账号，不依赖真实用户；可用 `PYTHON` 指定 Python，
+`TEST_BASE_URL` 指定静态服务地址，`TABLE_SCREENSHOT_DIR` 保存界面截图。
 
 ## 部署
 

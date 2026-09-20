@@ -1,894 +1,101 @@
-/* =========================================================
-   掼蛋牌桌：方形桌面 + 四方位座位，手机竖屏/横屏与桌面共用。
-   手牌与结算复用 poker-dock / poker-result 的既有骨架。
-========================================================= */
-
-.create-rules-label {
-    margin: 6px 2px -6px;
-
-    color: #86868b;
-
-    font-size: 12px;
-
-    font-weight: 650;
-}
-
-.gd-page {
-    display: flex;
-
-    flex-direction: column;
-
-    gap: 12px;
-}
-
-/* ---- 方形牌桌 ---- */
-
-.gd-table {
-    position: relative;
-
-    width: 100%;
-
-    max-width: 520px;
-
-    aspect-ratio: 1 / 0.92;
-
-    margin: 0 auto;
-
-    padding: 12px;
-
-    border-radius: 20px;
-
-    background:
-        radial-gradient(
-            ellipse at 50% 0%,
-            #25603f,
-            #143c28 72%
-        );
-
-    box-shadow:
-        inset 0 0 0 5px rgba(255,255,255,.14),
-        0 10px 30px rgba(10,50,30,.3);
-}
-
-.gd-table .poker-topbar {
-    font-size: 11px;
-}
-
-.gd-levels {
-    display: flex;
-
-    flex-wrap: wrap;
-
-    align-items: center;
-
-    justify-content: center;
-
-    gap: 6px;
-
-    margin: 8px 0 6px;
-}
-
-.gd-level-chip {
-    display: inline-flex;
-
-    align-items: center;
-
-    gap: 6px;
-
-    padding: 4px 10px;
-
-    border-radius: 999px;
-
-    background: rgba(255,255,255,.14);
-
-    color: rgba(255,255,255,.92);
-
-    font-size: 12px;
-
-    font-weight: 650;
-}
-
-.gd-level-chip.mine {
-    background: rgba(255,255,255,.24);
-
-    box-shadow: 0 0 0 1.5px rgba(255,255,255,.35);
-}
-
-.gd-level-chip b {
-    font-variant-numeric: tabular-nums;
-}
-
-.gd-dot {
-    display: inline-block;
-
-    flex: none;
-
-    width: 9px;
-
-    height: 9px;
-
-    border-radius: 50%;
-}
-
-.gd-mult {
-    padding: 4px 10px;
-
-    border-radius: 999px;
-
-    background: #ffe6a8;
-
-    color: #6b4a08;
-
-    font-size: 12px;
-
-    font-weight: 750;
-}
-
-.gd-table .poker-status {
-    margin: 0 0 6px;
-
-    padding: 6px 10px;
-
-    background: rgba(255,255,255,.12);
-
-    font-size: 12px;
-
-    min-height: 28px;
-}
-
-/* ---- 座位 ---- */
-
-.gd-seats {
-    position: absolute;
-
-    inset: 88px 6px 12px;
-
-    pointer-events: none;
-}
-
-.gd-seat {
-    position: absolute;
-
-    display: flex;
-
-    flex-direction: column;
-
-    align-items: center;
-
-    gap: 2px;
-
-    width: 104px;
-
-    padding: 7px 6px 6px;
-
-    border-radius: 12px;
-
-    background: rgba(255,255,255,.94);
-
-    box-shadow: 0 4px 12px rgba(0,0,0,.22);
-
-    pointer-events: auto;
-
-    transition: box-shadow .25s;
-}
-
-.gd-seat::before {
-    content: "";
-
-    position: absolute;
-
-    top: 6px;
-
-    bottom: 6px;
-
-    left: 0;
-
-    width: 4px;
-
-    border-radius: 4px;
-
-    background: var(--team-color, #888);
-}
-
-.gd-seat.pos-top {
-    top: 0;
-
-    left: 50%;
-
-    transform: translateX(-50%);
-}
-
-.gd-seat.pos-bottom {
-    bottom: 0;
-
-    left: 50%;
-
-    transform: translateX(-50%);
-}
-
-.gd-seat.pos-left {
-    left: 0;
-
-    top: 50%;
-
-    transform: translateY(-50%);
-}
-
-.gd-seat.pos-right {
-    right: 0;
-
-    top: 50%;
-
-    transform: translateY(-50%);
-}
-
-.gd-seat.me {
-    background: #efeaff;
-
-    box-shadow: inset 0 0 0 2px #a58ad4;
-}
-
-.gd-seat.active {
-    box-shadow: 0 0 0 2.5px #ffd60a, 0 0 16px rgba(255,214,10,.6);
-}
-
-.gs-name {
-    display: flex;
-
-    align-items: center;
-
-    gap: 4px;
-
-    max-width: 96px;
-
-    font-size: 12px;
-
-    font-weight: 700;
-
-    white-space: nowrap;
-
-    overflow: hidden;
-
-    text-overflow: ellipsis;
-}
-
-.gs-team-dot {
-    display: inline-block;
-
-    flex: none;
-
-    width: 8px;
-
-    height: 8px;
-
-    border-radius: 50%;
-
-    background: var(--team-color, #888);
-}
-
-.gs-info {
-    display: flex;
-
-    gap: 8px;
-
-    font-size: 11px;
-
-    font-variant-numeric: tabular-nums;
-}
-
-.gs-stack {
-    color: #b45309;
-
-    font-weight: 750;
-}
-
-.gs-count {
-    color: #56606b;
-
-    font-weight: 650;
-}
-
-.gs-role {
-    position: absolute;
-
-    top: -9px;
-
-    left: 50%;
-
-    transform: translateX(-50%);
-
-    padding: 2px 9px;
-
-    border-radius: 999px;
-
-    background: linear-gradient(180deg, #ffd60a, #f5a623);
-
-    color: #5b3a00;
-
-    font-size: 10.5px;
-
-    font-weight: 800;
-
-    white-space: nowrap;
-
-    box-shadow: 0 2px 6px rgba(0,0,0,.25);
-}
-
-.gs-pass {
-    position: absolute;
-
-    top: -7px;
-
-    right: -6px;
-
-    padding: 2px 7px;
-
-    border-radius: 999px;
-
-    background: #ff2d55;
-
-    color: white;
-
-    font-size: 10px;
-
-    font-weight: 750;
-
-    box-shadow: 0 2px 6px rgba(0,0,0,.25);
-}
-
-/* ---- 中央出牌区 ---- */
-
-.gd-center {
-    position: absolute;
-
-    top: 50%;
-
-    left: 50%;
-
-    transform: translate(-50%, -50%);
-
-    display: flex;
-
-    flex-direction: column;
-
-    align-items: center;
-
-    gap: 8px;
-
-    max-width: 46%;
-}
-
-.gd-standing-cards {
-    display: flex;
-
-    flex-wrap: wrap;
-
-    justify-content: center;
-
-    gap: 4px;
-}
-
-.gd-standing-cards .gcard + .gcard {
-    margin-left: -2px;
-}
-
-.gd-standing-by {
-    padding: 3px 10px;
-
-    border-radius: 999px;
-
-    background: rgba(0,0,0,.32);
-
-    color: #ffe9a8;
-
-    font-size: 11.5px;
-
-    font-weight: 650;
-
-    white-space: nowrap;
-}
-
-.gd-free-lead {
-    padding: 6px 14px;
-
-    border-radius: 12px;
-
-    border: 1.5px dashed rgba(255,255,255,.4);
-
-    color: rgba(255,255,255,.85);
-
-    font-size: 12.5px;
-
-    font-weight: 650;
-
-    white-space: nowrap;
-}
-
-/* ---- 牌面 ---- */
-
-.gcard {
-    position: relative;
-
-    display: inline-flex;
-
-    flex-direction: column;
-
-    align-items: center;
-
-    justify-content: center;
-
-    flex: none;
-
-    width: 42px;
-
-    height: 58px;
-
-    border-radius: 6px;
-
-    background: white;
-
-    box-shadow: 0 2px 6px rgba(0,0,0,.28);
-
-    color: #1d1d1f;
-
-    font-weight: 800;
-
-    line-height: 1.05;
-}
-
-.gcard.red {
-    color: #e0355e;
-}
-
-.gcard .gc-rank {
-    font-size: 16px;
-}
-
-.gcard .gc-suit {
-    font-size: 12px;
-}
-
-.gcard.small {
-    width: 32px;
-
-    height: 45px;
-}
-
-.gcard.small .gc-rank {
-    font-size: 12px;
-}
-
-.gcard.small .gc-suit {
-    font-size: 10px;
-}
-
-.gcard.wild {
-    box-shadow:
-        0 0 0 2px #ffb340,
-        0 2px 8px rgba(0,0,0,.3);
-}
-
-.gcard.wild::after {
-    content: "配";
-
-    position: absolute;
-
-    top: 1px;
-
-    right: 2px;
-
-    color: #e08a00;
-
-    font-size: 8px;
-
-    font-weight: 800;
-}
-
-/* ---- 手牌 dock ---- */
-
-.gd-dock {
-    display: flex;
-
-    flex-direction: column;
-
-    gap: 8px;
-
-    padding: 12px 14px;
-}
-
-.gd-dock.is-my-turn {
-    border-color: #7fae8d;
-
-    box-shadow: 0 0 0 2px #7fae8d33;
-}
-
-.gd-dock.is-my-turn .my-cards-label {
-    color: #1a7a45;
-
-    font-weight: 750;
-}
-
-.gd-hand {
-    display: flex;
-
-    align-items: flex-end;
-
-    gap: 0;
-
-    min-height: 74px;
-
-    padding: 14px 4px 4px;
-
-    overflow-x: auto;
-
-    overscroll-behavior-x: contain;
-}
-
-.gd-hand-card {
-    flex: none;
-
-    margin-left: -20px;
-
-    padding: 0;
-
-    border: 0;
-
-    background: transparent;
-
-    font: inherit;
-
-    cursor: pointer;
-}
-
-.gd-hand-card:first-child {
-    margin-left: 0;
-}
-
-.gd-hand-card:focus-visible {
-    outline: 3px solid #7256ef;
-
-    outline-offset: 3px;
-
-    z-index: 2;
-}
-
-.gd-hand-card .gcard {
-    transition: transform .15s, box-shadow .15s;
-}
-
-.gd-hand-card .gcard.picked {
-    transform: translateY(-10px);
-
-    box-shadow:
-        0 0 0 2.5px #1fa971,
-        0 8px 16px rgba(0,0,0,.3);
-}
-
-.gd-dock .action-bar {
-    margin-top: 0;
-}
-
-.gd-dock-action {
-    flex: 1;
-
-    min-width: 0;
-
-    color: #e8f3ec;
-
-    font-size: 12px;
-
-    text-align: center;
-
-    white-space: nowrap;
-
-    overflow: hidden;
-
-    text-overflow: ellipsis;
-}
-
-.gd-dock .countdown {
-    margin-top: 0;
-}
-
-/* ---- 结算 ---- */
-
-.gd-result .gd-level-line {
-    color: #56606b;
-
-    font-size: 12px;
-}
-
-.gd-match-banner {
-    margin: 0 auto 8px;
-
-    padding: 10px 18px;
-
-    border-radius: 14px;
-
-    background: linear-gradient(180deg, #fff3c4, #ffe08a);
-
-    color: #6b4a08;
-
-    font-size: 15px;
-
-    font-weight: 800;
-
-    text-align: center;
-
-    box-shadow: 0 8px 22px rgba(214,158,30,.35);
-}
-
-.gd-table .gd-match-banner {
-    position: absolute;
-
-    left: 50%;
-
-    bottom: 14%;
-
-    transform: translateX(-50%);
-
-    margin: 0;
-
-    white-space: nowrap;
-
-    z-index: 5;
-}
-
-.gd-table .paused-overlay {
-    position: absolute;
-
-    inset: 0;
-
-    display: grid;
-
-    place-items: center;
-
-    border-radius: 20px;
-
-    background: rgba(10, 30, 20, .55);
-
-    color: white;
-
-    font-size: 15px;
-
-    font-weight: 750;
-}
-
-/* =========================================================
-   桌面端（≥1024px）
-========================================================= */
-
-@media (min-width: 1024px) {
-    .gd-table {
-        max-width: 620px;
-
-        aspect-ratio: 1 / 0.8;
-    }
-
-    .gd-seats {
-        inset: 96px 10px 14px;
-    }
-
-    .gd-seat {
-        width: 118px;
-
-        padding: 9px 8px 8px;
-    }
-
-    .gd-center {
-        max-width: 52%;
-    }
-
-    .gd-standing-cards .gcard {
-        width: 46px;
-
-        height: 64px;
-    }
-
-    .gd-hand-card {
-        margin-left: -14px;
-    }
-
-    .gd-hand {
-        justify-content: center;
-
-        flex-wrap: wrap;
-
+.create-rules-label { margin: 6px 2px -6px; color: #86868b; font-size: 12px; font-weight: 650; }
+.gd-table { position: relative; flex: 1; min-height: 310px; display: flex; flex-direction: column; }
+.gd-table .poker-topbar { color: #bed1e8; font-size: 12px; margin: 0; background: none; padding: 0; }
+.gd-levels { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; margin: 12px 0 0; }
+.gd-level-chip, .gd-mult { display: inline-flex; align-items: center; gap: 6px; padding: 6px 14px; border-radius: 20px; background: #0b234144; color: #d3e4fb; font-size: 12px; }
+.gd-level-chip.mine { color: #fff0c4; border: 1px solid #ffd88744; }
+.gd-level-chip b { font-size: 17px; font-variant-numeric: tabular-nums; }
+.gd-dot, .gs-team-dot { display: inline-block; flex: none; width: 8px; height: 8px; border-radius: 50%; background: var(--team-color); }
+.gd-mult { color: #ffdc8b; }
+.gd-table .poker-status { margin: 8px auto 0; padding: 0; min-height: 18px; background: none; color: #bed1e8; font-size: 12px; }
+.gd-arena { position: relative; flex: 1; min-height: 235px; }
+.gd-seats { position: absolute; inset: 0; pointer-events: none; }
+.gd-seat { position: absolute; width: 110px; display: flex; flex-direction: column; align-items: center; gap: 4px; pointer-events: auto; color: #e9f2ff; }
+.gd-seat.pos-top { top: 10px; left: 50%; transform: translateX(-50%); }
+.gd-seat.pos-left { left: 0; top: 45%; transform: translateY(-50%); }
+.gd-seat.pos-right { right: 0; top: 45%; transform: translateY(-50%); }
+.gd-seat.pos-bottom { bottom: 4px; left: 0; }
+.gd-seat.pos-bottom .casual-avatar, .gd-seat.pos-bottom .rating-badge, .gd-seat.pos-bottom .gs-relation { display: none; }
+.gs-relation { position: absolute; top: 52px; padding: 2px 9px; background: #203d63; color: #dbeaff; border: 1px solid #a9c5e744; border-radius: 20px; font-size: 10px; }
+.gs-name { display: flex; gap: 5px; align-items: center; max-width: 108px; font-size: 13px; font-weight: 700; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.gs-info { display: flex; gap: 8px; align-items: center; font-size: 11px; font-variant-numeric: tabular-nums; }
+.gs-stack { color: #ffdb88; }
+.gs-count { padding: 2px 6px; border-radius: 8px; background: #102c5188; color: #e6f2ff; }
+.gd-seat .rating-badge { font-size: 10px; color: #c0d4ef; background: none; }
+.gs-role, .gs-pass { border-radius: 12px; padding: 3px 9px; font-size: 12px; background: #ffda82; color: #604018; }
+.gs-pass { background: #ffffff15; color: #bed1e8; }
+.gd-center { position: absolute; left: 50%; top: 64%; transform: translate(-50%, -50%); width: calc(100% - 260px); max-width: 650px; display: flex; flex-direction: column; align-items: center; gap: 12px; }
+.gd-standing-cards { display: flex; justify-content: safe center; max-width: 100%; overflow-x: auto; padding: 5px; }
+.gd-standing-cards .gcard + .gcard { margin-left: -20px; }
+.gd-standing-by, .gd-free-lead { font-size: 13px; color: #ffdf95; text-align: center; }
+.gd-free-lead { color: #c1d5ed; }
+.gcard { position: relative; display: inline-flex; flex: none; flex-direction: column; align-items: flex-start; justify-content: flex-start; width: 64px; height: 88px; padding: 8px; border: 1px solid #d0d9e4; border-radius: 8px; background: linear-gradient(135deg, #fff, #f1f5fa); box-shadow: 0 3px 5px #08203c44; color: #1d2838; font-weight: 800; line-height: 1.1; }
+.gcard.red { color: #d23a52; }
+.gc-rank { font-size: 21px; }
+.gc-suit { font-size: 16px; margin-top: 4px; }
+.gcard.small { width: 34px; height: 48px; padding: 4px; border-radius: 4px; }
+.gcard.small .gc-rank { font-size: 13px; }
+.gcard.small .gc-suit { font-size: 11px; margin-top: 2px; }
+.gcard.wild { border-color: #f7b934; }
+.gcard.wild::after { content: '配'; position: absolute; right: 3px; bottom: 4px; color: #ab7210; font-size: 10px; }
+.gd-dock .dock-head { order: 0; }
+.gd-dock-action { display: none; }
+.gd-dock > .countdown { order: 1; }
+.gd-dock .action-bar { order: 2; }
+.gd-selection-status { order: 3; min-height: 18px; color: #c1d5ed; font-size: 12px; text-align: center; }
+.gd-hand { order: 4; display: flex; align-items: flex-end; justify-content: safe center; min-height: 114px; padding: 16px 4px 6px; overflow-x: auto; overscroll-behavior-x: contain; }
+.gd-hand-card { flex: none; padding: 0; margin-left: -24px; border: 0; background: none; cursor: pointer; font: inherit; }
+.gd-hand-card:first-child { margin-left: 0; }
+.gd-hand-card .gcard { transition: transform .15s; }
+.gd-hand-card .picked { transform: translateY(-12px); background: #fff5d8; border-color: #ffd478; box-shadow: 0 0 0 2px #ffd478, 0 5px 12px #08203c55; }
+.gd-result .gd-level-line { color: #56606b; font-size: 12px; }
+.gd-match-banner { padding: 14px; border-radius: 12px; background: #ffe6a2; color: #664314; text-align: center; font-weight: 750; }
+@media (max-width: 650px) {
+    .gd-table .poker-topbar { font-size: 10px; }
+    .gd-levels { gap: 5px; }
+    .gd-level-chip, .gd-mult { padding: 4px 8px; font-size: 10px; }
+    .gd-seat { width: 76px; }
+    .gs-name { max-width: 76px; font-size: 11px; }
+    .gs-relation { top: 35px; font-size: 9px; }
+    .gd-seat .rating-badge { display: none; }
+    .gs-info { gap: 3px; font-size: 10px; }
+    .gd-center { width: calc(100% - 155px); top: 62%; }
+    .gd-standing-by { font-size: 11px; }
+    .gcard { width: 52px; height: 74px; padding: 6px; }
+    .gc-rank { font-size: 19px; }
+    .gc-suit { font-size: 14px; }
+    .gd-hand { min-height: 100px; }
+    .gd-hand-card { margin-left: -22px; }
+    .gd-dock .dock-head { justify-content: space-between; }
+    .gd-hand.many-cards {
+        display: grid;
+        grid-template-columns: repeat(13, minmax(0, 1fr)) 52px;
+        row-gap: 14px;
         overflow: visible;
-
-        row-gap: 8px;
     }
-
-    .gd-dock {
-        padding: 16px 22px;
-    }
+    .gd-hand.many-cards .gd-hand-card { width: 52px; margin: 0; }
+    .gd-hand.many-cards .gcard { width: 52px; }
+    .gd-hand.many-cards .gc-rank { font-size: 16px; }
 }
-
-/* =========================================================
-   手机横屏：级数并入顶栏、左右座位移到顶行两角，
-   中央与自身座位错开，保证一屏放下不重叠。
-========================================================= */
-
 @media (orientation: landscape) and (max-height: 540px) {
-    .gd-table {
-        max-width: none;
-
-        aspect-ratio: auto;
-
-        height: max(160px, calc(100dvh - 224px));
-
-        padding: 6px 10px 8px;
-    }
-
-    .gd-table .poker-topbar {
-        margin-bottom: 4px;
-
-        font-size: 10.5px;
-    }
-
-    /* 级数信息已并入顶栏文本，横屏收起独立级数条与状态条 */
-    .gd-levels,
-    .gd-table .poker-status {
-        display: none;
-    }
-
-    .gd-seats {
-        inset: 30px 4px 6px;
-    }
-
-    .gd-seat {
-        width: 92px;
-
-        padding: 4px 5px;
-
-        gap: 0;
-    }
-
-    .gd-seat .rating-badge {
-        display: none;
-    }
-
-    .gs-name {
-        max-width: 82px;
-
-        font-size: 10.5px;
-    }
-
-    .gs-info {
-        font-size: 9.5px;
-
-        gap: 6px;
-    }
-
-    /* 顶行三座：左右两角 + 对家居中；我方独占底行 */
-    .gd-seat.pos-left {
-        top: 0;
-
-        left: 0;
-
-        transform: none;
-    }
-
-    .gd-seat.pos-right {
-        top: 0;
-
-        right: 0;
-
-        left: auto;
-
-        transform: none;
-    }
-
-    .gd-seat.pos-top {
-        top: 0;
-    }
-
-    .gd-seat.pos-bottom {
-        bottom: 0;
-    }
-
-    .gd-center {
-        top: 34px;
-
-        transform: translateX(-50%);
-
-        gap: 3px;
-
-        max-width: 40%;
-    }
-
-    .gd-standing-by,
-    .gd-free-lead {
-        font-size: 10.5px;
-
-        padding: 2px 8px;
-    }
-
-    .gd-standing-cards .gcard {
-        width: 28px;
-
-        height: 40px;
-    }
-
-    .gd-standing-cards .gcard .gc-rank {
-        font-size: 11px;
-    }
-
-    .gd-standing-cards .gcard .gc-suit {
-        font-size: 9px;
-    }
-
-    .gd-dock {
-        gap: 5px;
-
-        min-height: 0;
-
-        padding: 8px 12px;
-    }
-
-    .gd-hand {
-        min-height: 54px;
-
-        padding: 10px 2px 2px;
-    }
-
-    .gd-hand-card {
-        margin-left: -24px;
-    }
-
-    .gd-hand-card .gcard {
-        width: 36px;
-
-        height: 50px;
-    }
-
-    .gd-hand-card .gcard .gc-rank {
-        font-size: 13px;
-    }
-
-    .gd-hand-card .gcard .gc-suit {
-        font-size: 10px;
-    }
-
-    .gd-dock .action-bar {
-        gap: 6px;
-
-        margin-top: 0;
-    }
-
-    .gd-dock .action-btn {
-        padding: 7px 12px;
-
-        font-size: 12.5px;
-    }
-
-    .gd-dock .countdown {
-        margin-top: 0;
-    }
-
-    .gd-dock-action {
-        font-size: 11px;
-    }
-}
-
-@media (max-width: 400px) {
-    .gd-seat {
-        width: 92px;
-
-        padding: 6px 4px 5px;
-    }
-
-    .gs-name {
-        max-width: 84px;
-
-        font-size: 11px;
-    }
-
-    .gd-center {
-        max-width: 42%;
-    }
-
-    .gd-hand-card {
-        margin-left: -24px;
-    }
+    .gd-table { min-height: 150px; }
+    .gd-levels { position: absolute; top: 20px; left: 50%; transform: translateX(-50%); margin: 0; flex-wrap: nowrap; }
+    .gd-level-chip, .gd-mult { padding: 3px 8px; font-size: 10px; white-space: nowrap; }
+    .gd-level-chip b { font-size: 12px; }
+    .gd-arena { min-height: 115px; }
+    .gd-seat { width: 92px; }
+    .gd-seat.pos-top { left: 50%; top: 26px; flex-direction: row; flex-wrap: wrap; justify-content: center; width: 140px; }
+    .gd-seat.pos-top .casual-avatar, .gd-seat.pos-top .rating-badge, .gd-seat.pos-bottom { display: none; }
+    .gs-relation { position: static; }
+    .gd-seat .rating-badge { display: none; }
+    .gd-center { top: 78%; gap: 3px; }
+    .gd-table .poker-status, .gd-dock > .countdown, .gd-selection-status { display: none; }
+    .gcard { width: 40px; height: 56px; padding: 5px; }
+    .gc-rank { font-size: 15px; }
+    .gc-suit { font-size: 11px; margin-top: 2px; }
+    .gd-hand { min-height: 76px; padding-top: 14px; padding-bottom: 3px; }
+    .gd-hand-card { margin-left: -15px; }
+    .gd-dock .dock-head { position: absolute; left: 0; right: 0; top: 0; justify-content: space-between; pointer-events: none; }
+    .gd-dock .dock-head .dock-chat-toggle { pointer-events: auto; }
+    .gd-dock .action-bar { padding-inline: 150px; }
 }
