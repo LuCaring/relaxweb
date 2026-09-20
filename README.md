@@ -4,6 +4,36 @@
 以及内置的两个多人小游戏——德州扑克与 UNO。后端 Python 3 标准库 + `websockets`，
 前端原生 ES Module，**没有构建步骤**，改完文件刷新页面即生效。
 
+## 本地游戏 UI 预览
+
+在仓库根目录运行（仅需 Python 3.9+，无需安装额外依赖）：
+
+```bash
+python3 scripts/preview_ui.py
+```
+
+会启动本地服务并自动打开浏览器，直接进入掼蛋牌桌，无需登录或凑齐玩家。
+工具栏可以切换掼蛋、麻将、德扑、UNO，以及普通牌桌、长昵称/拥挤牌面、等待开局、暂停场景；
+也可以切换桌面/手机/横屏尺寸、显示聊天气泡、重置场景或单独打开牌桌。
+修改 `assets/`、`game.html` 或预览工具页面后自动刷新，保留当前游戏、场景与尺寸。
+
+```bash
+python3 scripts/preview_ui.py --game mahjong             # 直接预览麻将
+python3 scripts/preview_ui.py --game guandan --scene dense # 长昵称和长手牌
+python3 scripts/preview_ui.py --port 0 --no-open          # 自动选空闲端口，只打印地址
+```
+
+默认地址为 `http://127.0.0.1:8010/`，按 `Ctrl+C` 停止。没有桌面浏览器的环境可手动打开终端打印的地址。
+这是使用真实前端和游戏引擎视图生成的**布局样例**：选牌、提示、聊天、暂停可以测试，出牌等操作会显示记录并解除按钮锁，
+不推进完整对局。倒计时延长至一天，便于持续观察。修改 Python 样例生成逻辑后需重启脚本。
+服务只绑定本机地址，屏蔽真实 WebSocket，不读取账号数据库，也不连接生产服务。
+
+预览工具回归测试（需要本地 Playwright 和 Chrome，可设置 `NODE_PATH`、`CHROME_PATH`）：
+
+```bash
+node tests/test_ui_preview.cjs
+```
+
 ## 功能
 
 - **直播**：MediaMTX 推流，页面用 WebRTC（WHEP）拉流；播放器支持音量、静音、全屏、弹幕开关
