@@ -16,6 +16,7 @@ const SOUND_CUES = {
   estate_mine_cell: "mine",
   estate_finish_mining: "mine",
   estate_buy: "shop",
+  estate_buy_skin: "shop",
   estate_sell: "shop",
   estate_sell_all: "shop",
   estate_buy_tool: "shop",
@@ -48,12 +49,15 @@ export function estateCommand(type, payload = {}) {
   return id;
 }
 
-export function estateRequest(type, payload = {}) {
+export function estateRequest(type, payload = {}, { timeoutMs = 0 } = {}) {
   const id = estateCommand(type, payload);
   if (!id) return Promise.reject(new Error("游戏厅尚未连接"));
   return new Promise((resolve, reject) => {
     const record = estateStore.pending.get(id);
     record.resolve = resolve; record.reject = reject;
+    if (timeoutMs > 0) record.timeout = window.setTimeout(() => {
+      settleRequest(id, { error: new Error("保存超时，请重试或重新进入庄园确认") });
+    }, timeoutMs);
   });
 }
 
@@ -62,6 +66,7 @@ function settleRequest(id, { error, result } = {}) {
   const record = id ? estateStore.pending.get(id) : null;
   if (id) estateStore.pending.delete(id);
   if (!record) return null;
+  window.clearTimeout(record.timeout);
   if (record.reject) error ? record.reject(error) : record.resolve(result);
   return record;
 }
@@ -148,7 +153,7 @@ export async function leaveEstateVisit() {
 document.addEventListener("authstatechange", ({ detail }) => {
   if (!detail.user) {
     const reason = new Error("登录已结束");
-    for (const record of [...estateStore.pending.values()]) record.reject?.(reason);
+    for (const id of [...estateStore.pending.keys()]) settleRequest(id, { error: reason });
     clearEstate();
     return;
   }

@@ -43,6 +43,8 @@ from estate import (
     repair_tool as estate_repair_tool,
     sell as estate_sell,
     sell_all as estate_sell_all,
+    set_skin as estate_set_skin,
+    buy_skin as estate_buy_skin,
     start_fishing as estate_start_fishing,
     start_mining as estate_start_mining,
     upgrade_tool as estate_upgrade_tool,
@@ -1262,7 +1264,11 @@ async def handle_estate_action(websocket, state, data, action):
             result = None
             if action != "get":
                 conn.execute("BEGIN IMMEDIATE")
-            if action == "buy":
+            if action == "set_skin":
+                result = estate_set_skin(conn, username, request_id, data.get("skin_id"), now)
+            elif action == "buy_skin":
+                result = estate_buy_skin(conn, username, request_id, data.get("skin_id"), now, adjust_coins)
+            elif action == "buy":
                 result = estate_buy(
                     conn, username, request_id, data.get("kind"),
                     data.get("item_id"), data.get("quantity", 1), now,
@@ -1350,6 +1356,14 @@ async def handle_get_estate(websocket, state, data):
         with database() as conn, conn:
             rows = estate_notifications(conn, user["username"], int(time.time()))
         await send_json(websocket, {"type": "estate_notifications", "notifications": rows})
+
+
+async def handle_estate_set_skin(websocket, state, data):
+    await handle_estate_action(websocket, state, data, "set_skin")
+
+
+async def handle_estate_buy_skin(websocket, state, data):
+    await handle_estate_action(websocket, state, data, "buy_skin")
 
 
 async def handle_estate_buy(websocket, state, data):
@@ -2671,6 +2685,8 @@ handlers = {
     "daily_checkin": handle_daily_checkin,
     "draw_lottery": handle_draw_lottery,
     "get_estate": handle_get_estate,
+    "estate_set_skin": handle_estate_set_skin,
+    "estate_buy_skin": handle_estate_buy_skin,
     "estate_buy": handle_estate_buy,
     "estate_plant": handle_estate_plant,
     "estate_harvest": handle_estate_harvest,

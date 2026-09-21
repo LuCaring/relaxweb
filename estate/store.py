@@ -9,7 +9,7 @@ import json
 
 from estate.catalog import (
     FISHING_STEPS, INITIAL_PLOTS, MAX_PLOTS, MINE_BOARD_SIZE, MINING_LEVELS, TOOLS,
-    WAREHOUSE_LEVELS, item_info, public_catalog, xp_for_next,
+    WAREHOUSE_LEVELS, FISHING_TREASURES, SKINS, collectible_item, item_info, public_catalog, xp_for_next,
 )
 
 
@@ -70,7 +70,7 @@ def plot_index(value):
 # --------------------------------------------------------------------------
 
 PROFILE_COLUMNS = (
-    "level", "xp", "warehouse_level", "plot_count",
+    "skin_id", "level", "xp", "warehouse_level", "plot_count",
     "reserved_capacity", "pet_level", "version", "created_at", "updated_at",
 )
 
@@ -162,6 +162,8 @@ def change_inventory(conn, username, item_id, delta):
             "ON CONFLICT(username,item_id) DO UPDATE SET quantity=excluded.quantity",
             (username, item_id, updated),
         )
+    if delta > 0 and item_id in {collectible_item(key) for key in FISHING_TREASURES}:
+        conn.execute("INSERT OR IGNORE INTO estate_collections VALUES (?,?)", (username, item_id))
     return updated
 
 
@@ -351,13 +353,34 @@ def _mining_view(conn, username):
             "loot": json.loads(row[4]), "size": MINE_BOARD_SIZE}
 
 
+def skin_state(conn, username):
+    # Backfill collections already present in old saves. Collection credit is permanent.
+    conn.execute("INSERT OR IGNORE INTO estate_collections SELECT username,item_id "
+                 "FROM estate_inventory WHERE username=? AND item_id LIKE 'collectible:%'", (username,))
+    owned = {"berry"} | {row[0] for row in conn.execute(
+        "SELECT skin_id FROM estate_owned_skins WHERE username=?", (username,)) if row[0] in SKINS}
+    collected = {row[0] for row in conn.execute(
+        "SELECT item_id FROM estate_collections WHERE username=?", (username,))}
+    missing_skins = [key for key in SKINS if key != "xiaoxiaopang" and key not in owned]
+    missing_collectibles = [key for key in FISHING_TREASURES if collectible_item(key) not in collected]
+    if not missing_skins and not missing_collectibles:
+        conn.execute("INSERT OR IGNORE INTO estate_owned_skins VALUES (?,?)", (username, "xiaoxiaopang"))
+        owned.add("xiaoxiaopang")
+    return {"owned": sorted(owned), "missing_skins": missing_skins,
+            "missing_collectibles": missing_collectibles}
+
+
 def estate_state(conn, username, now):
     """组装客户端所需的完整快照；读取本身也幂等建档并清扫过期钓鱼局。"""
     now = int(now)
     ensure_estate(conn, username, now)
     sweep_expired_fishing(conn, username, now)
 
+    skins = skin_state(conn, username)
     profile = load_profile(conn, username)
+    if profile["skin_id"] not in skins["owned"]:
+        conn.execute("UPDATE estate_profiles SET skin_id='berry' WHERE username=?", (username,))
+        profile["skin_id"] = "berry"
     used = inventory_used(conn, username)
     balance = conn.execute(
         "SELECT coins FROM users WHERE username = ?", (username,)
@@ -384,4 +407,5 @@ def estate_state(conn, username, now):
         "fishing_session": _fishing_view(conn, username),
         "mining_run": _mining_view(conn, username),
         "catalog": public_catalog(),
+        "skins": skins,
     }

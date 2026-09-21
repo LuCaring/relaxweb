@@ -2,6 +2,7 @@
 
 import { alertDialog, confirmDialog } from "../dialog.js";
 import { formatCoins, formatCoinsWhole } from "../format.js";
+import { characterAsset } from "./characters.js";
 import { cropAsset, cropStage, inventoryAsset, toolAsset } from "./assets.js";
 import { catalogEntry, formatDuration, repairCost, reservedSlots } from "./rules.js";
 import { estateCommand, estateRequest, pendingEstateAction } from "./protocol.js";
@@ -115,6 +116,22 @@ export function createEstateUI(root, activities = {}) {
   function renderGeneralStore() {
     const snapshot = estateStore.snapshot; if (!snapshot) return;
     show("商店");
+    sheetBody.append(note("角色皮肤 · 普通皮肤每套 20,000 金币，永久解锁后到衣橱换装。"));
+    for (const skin of Object.values(snapshot.catalog.skins)) {
+      const owned = snapshot.skins.owned.includes(skin.id);
+      const special = skin.unlock === "collection";
+      const insufficient = snapshot.coins < skin.price;
+      const missing = snapshot.skins.missing_collectibles.map(id => snapshot.catalog.fishing_treasures[id]?.name || id);
+      const meta = special ? `其他皮肤全部解锁（还差 ${snapshot.skins.missing_skins.length} 套）且集齐全部收集品${missing.length ? `：还差${missing.join("、")}` : "（收集品已集齐）"}`
+        : skin.unlock === "default" ? "默认皮肤 · 免费" : "20,000 金币 · 永久解锁";
+      const card = itemCard({ iconUrl: characterAsset(skin.id, "portrait.png"), title: skin.name, meta,
+        controls: [button(owned ? "已解锁" : special ? "收集解锁" : insufficient ? "金币不足 · 20,000" : "20,000 金币 · 购买",
+          () => estateCommand("estate_buy_skin", { skin_id: skin.id }),
+          { disabled: owned || special || insufficient, className: "estate-button estate-button-gold" })] });
+      card.dataset.shopSkin = skin.id;
+      sheetBody.append(card);
+    }
+    sheetBody.append(note("宠物"));
     const level = Number(snapshot.profile.pet_level || 0);
     const rules = snapshot.catalog.pet_levels;
     if (!level) {
@@ -472,6 +489,7 @@ export function createEstateUI(root, activities = {}) {
     render, interact, closeSheet,
     openVisits: renderVisits,
     openNotifications: renderNotifications,
+    openStore() { openPanel("general_store"); },
     openFishing() { openPanel("fishing"); },
     destroy() { window.clearInterval(timer); close.removeEventListener("click", closeSheet); },
   };

@@ -9,6 +9,7 @@ import {
   BUILDING_ASSETS, cropAsset, cropStage, drawAsset, drawPetAsset, drawPlayerAsset, ESTATE_SIGN,
 } from "./assets.js";
 import { drawSprite, stableSprite } from "./sprites.js";
+import { CHARACTER_SCALE } from "./characters.js";
 
 const WORLD = { width: 1280, height: 720 };
 const BLOCKS = [
@@ -33,7 +34,7 @@ const ZONES = [
 ];
 
 // 角色与交互参数：数值本身就是手感，集中命名便于调整。
-const PLAYER_BOX = 12;              // 角色碰撞盒的半边长
+const PLAYER_BOX = { x: 7 * CHARACTER_SCALE, y: 5 * CHARACTER_SCALE }; // 脚底中心的 14×10 碰撞框
 const SPRINT_SPEED = 190;           // 按住左 Shift 的移动速度（像素/秒）
 const WALK_SPEED = 125;
 const SPRINT_STEP_RATE = 18;        // 行走动画推进速度
@@ -189,6 +190,8 @@ function drawPlot(ctx, plot) {
 }
 
 function nearTarget(player, snapshot) {
+  const facing = { down: [0, 1], up: [0, -1], right: [1, 0], left: [-1, 0] }[player.direction] || [0, 1];
+  const reach = { x: player.x + facing[0] * 18, y: player.y + facing[1] * 18 };
   let best = null;
   const visiting = Boolean(estateStore.visit);
   const candidates = visiting ? [] : [...ZONES];
@@ -200,7 +203,7 @@ function nearTarget(player, snapshot) {
     candidates.push({ kind: "plot", label, plot, x: pos[0] + 41, y: pos[1] + 35 });
   }
   for (const zone of candidates) {
-    const distance = Math.hypot(player.x - zone.x, player.y - zone.y);
+    const distance = Math.hypot(reach.x - zone.x, reach.y - zone.y);
     if (distance < INTERACT_RADIUS && (!best || distance < best.distance)) best = { ...zone, distance };
   }
   return best;
@@ -209,8 +212,10 @@ function nearTarget(player, snapshot) {
 function blockingArea(x, y, box = PLAYER_BOX) {
   if (x < EDGE.left || y < EDGE.top
     || x > WORLD.width - EDGE.right || y > WORLD.height - EDGE.bottom) return { edge: true };
-  return BLOCKS.find((block) => x + box > block.x && x - box < block.x + block.w
-    && y + box > block.y && y - box < block.y + block.h) || null;
+  const bx = typeof box === "number" ? box : box.x;
+  const by = typeof box === "number" ? box : box.y;
+  return BLOCKS.find((block) => x + bx > block.x && x - bx < block.x + block.w
+    && y + by > block.y && y - by < block.y + block.h) || null;
 }
 
 function collides(x, y, box = PLAYER_BOX) {
@@ -295,7 +300,7 @@ export function createEstateMap(canvas, input, onInteract, onTarget, onMove = ()
       ctx.strokeStyle = "#fff4a8"; ctx.lineWidth = 3; ctx.setLineDash([6, 4]);
       ctx.strokeRect(target.x - 24, target.y - 24, 48, 48); ctx.setLineDash([]);
     }
-    if (!drawPlayerAsset(ctx, player, performance.now())) drawCharacter(ctx, player, performance.now());
+    if (!drawPlayerAsset(ctx, player, performance.now(), (estateStore.homeSnapshot || estateStore.snapshot)?.profile.skin_id)) drawCharacter(ctx, player, performance.now());
     const petLevel = Number(estateStore.snapshot?.profile?.pet_level || 0);
     if (petLevel > 0) {
       const visiblePet = estateStore.visit
@@ -313,6 +318,7 @@ export function createEstateMap(canvas, input, onInteract, onTarget, onMove = ()
   function tick(now) {
     const dt = Math.min(.05, (now - last) / 1000); last = now;
     const length = Math.hypot(input.vector.x, input.vector.y) || 1;
+    player.sprinting = input.sprinting;
     const speed = input.sprinting ? SPRINT_SPEED : WALK_SPEED;
     const dx = input.vector.x / length * speed * dt;
     const dy = input.vector.y / length * speed * dt;

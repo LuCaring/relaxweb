@@ -5,6 +5,7 @@ def init_estate(conn):
     conn.execute("""
         CREATE TABLE IF NOT EXISTS estate_profiles (
             username TEXT PRIMARY KEY COLLATE NOCASE,
+            skin_id TEXT NOT NULL DEFAULT 'berry',
             level INTEGER NOT NULL DEFAULT 1 CHECK(level >= 1),
             xp INTEGER NOT NULL DEFAULT 0 CHECK(xp >= 0),
             warehouse_level INTEGER NOT NULL DEFAULT 1 CHECK(warehouse_level >= 1),
@@ -16,7 +17,15 @@ def init_estate(conn):
             updated_at INTEGER NOT NULL
         )
     """)
+    conn.execute("""CREATE TABLE IF NOT EXISTS estate_owned_skins (
+        username TEXT NOT NULL COLLATE NOCASE, skin_id TEXT NOT NULL,
+        PRIMARY KEY(username, skin_id))""")
+    conn.execute("""CREATE TABLE IF NOT EXISTS estate_collections (
+        username TEXT NOT NULL COLLATE NOCASE, item_id TEXT NOT NULL,
+        PRIMARY KEY(username, item_id))""")
     profile_columns = {row[1] for row in conn.execute("PRAGMA table_info(estate_profiles)")}
+    if "skin_id" not in profile_columns:
+        conn.execute("ALTER TABLE estate_profiles ADD COLUMN skin_id TEXT NOT NULL DEFAULT 'berry'")
     if "reserved_capacity" not in profile_columns:
         conn.execute("ALTER TABLE estate_profiles ADD COLUMN reserved_capacity INTEGER NOT NULL DEFAULT 0")
     if "pet_level" not in profile_columns:

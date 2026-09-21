@@ -11,6 +11,23 @@ MAX_PLOTS = 12
 BALANCE_VERSION = "v1"
 FISH_RARITY_WEIGHTS = {1: 100, 2: 22, 3: 4, 4: .6, 5: .08, 6: .006}
 
+# 稳定 ID 写入账号存档，价格和解锁方式由服务端定义。
+SKINS = {
+    "berry": {"name": "小女孩", "description": "莓果色长发，陪你照料每一寸田野。"},
+    "steve": {"name": "史蒂夫", "description": "方块风格的冒险家，准备探索庄园的每个角落。"},
+    "dva": {"name": "DVA", "description": "粉蓝机甲风格，轻快地穿行在田野之间。"},
+    "little_gwen": {"name": "小小格温", "description": "蓝发与蝴蝶结装束，带着优雅来到庄园。"},
+    "jamie": {"name": "杰米", "description": "亮黄色运动装，活力满满地照料庄园。"},
+    "xiaofei": {"name": "小菲", "description": "粉发小礼帽装束，把田园生活变得甜美。"},
+    "weichong": {"name": "威虫", "description": "战术装甲造型，沉稳守护庄园的收获。"},
+    "xiaoxiaopang": {"name": "小小胖", "description": "黑色棉服与圆框眼镜，悠闲漫步在庄园。"},
+}
+
+for _skin_id, _skin in SKINS.items():
+    _skin["price"] = 20000 if _skin_id not in ("berry", "xiaoxiaopang") else 0
+    _skin["unlock"] = "collection" if _skin_id == "xiaoxiaopang" else "default" if _skin_id == "berry" else "purchase"
+
+
 # --------------------------------------------------------------------------
 # 钓鱼与矿场的规则常量
 # --------------------------------------------------------------------------
@@ -292,6 +309,7 @@ def item_info(item_id):
 def public_catalog():
     return {
         "balance_version": BALANCE_VERSION,
+        "skins": {key: {"id": key, **value} for key, value in SKINS.items()},
         "crops": {
             crop_id: {
                 "id": crop_id,

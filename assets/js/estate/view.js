@@ -9,6 +9,7 @@ import { openMiningGame } from "./mining.js";
 import { estateCommand, leaveEstateVisit, requestEstate, sendEstatePosition } from "./protocol.js";
 import { createEstateUI } from "./ui.js";
 import { estateStore, subscribeEstate } from "./state.js";
+import { createEstateWardrobe } from "./wardrobe.js";
 
 let cleanup = null;
 
@@ -23,6 +24,7 @@ const ESTATE_MARKUP = `
       <div class="estate-hud-item"><small>金币</small><b data-estate-coins>--</b></div>
       <div class="estate-hud-item"><small>仓库</small><b data-estate-warehouse>--</b></div>
       <div class="estate-level"><b data-estate-level>Lv.1</b><span><i class="estate-xp-fill"></i></span></div>
+      <button class="estate-wardrobe-open" type="button" aria-label="打开角色衣橱" aria-haspopup="dialog" aria-expanded="false" title="角色衣橱"><span aria-hidden="true">♧</span> 衣橱</button>
       <button class="estate-audio-open" id="estateAudioSettingsButton" type="button" aria-label="音效设置" title="音效设置">🔊</button>
     </div>
     <div class="estate-loading">正在走进庄园…</div>
@@ -47,6 +49,11 @@ function renderEstate() {
   ui = createEstateUI(root, {
     fishing: (session) => openFishingGame(root, session, { onBack: () => ui.openFishing() }),
     mining: (run) => openMiningGame(root, run),
+  });
+  const wardrobe = createEstateWardrobe(root, {
+    onOpen: () => { input.clear(); ui.closeSheet(); },
+    onClose: () => input.clear(),
+    onShop: () => ui.openStore(),
   });
   const hint = root.querySelector(".estate-interact-hint");
   const map = createEstateMap(root.querySelector("canvas"), input, (target) => {
@@ -76,9 +83,10 @@ function renderEstate() {
     estateCommand("estate_leave_visit");
     state.hallPage = null; state.currentGameId = null; renderGameView();
   });
+  root.querySelector(".estate-loading").hidden = Boolean(estateStore.snapshot);
   if (estateStore.snapshot) ui.render(); else requestEstate();
   cleanup = () => {
-    document.body.classList.remove("estate-active"); unsubscribe(); map.destroy(); input.destroy(); ui.destroy();
+    document.body.classList.remove("estate-active"); wardrobe.destroy(); unsubscribe(); map.destroy(); input.destroy(); ui.destroy();
   };
 }
 

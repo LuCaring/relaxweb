@@ -1,12 +1,13 @@
 """休闲庄园：持久化单人经营系统。
 
 对外接口按职责分组：内核与读模型在 ``estate.store``，农场在 ``estate.farming``，
-工具与钓鱼、矿场在 ``estate.activities``。宿主（``chat_server``）只依赖这里
-导出的名字，因此内部模块拆分不影响协议层。
+工具与钓鱼、矿场在 ``estate.activities``，角色皮肤在 ``estate.skins``。
+宿主（``chat_server``）只依赖这里导出的名字，因此内部模块拆分不影响协议层。
 """
 
 from estate.schema import init_estate
 from estate.store import EstateError, ensure_estate, estate_state
+from estate.skins import buy_skin, set_skin
 from estate.farming import buy, harvest, plant, sell, sell_all
 from estate.activities import (
     buy_tool, finish_fishing, finish_mining, mine_cell, repair_tool,
@@ -21,6 +22,8 @@ from estate.visits import (
 __all__ = [
     # 建档与快照
     "EstateError", "init_estate", "ensure_estate", "estate_state",
+    # 角色皮肤
+    "set_skin", "buy_skin",
     # 农场
     "buy", "plant", "harvest", "sell", "sell_all",
     # 工具

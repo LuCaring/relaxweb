@@ -1,4 +1,5 @@
 "use strict";
+import { drawCharacterSkin, DEFAULT_SKIN_ID } from "./characters.js";
 
 const ROOT = "assets/estate/xiaopang";
 export const ESTATE_SIGN = "assets/estate/signs/estate-sign.png";
@@ -99,33 +100,8 @@ export function drawAsset(ctx, src, x, y, width, height, options = {}) {
   return true;
 }
 
-export function drawPlayerAsset(ctx, player, tick) {
-  const record = cachedImage(PLAYER_SPRITE.src);
-  if (!record?.ready || record.failed) return false;
-  const moving = player.walking > 0 && tick - (player.lastMove || 0) < 120;
-  const requested = player.direction || "down";
-  const direction = requested === "left" ? "right" : requested;
-  const frames = PLAYER_SPRITE.frames[direction] || PLAYER_SPRITE.frames.down;
-  const frameIndex = moving ? Math.floor(player.walking * .55) % frames.length : 0;
-  const [sx, sy, sw, sh] = frames[frameIndex];
-  const height = direction === "right" ? 70 : 68;
-  const width = Math.round(sw / sh * height);
-  const x = Math.round(player.x - width / 2);
-  const y = Math.round(player.y + 20 - height);
-
-  ctx.save();
-  ctx.imageSmoothingEnabled = false;
-  ctx.fillStyle = "rgba(38,48,39,.28)";
-  ctx.fillRect(Math.round(player.x - 13), Math.round(player.y + 14), 26, 6);
-  if (requested === "left") {
-    ctx.translate(x + width, y);
-    ctx.scale(-1, 1);
-    ctx.drawImage(record.image, sx, sy, sw, sh, 0, 0, width, height);
-  } else {
-    ctx.drawImage(record.image, sx, sy, sw, sh, x, y, width, height);
-  }
-  ctx.restore();
-  return true;
+export function drawPlayerAsset(ctx, player, tick, skinId = DEFAULT_SKIN_ID) {
+  return drawCharacterSkin(ctx, skinId, player, tick);
 }
 
 export function drawPetAsset(ctx, pet, tick) {
