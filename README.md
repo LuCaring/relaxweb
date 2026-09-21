@@ -17,8 +17,10 @@ python3 scripts/preview_ui.py
 不会终止其他占用端口的服务或其他仓库的预览。自动化测试并行运行时可传 `--no-replace` 保留旧实例。
 其他系统可使用 `--no-replace` 并手动停止旧预览。
 工具栏可以切换掼蛋、麻将、德扑、UNO，以及普通牌桌、长昵称/拥挤牌面、等待开局、暂停场景；
-也可以切换桌面/手机/横屏尺寸、显示聊天气泡、重置场景或单独打开牌桌。
-修改 `assets/`、`game.html` 或预览工具页面后自动刷新，保留当前游戏、场景与尺寸。
+也可以切换玩家／观战视角、观看目标、桌面/手机/横屏尺寸、显示聊天气泡、重置场景或单独打开牌桌。
+观战支持四种游戏的普通、拥挤及暂停场景，手牌等信息来自所选玩家的真实引擎视图；
+局内「更换玩家」与工具栏同步，观战聊天带身份标注，对局操作只读。等待开局场景仅提供玩家视角。
+修改 `assets/`、`game.html` 或预览工具页面后自动刷新，保留当前游戏、场景、尺寸及观战目标。
 
 ```bash
 python3 scripts/preview_ui.py --game mahjong             # 直接预览麻将
@@ -27,6 +29,8 @@ python3 scripts/preview_ui.py --port 0 --no-open          # 自动选空闲端�
 python3 scripts/preview_ui.py --game mahjong --mobile    # 直接查看手机竖屏 UI
 python3 scripts/preview_ui.py --game mahjong --landscape # 直接查看手机横屏 UI
 python3 scripts/preview_ui.py --game mahjong --lan       # 同一 Wi-Fi 下用真机访问
+python3 scripts/preview_ui.py --game mahjong --spectator # 直接进入观战，默认看 p0
+python3 scripts/preview_ui.py --game uno --watch p2 --mobile # 手机观战第三位玩家
 ```
 
 默认地址为 `http://127.0.0.1:8010/`，按 `Ctrl+C` 停止。没有桌面浏览器的环境可手动打开终端打印的地址。

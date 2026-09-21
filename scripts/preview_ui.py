@@ -27,6 +27,7 @@ from games.base import create_room  # noqa: E402
 
 GAMES = ("guandan", "mahjong", "holdem", "uno")
 SCENES = ("normal", "dense", "waiting", "paused")
+PLAYERS = ("p0", "p1", "p2", "p3")
 
 
 def is_previous_preview(pid):
@@ -130,6 +131,7 @@ async def make_fixtures():
     """Use engine views so snapshots follow the production response shape."""
     random.seed(19)
     fixtures = {}
+    spectators = {}
     names = ("清风", "竹间听雨", "月下客", "一杯春茶")
 
     async def noop(*args, **kwargs):
@@ -144,6 +146,19 @@ async def make_fixtures():
         for i in range(4):
             room.add_member(f"p{i}", 200)
         waiting = room.view_for("p0")
+
+        def capture():
+            # Each target uses the engine's actual private view, including team,
+            # flowers and hole cards. Never reuse p0's hand for another seat.
+            own = copy.deepcopy(room.view_for("p0"))
+            views = {}
+            for watched in PLAYERS:
+                room.add_spectator("preview-watcher", watched)
+                views[watched] = copy.deepcopy(room.spectator_view("preview-watcher"))
+            for view in [own, *views.values()]:
+                view["turn_left"] = 86400
+            return own, views
+
         try:
             await room.start()
             g = room.game
@@ -176,31 +191,36 @@ async def make_fixtures():
                     {"c": "w", "v": "wild"}, {"c": "w", "v": "wd4"}, {"c": "r", "v": "d2"}]
                 g["color"], g["value"] = "r", "5"
                 g["discard"][-1] = {"c": "r", "v": "5"}
-            normal = room.view_for("p0")
+            normal, normal_spectators = capture()
+
+            if game == "mahjong":
+                g["discards"] = {f"p{i}": [(j * 7 + i) % 34 for j in range(18)] for i in range(4)}
+                g["last_discard"] = {"by": "p3", "tile": g["discards"]["p3"][-1]}
+                g["melds"]["p1"].append({"type": "angang", "tiles": [8, 8, 8, 8]})
+                g["hands"]["p1"] = g["hands"]["p1"][:7]
+                g["flowers"]["p0"] = [34, 35, 36, 37]
+            elif game == "uno":
+                g["hands"]["p0"] = (g["hands"]["p0"] * 3)[:20]
+            elif game == "holdem":
+                g["board"] += [(13, 3), (14, 0)]
+                g["stage"] = "river"
+            dense, dense_spectators = capture()
+            for view in [dense, *dense_spectators.values()]:
+                view["last_action"] = {"nickname": "一个很长的玩家昵称", "text": "打出了手中的牌，现在等待下一位玩家行动"}
+                for player in view["players"]:
+                    player["nickname"] += "的超长昵称"
+            if game == "mahjong":
+                # Deliberate layout sample, scoped to the player whose hand it describes.
+                for view in [dense, dense_spectators["p0"]]:
+                    view["tenpai"] = {"waits": [24, 27, 30], "remaining": {24: 3, 27: 2, 30: 1}}
         finally:
             room.cancel_timers()
-        # Keep the UI actionable during a long design session; no engine timers run.
-        normal["turn_left"] = 86400
-        dense = copy.deepcopy(normal)
-        dense["last_action"] = {"nickname": "一个很长的玩家昵称", "text": "打出了手中的牌，现在等待下一位玩家行动"}
-        for p in dense["players"]:
-            p["nickname"] += "的超长昵称"
-        if game == "mahjong":
-            dense["discards"] = {f"p{i}": [(j * 7 + i) % 34 for j in range(18)] for i in range(4)}
-            dense["last_discard"] = {"by": "p3", "tile": dense["discards"]["p3"][-1]}
-            dense["players"][1]["melds"] += [{"type": "angang", "tiles": [8, 8, 8, 8]}]
-            dense["players"][1]["concealed"] = 7
-            dense["your_flowers"] = [34, 35, 36, 37]
-            dense["tenpai"] = {"waits": [24, 27, 30], "remaining": {24: 3, 27: 2, 30: 1}}
-        elif game == "uno":
-            dense["your_hand"] = (dense["your_hand"] * 3)[:20]
-            dense["players"][0]["cards"] = 20
-        elif game == "holdem":
-            dense["board"] += [{"r": 13, "s": 3}, {"r": 14, "s": 0}]
-            dense["stage"] = "river"
         fixtures[game] = {"normal": normal, "dense": dense, "waiting": waiting,
                           "paused": {**copy.deepcopy(normal), "paused": True}}
-    return fixtures
+        spectators[game] = {"normal": normal_spectators, "dense": dense_spectators,
+                            "paused": {name: {**copy.deepcopy(view), "paused": True}
+                                       for name, view in normal_spectators.items()}}
+    return fixtures, spectators
 
 
 def revision():
@@ -229,6 +249,8 @@ class PreviewHandler(BaseHTTPRequestHandler):
         path = unquote(urlsplit(self.path).path)
         if path == "/__preview/fixtures":
             return self.reply(json.dumps(self.server.fixtures, ensure_ascii=False))
+        if path == "/__preview/spectators":
+            return self.reply(json.dumps(self.server.spectators, ensure_ascii=False))
         if path == "/__preview/revision":
             return self.reply(json.dumps({"revision": revision()}))
         if path in ("/game.html", "/game"):
@@ -257,6 +279,8 @@ def main():
     parser = argparse.ArgumentParser(description="一行命令启动本地游戏 UI 预览，无需登录、数据库或额外依赖。")
     parser.add_argument("--game", choices=GAMES, default="guandan")
     parser.add_argument("--scene", choices=SCENES, default="normal")
+    parser.add_argument("--spectator", action="store_true", help="以观战视角启动，可在牌桌内更换玩家")
+    parser.add_argument("--watch", choices=PLAYERS, help="以观战视角观看指定玩家，默认 p0")
     parser.add_argument("--port", type=int, default=8010, help="本地端口，0 表示自动选择空闲端口")
     parser.add_argument("--no-open", action="store_true", help="不自动打开系统浏览器")
     parser.add_argument("--no-replace", action="store_true", help="保留旧预览进程（用于独立自动化测试）")
@@ -269,7 +293,9 @@ def main():
     args = parser.parse_args()
     if not 0 <= args.port <= 65535:
         parser.error('端口必须介于 0 和 65535 之间')
-    fixtures = asyncio.run(make_fixtures())
+    if (args.spectator or args.watch) and args.scene == "waiting":
+        parser.error("等待开局场景不支持观战；请使用 normal、dense 或 paused")
+    fixtures, spectators = asyncio.run(make_fixtures())
     if not args.no_replace:
         try:
             stop_previous_previews()
@@ -280,7 +306,10 @@ def main():
     except OSError as error:
         parser.exit(1, f"无法启动端口 {args.port}：{error}。可用 --port 0 自动选择空闲端口。\n")
     server.fixtures = fixtures
+    server.spectators = spectators
     query = f"game={args.game}&scene={args.scene}"
+    if args.spectator or args.watch:
+        query += f"&perspective=spectator&watch={args.watch or 'p0'}"
     url = f"http://127.0.0.1:{server.server_port}/?{query}&size={args.size}"
     print(f"本地 UI 预览：{url}\n修改前端文件后自动刷新；Ctrl+C 停止。", flush=True)
     if args.lan:

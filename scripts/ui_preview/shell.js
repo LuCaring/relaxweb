@@ -1,6 +1,6 @@
 const $ = id => document.getElementById(id);
 const params = new URLSearchParams(location.search);
-for (const id of ["game", "scene", "size"]) {
+for (const id of ["game", "scene", "size", "perspective", "watch"]) {
   if ([...$(id).options].some(option => option.value === params.get(id))) $(id).value = params.get(id);
 }
 function resize() {
@@ -10,16 +10,20 @@ function resize() {
   $("table").style.height = auto ? `${Math.max(320, innerHeight - $("table").getBoundingClientRect().top - 16)}px` : `${dimensions[1]}px`;
 }
 function updateURL() {
-  const next = new URLSearchParams(["game", "scene", "size"].map(id => [id, $(id).value]));
+  const next = new URLSearchParams(["game", "scene", "size", "perspective", "watch"].map(id => [id, $(id).value]));
   history.replaceState(null, "", `?${next}`);
   $("direct").href = `/game.html?${next}`;
 }
 function load() {
+  const spectating = $("perspective").value === "spectator";
+  $("watch-label").hidden = !spectating;
+  $("scene").querySelector('[value="waiting"]').disabled = spectating;
+  if (spectating && $("scene").value === "waiting") $("scene").value = "normal";
   updateURL();
   $("table").src = $("direct").href;
   resize();
 }
-for (const id of ["game", "scene"]) $(id).addEventListener("change", load);
+for (const id of ["game", "scene", "perspective", "watch"]) $(id).addEventListener("change", load);
 $("size").addEventListener("change", () => { updateURL(); resize(); });
 $("mobile").addEventListener("click", () => {
   $("size").value = "390x844";
@@ -35,6 +39,10 @@ window.addEventListener("resize", resize);
 window.addEventListener("message", event => {
   if (event.origin !== location.origin || event.source !== $("table").contentWindow) return;
   if (event.data.type === "preview-feedback") $("feedback").textContent = event.data.text;
+  if (event.data.type === "preview-watch" && [...$("watch").options].some(option => option.value === event.data.watch)) {
+    $("watch").value = event.data.watch;
+    updateURL();
+  }
 });
 load();
 let revision;
