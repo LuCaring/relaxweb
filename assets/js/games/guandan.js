@@ -457,7 +457,7 @@ function seatNode(p) {
   dot.className = "gs-team-dot";
   dot.title = TEAM_NAMES[team];
   name.append(dot, document.createTextNode(p.nickname));
-  const avatar = playerAvatarNode(p.username === selfUsername()
+  const avatar = playerAvatarNode(!room.spectator && p.username === selfUsername()
     ? { ...p, avatar: p.avatar || state.currentUser?.avatar || "" } : p);
   const relation = document.createElement("span");
   relation.className = "gs-relation";

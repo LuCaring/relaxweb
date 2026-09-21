@@ -1,6 +1,6 @@
 /* Hand and match settlement views. */
 
-import { displayNameOf, elements, formatCoins, ratingBadge, selfUsername, send, spectating, state } from "./core.js";
+import { displayNameOf, elements, formatCoins, leaveRoom, ratingBadge, selfUsername, send, spectating, state } from "./core.js";
 import { ratingResultsNode } from "./rating.js";
 import { fillBlindOptions } from "./game-config.js";
 import { gameView } from "./registry.js";
@@ -98,7 +98,7 @@ export function renderHandResultOverlay() {
   const progress = document.createElement("div");
   progress.className = "hand-result-progress";
   foot.append(progress);
-  // 观战者只读：不出现「继续下一手」，只显示等待进度。
+  // 观战者无需准备；弹层也必须提供随时退出的入口。
   if (!spectating()) {
     const button = document.createElement("button");
     button.className = "login-submit hand-continue-button";
@@ -111,6 +111,13 @@ export function renderHandResultOverlay() {
       send({ type: "hand_continue" });
     });
     foot.append(button);
+  } else {
+    const exit = document.createElement("button");
+    exit.className = "login-submit";
+    exit.type = "button";
+    exit.textContent = "退出观战";
+    exit.addEventListener("click", leaveRoom);
+    foot.append(exit);
   }
   card.append(foot);
 

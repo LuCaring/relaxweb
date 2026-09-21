@@ -282,7 +282,15 @@
 
 /* 观战状态徽标与「更换玩家」下拉（复用 .room-manage 结构） */
 .spectate-badge {
-    flex: none;
+    flex: 0 1 auto;
+
+    min-width: 0;
+
+    max-width: 360px;
+
+    overflow: hidden;
+
+    text-overflow: ellipsis;
 
     padding: 4px 10px;
 
@@ -362,6 +370,16 @@
 
     .room-topbar-name {
         font-size: 14px;
+    }
+
+    .room-topbar:has(.spectate-badge:not([hidden])) .room-topbar-name {
+        display: none;
+    }
+
+    .spectate-badge {
+        flex: 1;
+        padding-inline: 6px;
+        font-size: 11px;
     }
 
 }

@@ -523,6 +523,10 @@ console.log(`PASS Python/JavaScript parity for ${fixtures.cases.length} hands an
   await setRoom('guandan_spectator');
   assert.equal(await page.locator('.gd-seat.me').count(),1,'guandan spectator keeps first-person seat');
   assert.equal(await page.locator('.gd-dock .action-bar').count(),0,'guandan spectator gets no action bar');
+  await page.evaluate(()=>{core.state.currentUser.avatar='data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg"/>';});
+  await setRoom('guandan_spectator', {players:fixtures.rooms.guandan_spectator.players.map(p=>({...p,avatar:''}))});
+  assert.equal(await page.locator('.gd-seat.me .casual-avatar img').count(),0,
+    'a watched player without an avatar never borrows the spectator account avatar');
   await page.setViewportSize({width:390,height:844});
   await setRoom('mahjong_spectator');
   assert.equal(await page.locator('.mj-me').evaluate(e=>e.dataset.username),'p0');

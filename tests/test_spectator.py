@@ -95,7 +95,12 @@ async def main():
                 snapshot = json.dumps(server.game_rooms[room_id].game, default=list, sort_keys=True)
                 await send(spect, type='poker_action', action='discard', index=0)
                 await send(spect, type='hand_continue')
+                await send(spect, type='settle_vote', choice='dissolve')
+                # Same-socket get_room is a processing barrier for the prior actions.
+                await send(spect, type='get_room')
+                await receive(spect, 'game_update', lambda m: m.get('spectator'))
                 assert json.dumps(server.game_rooms[room_id].game, default=list, sort_keys=True) == snapshot
+                assert not server.game_rooms[room_id].votes
 
                 # 切换观看目标
                 await asyncio.sleep(.3)
@@ -132,6 +137,8 @@ async def main():
                 assert view['watching'] in names, view
 
                 # 被看玩家离桌：观看目标自动回退到仍在座的成员
+                await send(spect, type='watch_player', username=names[2])
+                await receive(spect, 'game_update', lambda m: m.get('watching') == names[2])
                 await send(player[2], type='leave_room')
                 await receive(player[2], 'room_closed')
                 fallback = await receive(spect, 'game_update',
