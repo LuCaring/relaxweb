@@ -5,6 +5,7 @@ import { confirmDialog } from "./dialog.js";
 import { elements, formatCoins, renderGameView, send, state } from "./core.js";
 import { onMessage, registerView } from "./registry.js";
 import { ratingCard } from "./rating.js";
+import { assetCard } from "./asset-ranking.js";
 import { DEFAULT_GAME, GAME_TYPES, ROOM_GAME_TYPES, gameMetaById } from "./game-config.js";
 import "./create-room.js";
 
@@ -88,7 +89,7 @@ function renderHall() {
     card.append(icon, info, go);
     grid.append(card);
   }
-  body.append(grid, ratingCard());
+  body.append(grid, ratingCard(), assetCard());
 }
 
 function roomKey(room) {

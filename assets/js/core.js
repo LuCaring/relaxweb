@@ -68,6 +68,9 @@ export const state = {
   ratingLeaderboard: null,
   ratingLeaderboardOffset: 0,
   ratingLeaderboardRequest: null,
+  assetLeaderboard: null,
+  assetLeaderboardOffset: 0,
+  assetLeaderboardRequest: null,
 };
 
 export const rewardsPanel = window.DailyRewards.create({
@@ -214,12 +217,17 @@ export function setSpectateMenu(open) {
 
 export function setSignedIn(user) {
   // 同一账号重连保留排行榜页码；切换账号/退出时清除分页及在途请求。
-  if (!user || user.username !== state.currentUser?.username) state.ratingLeaderboardOffset = 0;
+  if (!user || user.username !== state.currentUser?.username) {
+    state.ratingLeaderboardOffset = 0;
+    state.assetLeaderboardOffset = 0;
+  }
   state.currentUser = user;
   rewardsPanel.setUser(user);
   state.ratingEntries = [];
   state.ratingLeaderboard = null;
   state.ratingLeaderboardRequest = null;
+  state.assetLeaderboard = null;
+  state.assetLeaderboardRequest = null;
   elements.loginButton.hidden = Boolean(user);
   elements.coinChip.style.display = user ? "flex" : "none";
   elements.userAvatar.style.display = user ? "flex" : "none";

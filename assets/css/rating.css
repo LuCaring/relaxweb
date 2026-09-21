@@ -74,3 +74,5 @@
     .rating-page-number { order: -1; flex-basis: 100%; }
     .rating-pagination button { font-size: 12px; }
 }
+
+.asset-coin-amount { color: #896015; font-size: 14px; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }

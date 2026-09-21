@@ -409,6 +409,46 @@ async def handle_get_rating_leaderboard(websocket, state, data):
         "tiers": [rating_info(floor) for floor, _ in TIERS]})
 
 
+async def handle_get_asset_leaderboard(websocket, state, data):
+    user = state.get("user")
+    if not user:
+        return
+    limit = 100
+    requested_offset = data.get("offset", 0)
+    if type(requested_offset) is not int:
+        requested_offset = 0
+    request_id = data.get("request_id")
+    if not isinstance(request_id, str) or len(request_id) > 128:
+        request_id = None
+    with database() as conn:
+        # 页码、全站排名和本人余额必须来自同一快照，仅公开钱包金币。
+        conn.execute("BEGIN")
+        total = conn.execute("SELECT COUNT(*) FROM users").fetchone()[0]
+        last_offset = max(0, (total - 1) // limit * limit)
+        offset = min(max(0, requested_offset // limit * limit), last_offset)
+        rows = conn.execute("""
+            WITH balances AS (
+                SELECT username, nickname, ROUND(COALESCE(coins, 0), 2) AS coins FROM users
+            ), ranked AS (
+                SELECT username, nickname, coins,
+                       RANK() OVER (ORDER BY coins DESC) AS rank,
+                       ROW_NUMBER() OVER (ORDER BY coins DESC, username) AS position
+                FROM balances
+            )
+            SELECT * FROM ranked
+            WHERE (position > ? AND position <= ?) OR username = ? ORDER BY position
+        """, (offset, offset + limit, user["username"])).fetchall()
+    entries, own = [], None
+    for username, nickname, coins, rank, position in rows:
+        entry = {"username": username, "nickname": nickname, "coins": coins, "rank": rank}
+        if offset < position <= offset + limit:
+            entries.append(entry)
+        if username == user["username"]:
+            own = entry
+    await send_json(websocket, {"type": "asset_leaderboard", "entries": entries,
+        "self": own, "total": total, "limit": limit, "offset": offset, "request_id": request_id})
+
+
 def refund_game_escrows():
     """服务器重启后房间不再存在，把所有托管中的游戏筹码退还为金币。"""
     with database() as conn, conn:
@@ -2655,6 +2695,7 @@ handlers = {
     "claim_holdem_reward": handle_claim_holdem_reward,
     "get_rating_history": handle_get_rating_history,
     "get_rating_leaderboard": handle_get_rating_leaderboard,
+    "get_asset_leaderboard": handle_get_asset_leaderboard,
     "transfer_coins": handle_transfer_coins,
     "get_bet": handle_get_bet,
     "create_bet": handle_create_bet,

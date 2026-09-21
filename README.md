@@ -113,6 +113,15 @@ python3 tests/test_preview_startup.py # 进程替换、端口复用与局域网�
 重复请求、多个标签页并发或重连不会重复发奖；奖励直接进入账户金币，财务明细显示「每日德扑流水奖励」，不影响段位。
 结算或领取后自动同步该账号各页面的进度，重新打开面板也会刷新；每日重置无需定时任务。
 
+## 资产排行榜
+
+游戏厅「资产排行榜 → 查看资产排行」向登录用户展示所有账号的当前钱包金币，按余额降序排列，
+同额并列、同额玩家按用户名稳定排列，每页 100 位，可翻页查看全部用户，并单独展示自己的名次。
+不包含牌局筹码或未结算竞猜。打开、手动刷新及重连时读取最新余额；刷新和同账号重连保留页码。
+接口：登录后发送 `{"type":"get_asset_leaderboard","offset":0,"request_id":"asset-1"}`，
+返回 `asset_leaderboard`，包含 `entries`、`self`、`total`、`limit`、`offset` 和回显的 `request_id`；
+每条记录仅含 `username`、`nickname`、`coins`、`rank`。
+
 ## 段位计分
 
 以**每一局牌**为单位：开局扣盲注之前的筹码为本金 `B`，结算后筹码为 `F`，
@@ -151,7 +160,7 @@ r <  0：Δ = round_half_up(max(-20, 20 × r))
 自己的名次单独展示。所有账号均参与，包括初始 1000 分、尚未结算牌局的玩家。
 排行榜打开时会随段位结算批量刷新，也可手动刷新；刷新和同账号重连保留当前页码。
 榜单向所有登录用户公开用户名、昵称、段位分、已结算局数及下述德扑累计指标，
-不公开金币余额、底牌或其他玩家的逐局明细。
+段位榜不展示金币余额、底牌或其他玩家的逐局明细。
 六个段位分别使用铜盾、银章、金星、铂金翼章、蓝色钻石、紫色王冠标志；排行页可查看全部标志与分数门槛，
 大厅、房间座位、结算和两个页面的账号菜单使用相同标志，并保留段位文字与分数。
 
@@ -309,6 +318,7 @@ python3 tests/test_table_regressions.py # 选牌比较、抢杠、绝张、声�
 python3 tests/test_table_leave_protocol.py # 临时库与真实 WebSocket：非房主退出、暂停、声明窗、多页面通知和退款
 python3 tests/test_ratings.py          # 共享段位公式、结算、迁移、幂等与真实协议（需 websockets）
 python3 tests/test_holdem_rewards.py   # 每日德扑流水、四档领取、并发/回滚、跨日、引擎与真实协议
+python3 tests/test_asset_leaderboard.py # 资产榜余额排序、分页、并列名次与真实协议
 python3 tests/test_holdem_stats.py     # 德扑指标、行动分类、离桌/全下、原子性、分页与真实协议
 node --experimental-vm-modules tests/test_rating_leaderboard_state.cjs # 无第三方依赖的分页/请求状态测试
 python3 tests/test_rewards.py          # 签到日期/概率、累计机会、并发去重、扣次入账原子性
@@ -327,8 +337,8 @@ python3 tests/test_uno_challenge_protocol.py # 本地真实 WebSocket 质疑联�
 不会出现阻塞主线程、让测试卡住的原生对话框。
 
 浏览器回归：启动 `python3 deploy/serve.py` 后，用安装了 Playwright 的 Node 环境运行
-`node tests/test_desktop.cjs`、`node tests/test_ratings.cjs`、`node tests/test_rating_leaderboard.cjs`
-和 `node tests/test_mobile_settlement.cjs`。
+`node tests/test_desktop.cjs`、`node tests/test_ratings.cjs`、`node tests/test_rating_leaderboard.cjs`、
+`node tests/test_asset_leaderboard.cjs` 和 `node tests/test_mobile_settlement.cjs`。
 每日奖励面板可运行 `node tests/test_rewards.cjs` 与 `node tests/test_holdem_rewards.cjs`；后者覆盖两个页面的
 进度、领取/重连/跨日状态与手机原生触摸滚动、领取按钮。
 手机结算回归使用触摸滑动和坐标点击，验证长结算页底部的继续/解散按钮可达。
