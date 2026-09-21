@@ -93,7 +93,7 @@ def client_config():
         "site": CONFIG.get("site", {}),
         "stream": {
             "whep_port": get_int("stream.whep_port", default=8889),
-            "path": get("stream.path", default="xiaopang"),
+            "path": get("stream.path", env="STREAM_PATH", default="xiaopang"),
         },
         "chat_port": get_int("servers.chat_port", env="LIVE_CHAT_PORT", default=8765),
     }

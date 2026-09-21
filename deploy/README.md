@@ -25,6 +25,7 @@ $EDITOR config.json        # 站点标题、端口、推流路径与口令、数
 | `LIVE_AUTH_HOST` / `LIVE_AUTH_PORT` | `servers.auth_host` / `servers.auth_port` |
 | `LIVE_DB_FILE` | `database.file` |
 | `NEW_USER_COINS` | `economy.new_user_coins` |
+| `STREAM_PATH` | `stream.path` |
 | `STREAM_PUBLISH_USER` / `STREAM_PUBLISH_PASSWORD` | `stream.publish_user` / `stream.publish_password` |
 
 ## 2. 安装 systemd 单元
@@ -60,11 +61,11 @@ location /ws/         { proxy_pass http://127.0.0.1:8765; proxy_http_version 1.1
 - 播放：页面用 WebRTC（WHEP）拉流，地址按 `stream.whep_port` + `stream.path` 拼出来
   （默认 `http://<host>:8889/<path>/whep`），协议名与路径都在 `config.json` 里改。
 
-推流命令示例（用户名/口令来自 `stream.publish_user`、`stream.publish_password`）：
+推流命令示例（用户名、口令、流路径分别来自 `stream.publish_user`、`stream.publish_password`、`stream.path`，三者可独立配置）：
 
 ```bash
 ffmpeg -re -i 你的视频源 -c:v libx264 -c:a aac \
-  -f rtsp rtsp://xiaopang:你的推流口令@127.0.0.1:8554/xiaopang
+  -f rtsp 'rtsp://<推流用户名>:<推流口令>@127.0.0.1:8554/<流路径>'
 ```
 
 ## 5. 数据库初始化
