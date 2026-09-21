@@ -211,6 +211,8 @@ class EstateFrontendTests(unittest.TestCase):
         self.assertIn("[530, 396]", estate_map)
         self.assertIn("偷走全部收成", ui)
         self.assertIn("拜访其他庄园", ui)
+        self.assertIn('controls: [button("拜访", async () => {', ui)
+        self.assertNotIn('button(`拜访 ${entry.username} 的庄园`', ui)
         self.assertIn("返回我的庄园", view)
         self.assertIn("estateStore.players", estate_map)
         self.assertIn("width: 1280, height: 720", estate_map)

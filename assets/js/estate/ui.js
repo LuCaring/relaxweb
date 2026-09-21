@@ -394,7 +394,7 @@ export function createEstateUI(root, activities = {}) {
       for (const entry of entries) {
         sheetBody.append(itemCard({ title: `${entry.username} 的庄园`,
           meta: entry.mature_plots ? `${entry.mature_plots} 块成熟作物` : "暂无成熟作物",
-          controls: [button(`拜访 ${entry.username} 的庄园`, async () => {
+          controls: [button("拜访", async () => {
             try {
               await estateRequest("estate_enter_visit", { owner_username: entry.username });
               closeSheet();
