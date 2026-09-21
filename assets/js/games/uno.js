@@ -1,6 +1,6 @@
 /* UNO 牌桌：手牌、出牌区、行动条与牌局回顾。 */
 
-import { displayNameOf, elements, formatCoins, ratingBadge, renderGameView, requestProfile, send, startHallTicker, state } from "../core.js";
+import { displayNameOf, elements, formatCoins, ratingBadge, renderGameView, requestProfile, selfUsername, send, startHallTicker, state } from "../core.js";
 import { animateUnoEvent } from "./uno-effects.js";
 import { registerGame } from "../registry.js";
 import { openChatOverlay, reapplySeatBubbles } from "../room-chat.js";
@@ -19,7 +19,7 @@ let pendingWildHand = "";
 let unoActionLock = false;    // 出牌/摸牌后到下一帧视图前忽略重复点击
 
 function unoAct(payload) {
-  if (unoActionLock) return;
+  if (unoActionLock || state.myRoom?.spectator) return;
   unoActionLock = send({ type: "poker_action", ...payload });
   if (unoActionLock) {
     // 常驻 UNO 按钮保持可点、样式恒定（自身点击逻辑已挡住无效时机），
@@ -36,7 +36,8 @@ document.addEventListener("gameactionerror", () => {
 });
 
 function isMyTurn() {
-  return Boolean(state.currentUser) && state.myRoom.to_act === state.currentUser.username;
+  const me = selfUsername();
+  return Boolean(me) && state.myRoom.to_act === me;
 }
 
 function unoMatches(card, active) {
@@ -79,7 +80,7 @@ function unoSeatNode(p) {
   if (state.myRoom.status === "playing" && state.myRoom.to_act === p.username) {
     seat.classList.add("active");
   }
-  if (state.currentUser && p.username === state.currentUser.username) seat.classList.add("me");
+  if (p.username === selfUsername()) seat.classList.add("me");
   const name = document.createElement("div");
   name.className = "us-name";
   name.textContent = p.nickname;
@@ -100,7 +101,7 @@ function unoSeatNode(p) {
   if (p.in_hand && p.cards === 1) uno.classList.add("show");
   seat.append(name, ratingBadge(p.rating), info, uno);
   // 自己的补喊入口固定在dock的UNO常驻按钮上，座位上只保留对他人的质疑
-  if (p.uno && p.username !== state.currentUser?.username) {
+  if (p.uno && p.username !== selfUsername()) {
     const challenge = document.createElement("button");
     challenge.type = "button";
     challenge.className = "uno-challenge";
@@ -277,7 +278,7 @@ function renderUnoTable() {
   const seats = document.createElement("div");
   seats.className = "uno-seats";
   const players = state.myRoom.players;
-  const myIndex = Math.max(0, players.findIndex((p) => p.username === state.currentUser?.username));
+  const myIndex = Math.max(0, players.findIndex((p) => p.username === selfUsername()));
   players.forEach((p, index) => {
     const seat = unoSeatNode(p);
     // direction=1 的服务端座序对应视觉顺时针；本人固定在下方。
@@ -350,12 +351,13 @@ function renderUnoTable() {
 
   const dock = document.createElement("div");
   dock.className = "poker-dock uno-dock";
-  dock.classList.toggle("is-my-turn", isMyTurn() && !state.myRoom.paused);
+  dock.classList.toggle("is-my-turn", !state.myRoom.spectator && isMyTurn() && !state.myRoom.paused);
   const dockHead = document.createElement("div");
   dockHead.className = "dock-head";
   const label = document.createElement("div");
   label.className = "my-cards-label";
-  label.textContent = isMyTurn() ? "你的手牌 · 轮到你出牌" : "你的手牌";
+  label.textContent = state.myRoom.spectator ? "观战视角 · 手牌"
+    : isMyTurn() ? "你的手牌 · 轮到你出牌" : "你的手牌";
   const chatToggle = document.createElement("button");
   chatToggle.className = "dock-chat-toggle";
   chatToggle.type = "button";
@@ -379,7 +381,7 @@ function renderUnoTable() {
   }
   const drawnOnly = options.pass && state.myRoom.your_drawn != null;
   hand.forEach((card, index) => {
-    const playable = isMyTurn() && !state.myRoom.paused
+    const playable = !state.myRoom.spectator && isMyTurn() && !state.myRoom.paused
       && (!drawnOnly || index === state.myRoom.your_drawn)
       && unoMatches(card, state.myRoom.active);
     const node = document.createElement("button");
@@ -417,7 +419,7 @@ function renderUnoTable() {
 
   if (!state.myRoom.paused) {
     // 补喊入口已固定在常驻 UNO 按钮上，行动条只在自己回合（摸/留/选色）出现
-    if (isMyTurn() || pendingWildCard !== null) {
+    if (!state.myRoom.spectator && (isMyTurn() || pendingWildCard !== null)) {
       dock.append(unoActionBarNode());
       if (isMyTurn() && state.myRoom.turn_left > 0) startHallTicker(fill, state.myRoom.turn_left);
     }

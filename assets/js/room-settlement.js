@@ -1,6 +1,6 @@
 /* Hand and match settlement views. */
 
-import { displayNameOf, elements, formatCoins, ratingBadge, send, state } from "./core.js";
+import { displayNameOf, elements, formatCoins, ratingBadge, selfUsername, send, spectating, state } from "./core.js";
 import { ratingResultsNode } from "./rating.js";
 import { fillBlindOptions } from "./game-config.js";
 import { gameView } from "./registry.js";
@@ -34,7 +34,7 @@ function syncHandResultOverlay() {
   const overlay = document.getElementById(HAND_RESULT_ID);
   if (!overlay || !info) return;
   const ready = new Set(info.ready || []);
-  const me = state.currentUser?.username;
+  const me = selfUsername();
   const total = info.total || state.myRoom.players.length;
   const waiting = state.myRoom.players
     .filter((p) => !ready.has(p.username))
@@ -97,17 +97,21 @@ export function renderHandResultOverlay() {
   foot.className = "hand-result-foot";
   const progress = document.createElement("div");
   progress.className = "hand-result-progress";
-  const button = document.createElement("button");
-  button.className = "login-submit hand-continue-button";
-  button.type = "button";
-  button.textContent = "继续下一手";
-  button.addEventListener("click", () => {
-    handResultPressed = true;
-    button.disabled = true;
-    button.textContent = "已准备，等待其他人…";
-    send({ type: "hand_continue" });
-  });
-  foot.append(progress, button);
+  foot.append(progress);
+  // 观战者只读：不出现「继续下一手」，只显示等待进度。
+  if (!spectating()) {
+    const button = document.createElement("button");
+    button.className = "login-submit hand-continue-button";
+    button.type = "button";
+    button.textContent = "继续下一手";
+    button.addEventListener("click", () => {
+      handResultPressed = true;
+      button.disabled = true;
+      button.textContent = "已准备，等待其他人…";
+      send({ type: "hand_continue" });
+    });
+    foot.append(button);
+  }
   card.append(foot);
 
   overlay.append(card);
@@ -151,7 +155,7 @@ function renderMatchSettlement(body) {
     row.className = "match-row";
     if (landed > 0) row.classList.add("win");
     else if (landed < 0) row.classList.add("lose");
-    if (state.currentUser && item.username === state.currentUser.username) row.classList.add("me");
+    if (state.currentUser && item.username === selfUsername()) row.classList.add("me");
 
     const who = document.createElement("div");
     who.className = "match-who";
@@ -197,7 +201,7 @@ function renderMatchSettlement(body) {
   const total = data.total || room.players.length;
   const nextCount = Object.values(votes).filter((v) => v.choice === "next").length;
   const dissolveCount = Object.values(votes).filter((v) => v.choice === "dissolve").length;
-  const myChoice = state.currentUser ? votes[state.currentUser.username]?.choice : null;
+  const myChoice = votes[selfUsername()]?.choice;
   const canNext = Boolean(data.can_next);
 
   const voteCard = document.createElement("div");
@@ -213,47 +217,51 @@ function renderMatchSettlement(body) {
   progress.textContent = `已投 ${nextCount + dissolveCount} / ${total} 票 · 再来一局 ${nextCount} 票 · 解散 ${dissolveCount} 票`;
   voteCard.append(progress);
 
-  const blindRow = document.createElement("div");
-  blindRow.className = "settle-blind-row";
-  const blindLabel = document.createElement("span");
-  blindLabel.className = "settle-blind-label";
-  blindLabel.textContent = game?.blindLabel || "下一局盲注";
-  const blind = document.createElement("select");
-  blind.className = "login-input";
-  blind.id = "settleBlindSelect";
-  fillBlindOptions(blind, room.game_type, data.blind || room.blind);
-  blind.disabled = !canNext;
-  blindRow.append(blindLabel, blind);
-  voteCard.append(blindRow);
+  if (!spectating()) {
+    const blindRow = document.createElement("div");
+    blindRow.className = "settle-blind-row";
+    const blindLabel = document.createElement("span");
+    blindLabel.className = "settle-blind-label";
+    blindLabel.textContent = game?.blindLabel || "下一局盲注";
+    const blind = document.createElement("select");
+    blind.className = "login-input";
+    blind.id = "settleBlindSelect";
+    fillBlindOptions(blind, room.game_type, data.blind || room.blind);
+    blind.disabled = !canNext;
+    blindRow.append(blindLabel, blind);
+    voteCard.append(blindRow);
 
-  const btnRow = document.createElement("div");
-  btnRow.className = "game-btn-row";
-  const again = document.createElement("button");
-  again.className = "login-submit";
-  again.type = "button";
-  again.textContent = myChoice === "next" ? "已投：再来一局" : "结算并再来一局";
-  again.disabled = !canNext;
-  if (!canNext) again.title = "人数不足两人，无法再来一局";
-  again.addEventListener("click", () => {
-    send({ type: "settle_vote", choice: "next", blind: Number(blind.value) });
-  });
-  btnRow.append(again);
+    const btnRow = document.createElement("div");
+    btnRow.className = "game-btn-row";
+    const again = document.createElement("button");
+    again.className = "login-submit";
+    again.type = "button";
+    again.textContent = myChoice === "next" ? "已投：再来一局" : "结算并再来一局";
+    again.disabled = !canNext;
+    if (!canNext) again.title = "人数不足两人，无法再来一局";
+    again.addEventListener("click", () => {
+      send({ type: "settle_vote", choice: "next", blind: Number(blind.value) });
+    });
+    btnRow.append(again);
 
-  const dissolve = document.createElement("button");
-  dissolve.className = "login-submit danger";
-  dissolve.type = "button";
-  dissolve.textContent = myChoice === "dissolve" ? "已投：结算并解散房间" : "结算并解散房间";
-  dissolve.addEventListener("click", () => {
-    send({ type: "settle_vote", choice: "dissolve" });
-  });
-  btnRow.append(dissolve);
-  voteCard.append(btnRow);
+    const dissolve = document.createElement("button");
+    dissolve.className = "login-submit danger";
+    dissolve.type = "button";
+    dissolve.textContent = myChoice === "dissolve" ? "已投：结算并解散房间" : "结算并解散房间";
+    dissolve.addEventListener("click", () => {
+      send({ type: "settle_vote", choice: "dissolve" });
+    });
+    btnRow.append(dissolve);
+    voteCard.append(btnRow);
+  }
 
   const hint = document.createElement("div");
   hint.className = "game-hint";
-  hint.textContent = canNext
-    ? (game?.noNextHint?.() || "过半数投「再来一局」即按买入额重新买入开新的一局。")
-    : "人数不足，只能结算并解散房间。";
+  hint.textContent = spectating()
+    ? "观战者无需投票，等待玩家决定房间去向。"
+    : canNext
+      ? (game?.noNextHint?.() || "过半数投「再来一局」即按买入额重新买入开新的一局。")
+      : "人数不足，只能结算并解散房间。";
   voteCard.append(hint);
   body.append(voteCard);
 
@@ -293,7 +301,7 @@ export function renderSettlementView() {
   const total = settlement?.total || state.myRoom.players.length;
   const nextCount = Object.values(votes).filter((v) => v.choice === "next").length;
   const dissolveCount = Object.values(votes).filter((v) => v.choice === "dissolve").length;
-  const myChoice = state.currentUser ? votes[state.currentUser.username]?.choice : null;
+  const myChoice = votes[selfUsername()]?.choice;
 
   const voteCard = document.createElement("div");
   voteCard.className = "game-card-page";
@@ -309,47 +317,51 @@ export function renderSettlementView() {
   voteCard.append(progress);
 
   const canNext = Boolean(settlement?.can_next);
-  const blindRow = document.createElement("div");
-  blindRow.className = "settle-blind-row";
-  const blindLabel = document.createElement("span");
-  blindLabel.className = "settle-blind-label";
-  blindLabel.textContent = game?.blindLabel || "下一局盲注";
-  const blind = document.createElement("select");
-  blind.className = "login-input";
-  blind.id = "settleBlindSelect";
-  fillBlindOptions(blind, state.myRoom.game_type, settlement?.blind || state.myRoom.blind);
-  blind.disabled = !canNext;
-  blindRow.append(blindLabel, blind);
-  voteCard.append(blindRow);
+  if (!spectating()) {
+    const blindRow = document.createElement("div");
+    blindRow.className = "settle-blind-row";
+    const blindLabel = document.createElement("span");
+    blindLabel.className = "settle-blind-label";
+    blindLabel.textContent = game?.blindLabel || "下一局盲注";
+    const blind = document.createElement("select");
+    blind.className = "login-input";
+    blind.id = "settleBlindSelect";
+    fillBlindOptions(blind, state.myRoom.game_type, settlement?.blind || state.myRoom.blind);
+    blind.disabled = !canNext;
+    blindRow.append(blindLabel, blind);
+    voteCard.append(blindRow);
 
-  const btnRow = document.createElement("div");
-  btnRow.className = "game-btn-row";
-  const again = document.createElement("button");
-  again.className = "login-submit";
-  again.type = "button";
-  again.textContent = myChoice === "next" ? "已投：再来一局" : "结算并再来一局";
-  again.disabled = !canNext;
-  if (!canNext) again.title = "有人筹码不足下一局盲注";
-  again.addEventListener("click", () => {
-    send({ type: "settle_vote", choice: "next", blind: Number(blind.value) });
-  });
-  btnRow.append(again);
+    const btnRow = document.createElement("div");
+    btnRow.className = "game-btn-row";
+    const again = document.createElement("button");
+    again.className = "login-submit";
+    again.type = "button";
+    again.textContent = myChoice === "next" ? "已投：再来一局" : "结算并再来一局";
+    again.disabled = !canNext;
+    if (!canNext) again.title = "有人筹码不足下一局盲注";
+    again.addEventListener("click", () => {
+      send({ type: "settle_vote", choice: "next", blind: Number(blind.value) });
+    });
+    btnRow.append(again);
 
-  const dissolve = document.createElement("button");
-  dissolve.className = "login-submit danger";
-  dissolve.type = "button";
-  dissolve.textContent = myChoice === "dissolve" ? "已投：结算并解散房间" : "结算并解散房间";
-  dissolve.addEventListener("click", () => {
-    send({ type: "settle_vote", choice: "dissolve" });
-  });
-  btnRow.append(dissolve);
-  voteCard.append(btnRow);
+    const dissolve = document.createElement("button");
+    dissolve.className = "login-submit danger";
+    dissolve.type = "button";
+    dissolve.textContent = myChoice === "dissolve" ? "已投：结算并解散房间" : "结算并解散房间";
+    dissolve.addEventListener("click", () => {
+      send({ type: "settle_vote", choice: "dissolve" });
+    });
+    btnRow.append(dissolve);
+    voteCard.append(btnRow);
+  }
 
   const hint = document.createElement("div");
   hint.className = "game-hint";
-  hint.textContent = canNext
-    ? "过半数玩家投「再来一局」即开下一局；过半数投「解散」则按当前筹码退还所有人并关闭房间。"
-    : (game?.noNextHint?.() || "过半数投「解散」后房间将按当前筹码退还所有人。");
+  hint.textContent = spectating()
+    ? "观战者无需投票，等待玩家决定房间去向。"
+    : canNext
+      ? "过半数玩家投「再来一局」即开下一局；过半数投「解散」则按当前筹码退还所有人并关闭房间。"
+      : (game?.noNextHint?.() || "过半数投「解散」后房间将按当前筹码退还所有人。");
   voteCard.append(hint);
   body.append(voteCard);
 

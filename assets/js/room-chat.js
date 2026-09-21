@@ -29,7 +29,9 @@ function roomChatRowNode(m) {
   row.className = "rc-message";
   const name = document.createElement("span");
   name.className = "rc-name";
-  name.textContent = m.nickname || m.username;
+  // 观战者发言：灰色 id 并以（观战）注明身份。
+  name.textContent = `${m.nickname || m.username}${m.spectator ? "（观战）" : ""}`;
+  if (m.spectator) name.classList.add("rc-spectator");
   const time = document.createElement("span");
   time.className = "rc-time";
   time.textContent = m.time || "";
@@ -252,5 +254,6 @@ onMessage("room_chat", (data) => {
     button.textContent = `💬 房间聊天（${state.roomChat.length}）`;
   }
   appendRoomChatRow(data);
-  showSeatBubble(data.username, data.text);
+  // 观战者不坐席位：发言不弹座位气泡。
+  if (!data.spectator) showSeatBubble(data.username, data.text);
 });

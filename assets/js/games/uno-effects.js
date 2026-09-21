@@ -1,5 +1,5 @@
 /* 服务器公开动作驱动的动画；不根据私有手牌差分猜测对手牌面。 */
-import { state } from "../core.js";
+import { selfUsername, state } from "../core.js";
 
 let seenRoom = "";
 let seenEvent = 0;
@@ -54,10 +54,10 @@ export function animateUnoEvent(cardNode) {
     if (state.myRoom?.room_id !== room.room_id || state.myRoom?.hand_no !== room.hand_no || state.myRoom.paused) return;
     const table = document.querySelector(".uno-table");
     const destination = document.querySelector(".uno-discard") || document.querySelector("#gameMain .poker-result");
-    const source = event.username === state.currentUser?.username
+    const source = event.username === selfUsername()
       ? document.querySelector(".uno-hand") : seatFor(event.username);
     if (event.kind === "play") flyCard(source, destination, cardNode(event.card));
-    const target = event.target === state.currentUser?.username
+    const target = event.target === selfUsername()
       ? document.querySelector(".uno-hand") : seatFor(event.target);
     for (let i = 0; i < Math.min(4, event.count || 0); i += 1) {
       flyCard(document.querySelector(".uno-pile"), target, cardNode(null, { back: true }), 160 + i * 110);

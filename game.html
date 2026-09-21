@@ -17,13 +17,13 @@
 <link rel="stylesheet" href="assets/css/hall.css?v=31">
 <link rel="stylesheet" href="assets/css/games/poker.css?v=31">
 <link rel="stylesheet" href="assets/css/game-page.css?v=33">
-<link rel="stylesheet" href="assets/css/room.css?v=33">
+<link rel="stylesheet" href="assets/css/room.css?v=34">
 <link rel="stylesheet" href="assets/css/table.css?v=30">
 <link rel="stylesheet" href="assets/css/games/uno.css?v=31">
 <link rel="stylesheet" href="assets/css/dialog.css?v=30">
 <link rel="stylesheet" href="assets/css/estate.css?v=9">
 
-<link rel="stylesheet" href="assets/css/desktop-game.css?v=32">
+<link rel="stylesheet" href="assets/css/desktop-game.css?v=33">
 <link rel="stylesheet" href="assets/css/rating.css?v=34">
 
 <link rel="stylesheet" href="assets/css/games/uno-table.css?v=31">
@@ -162,6 +162,12 @@
         id="roomTopName"
     ></div>
 
+    <span
+        class="spectate-badge"
+        id="spectateBadge"
+        hidden
+    ></span>
+
     <button class="room-audio-open" id="roomAudioSettingsButton" type="button" aria-label="音效设置" title="音效设置">🔊</button>
 
     <div
@@ -206,6 +212,28 @@
                 重新开始
             </button>
         </div>
+    </div>
+
+    <div
+        class="room-manage spectate-manage"
+        id="spectateManage"
+        hidden
+    >
+        <button
+            class="room-manage-toggle"
+            id="spectateButton"
+            type="button"
+            aria-haspopup="menu"
+        >
+            更换玩家 ▾
+        </button>
+
+        <div
+            class="room-manage-menu"
+            id="spectateMenu"
+            role="menu"
+            hidden
+        ></div>
     </div>
 
 </div>
@@ -458,7 +486,7 @@
 
 <script src="assets/transfer-select.js?v=31" defer></script>
 <script src="assets/rewards.js?v=36" defer></script>
-<script type="module" src="assets/js/main.js?v=49"></script>
+<script type="module" src="assets/js/main.js?v=50"></script>
 
 
 </body>

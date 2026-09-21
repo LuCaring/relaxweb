@@ -50,6 +50,8 @@ async def views():
             g['discards'] = {'p'+str(i): [4, 7, 4] for i in range(4)}
             g['last_discard'] = {'by': 'p3', 'tile': 4}
         result[game] = room.view_for('p0')
+        room.add_spectator('watcher', 'p0')
+        result[game + '_spectator'] = room.spectator_view('watcher')
         room.remove_member('p1')
         room.note_leave('p1')
         await room.progress_game()
@@ -488,6 +490,45 @@ console.log(`PASS Python/JavaScript parity for ${fixtures.cases.length} hands an
     assert.ok(await page.evaluate(()=>window.sent.some(m=>m.type==='settle_vote'&&m.choice==='dissolve')));
    }
   }
+  // 观战：被看玩家第一视角、操作只读、灰色标注聊天、更换玩家入口。
+  await page.setViewportSize({width:1440,height:900});
+  await page.evaluate(()=>{ core.state.currentUser={username:'watcher',nickname:'小观'}; });
+  await setRoom('mahjong_spectator');
+  assert.equal(await page.locator('.mj-me').evaluate(e=>e.dataset.username),'p0',
+    'spectated player sits at the bottom as the first-person seat');
+  assert.equal(await page.locator('.rack-bottom .mj-hand-card').count(),
+    fixtures.rooms.mahjong_spectator.your_hand.length);
+  assert.equal(await page.locator('.rack-bottom .mj-hand-card:disabled').count(),
+    fixtures.rooms.mahjong_spectator.your_hand.length, 'spectator cannot select tiles');
+  assert.equal(await page.locator('.mj-actions button:enabled').count(),0,
+    'no visible action buttons for a spectator');
+  assert.ok(await page.locator('#spectateBadge').isVisible());
+  assert.match(await page.locator('#spectateBadge').innerText(),/观战中/);
+  assert.match(await page.locator('#spectateBadge').innerText(),/p0/);
+  assert.equal(await page.locator('#spectateManage:not([hidden])').count(),1);
+  await page.locator('#spectateButton').click();
+  assert.equal(await page.locator('#spectateMenu .room-manage-item').count(),4);
+  await page.locator('#spectateMenu .room-manage-item').nth(1).click();
+  assert.ok(await page.evaluate(()=>window.sent.some(m=>m.type==='watch_player'&&m.username==='p1')),
+    'player menu sends watch_player');
+  await page.evaluate(msg=>import('/assets/js/registry.js').then(r=>r.dispatchMessage(msg)),
+    {type:'room_chat', room_id:1, username:'p0', nickname:'p0', spectator:true, text:'各位继续', time:'09/21 12:00'});
+  assert.match(await page.locator('.rc-name.rc-spectator').first().innerText(),/（观战）/);
+  assert.equal(await page.locator('.rc-name.rc-spectator').first().evaluate(e=>getComputedStyle(e).color),
+    'rgb(138, 147, 161)','spectator id renders gray');
+  assert.equal(await page.locator('.seat-bubble').count(),0,'spectator message raises no seat bubble');
+  await page.evaluate(msg=>import('/assets/js/registry.js').then(r=>r.dispatchMessage(msg)),
+    {type:'room_chat', room_id:1, username:'p1', nickname:'p1', spectator:false, text:'好的', time:'09/21 12:01'});
+  assert.equal(await page.locator('.seat-bubble').count(),1,'player message still raises a seat bubble');
+  await setRoom('guandan_spectator');
+  assert.equal(await page.locator('.gd-seat.me').count(),1,'guandan spectator keeps first-person seat');
+  assert.equal(await page.locator('.gd-dock .action-bar').count(),0,'guandan spectator gets no action bar');
+  await page.setViewportSize({width:390,height:844});
+  await setRoom('mahjong_spectator');
+  assert.equal(await page.locator('.mj-me').evaluate(e=>e.dataset.username),'p0');
+  assert.ok(await page.locator('#spectateBadge').isVisible());
+  assert.equal(await page.locator('.mj-actions button:enabled').count(),0);
+  await page.evaluate(()=>{ core.state.currentUser={username:'p0',nickname:'我'}; });
   await page.setViewportSize({width:320,height:568});
   await setRoom('mahjong');
   assert.equal(await page.locator('#desktopRoomChat').count(),0);

@@ -280,6 +280,41 @@
     background: #e6284c;
 }
 
+/* 观战状态徽标与「更换玩家」下拉（复用 .room-manage 结构） */
+.spectate-badge {
+    flex: none;
+
+    padding: 4px 10px;
+
+    border-radius: 999px;
+
+    background: #f0f0f3;
+
+    color: #6e6e73;
+
+    font-size: 12px;
+
+    white-space: nowrap;
+}
+
+.spectate-manage .room-manage-toggle {
+    background: #6e6e73;
+}
+
+.room-manage-item.is-watching {
+    background: #f0f0f3;
+
+    font-weight: 650;
+}
+
+.room-manage-item.is-watching::after {
+    content: " · 观看中";
+
+    color: #8a93a1;
+
+    font-weight: 400;
+}
+
 .paused-overlay {
     margin-top: 10px;
 
@@ -408,6 +443,13 @@
     margin-right: 6px;
 
     font-weight: 700;
+}
+
+/* 观战者发言：灰色 id 标明身份（深色皮肤在 desktop-game.css 覆盖） */
+.rc-name.rc-spectator {
+    color: #8a93a1;
+
+    font-weight: 600;
 }
 
 .rc-time {

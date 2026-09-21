@@ -25,6 +25,8 @@ export const elements = {
   onlineNumber: $("onlineNumber"),
   password: $("password"),
   roomTopName: $("roomTopName"), roomTopbar: $("roomTopbar"),
+  spectateBadge: $("spectateBadge"), spectateButton: $("spectateButton"),
+  spectateManage: $("spectateManage"), spectateMenu: $("spectateMenu"),
   transferAmount: $("transferAmount"), transferFeedback: $("transferFeedback"),
   transferSubmit: $("transferSubmit"), transferTo: $("transferTo"),
   userArea: $("userArea"), userAvatar: $("userAvatar"),
@@ -76,6 +78,7 @@ export const rewardsPanel = window.DailyRewards.create({
 });
 
 let manageMenuOpen = false;
+let spectateMenuOpen = false;
 
 export function formatCoins(value) {
   return Number(value || 0).toFixed(2);
@@ -203,6 +206,13 @@ export function setManageMenu(open) {
   elements.manageButton.setAttribute("aria-expanded", String(open));
 }
 
+export function setSpectateMenu(open) {
+  if (elements.spectateManage.hidden) open = false;
+  spectateMenuOpen = open;
+  elements.spectateMenu.hidden = !open;
+  elements.spectateButton.setAttribute("aria-expanded", String(open));
+}
+
 export function setSignedIn(user) {
   // 同一账号重连保留排行榜页码；切换账号/退出时清除分页及在途请求。
   if (!user || user.username !== state.currentUser?.username) state.ratingLeaderboardOffset = 0;
@@ -261,13 +271,51 @@ export function isRoomOwner() {
   return Boolean(state.currentUser) && state.myRoom.owner === state.currentUser.username;
 }
 
+export function spectating() {
+  return Boolean(state.myRoom?.spectator);
+}
+
+/** 第一视角归属：观战时为被观看的玩家，其余为自己。 */
+export function selfUsername() {
+  if (spectating()) return state.myRoom.watching;
+  return state.currentUser?.username;
+}
+
 function leaveConfirm() {
+  if (spectating()) {
+    return { title: "退出观战", message: "随时可以从房间列表重新进入观战。", tone: "default" };
+  }
   if (isRoomOwner()) {
     return state.myRoom.status === "playing"
       ? { title: "确定流局？", message: "牌局结束，所有人按当前筹码退回金币。", tone: "danger" }
       : { title: "解散房间？", message: "所有人的买入将原额退还。", tone: "danger" };
   }
   return { title: "退出房间", message: "退出后取回你当前的筹码。", tone: "default" };
+}
+
+function syncSpectateBar() {
+  const showMenu = spectating() && state.myRoom.status === "playing" && !state.myRoom.settlement;
+  elements.spectateManage.hidden = !showMenu;
+  elements.spectateBadge.hidden = !spectating();
+  setSpectateMenu(spectateMenuOpen && showMenu);
+  if (!spectating()) return;
+  const watched = state.myRoom.watching;
+  const player = state.myRoom.players.find((p) => p.username === watched);
+  elements.spectateBadge.textContent = `观战中 · 正在观看 ${player?.nickname || watched || "—"}`;
+  if (!showMenu) return;
+  const items = state.myRoom.players.map((p) => {
+    const item = document.createElement("button");
+    item.type = "button";
+    item.className = "room-manage-item";
+    if (p.username === watched) item.classList.add("is-watching");
+    item.textContent = p.nickname || p.username;
+    item.addEventListener("click", () => {
+      setSpectateMenu(false);
+      if (p.username !== state.myRoom.watching) send({ type: "watch_player", username: p.username });
+    });
+    return item;
+  });
+  elements.spectateMenu.replaceChildren(...items);
 }
 
 export function setRoomMode() {
@@ -279,6 +327,7 @@ export function setRoomMode() {
   elements.roomManage.hidden = !showManage;
   setManageMenu(manageMenuOpen && showManage);
   elements.managePauseButton.textContent = state.myRoom.paused ? "继续" : "暂停";
+  syncSpectateBar();
 }
 
 function clearRoomMode() {

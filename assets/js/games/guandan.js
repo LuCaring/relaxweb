@@ -2,7 +2,7 @@
    牌型判定逻辑与 games/guandan.py 保持一致：客户端只做预校验和提示，
    服务器仍是唯一裁判。 */
 
-import { displayNameOf, elements, formatCoins, playerAvatarNode, ratingBadge, renderGameView, requestProfile, send, startHallTicker, state } from "../core.js";
+import { displayNameOf, elements, formatCoins, playerAvatarNode, ratingBadge, renderGameView, requestProfile, selfUsername, send, startHallTicker, state } from "../core.js";
 import { registerGame } from "../registry.js";
 import { openChatOverlay, reapplySeatBubbles } from "../room-chat.js";
 
@@ -314,7 +314,8 @@ function indicesOf(hand, cards) {
 ========================================================= */
 
 function isMyTurn() {
-  return Boolean(state.currentUser) && state.myRoom.to_act === state.currentUser.username;
+  const me = selfUsername();
+  return Boolean(me) && state.myRoom.to_act === me;
 }
 
 function levelSet() {
@@ -371,7 +372,7 @@ function gcardNode(card, opts = {}) {
 }
 
 function gdAct(payload) {
-  if (gdActionLock) return;
+  if (gdActionLock || state.myRoom?.spectator) return;
   gdActionLock = send({ type: "poker_action", ...payload });
   if (gdActionLock) {
     document.querySelectorAll(".gd-dock button").forEach((button) => { button.disabled = true; });
@@ -449,18 +450,18 @@ function seatNode(p) {
   const team = p.team ?? 0;
   seat.style.setProperty("--team-color", TEAM_COLORS[team]);
   if (room.status === "playing" && room.to_act === p.username) seat.classList.add("active");
-  if (state.currentUser && p.username === state.currentUser.username) seat.classList.add("me");
+  if (p.username === selfUsername()) seat.classList.add("me");
   const name = document.createElement("div");
   name.className = "gs-name";
   const dot = document.createElement("span");
   dot.className = "gs-team-dot";
   dot.title = TEAM_NAMES[team];
   name.append(dot, document.createTextNode(p.nickname));
-  const avatar = playerAvatarNode(p.username === state.currentUser?.username
-    ? { ...p, avatar: p.avatar || state.currentUser.avatar || "" } : p);
+  const avatar = playerAvatarNode(p.username === selfUsername()
+    ? { ...p, avatar: p.avatar || state.currentUser?.avatar || "" } : p);
   const relation = document.createElement("span");
   relation.className = "gs-relation";
-  relation.textContent = p.username === state.currentUser?.username ? "我"
+  relation.textContent = p.username === selfUsername() ? "我"
     : team === room.my_team ? "队友" : "对手";
   const info = document.createElement("div");
   info.className = "gs-info";
@@ -738,7 +739,7 @@ function renderGuandanTable() {
   const seats = document.createElement("div");
   seats.className = "gd-seats";
   const players = room.players;
-  const myIndex = Math.max(0, players.findIndex((p) => p.username === state.currentUser?.username));
+  const myIndex = Math.max(0, players.findIndex((p) => p.username === selfUsername()));
   const positions = ["pos-bottom", "pos-left", "pos-top", "pos-right"];
   players.forEach((p, index) => {
     const seat = seatNode(p);
@@ -770,13 +771,14 @@ function renderGuandanTable() {
 
   const dock = document.createElement("div");
   dock.className = "casual-dock gd-dock";
-  dock.classList.toggle("is-my-turn", isMyTurn() && !room.paused);
+  dock.classList.toggle("is-my-turn", !room.spectator && isMyTurn() && !room.paused);
   const dockHead = document.createElement("div");
   dockHead.className = "dock-head";
   const label = document.createElement("div");
   label.className = "my-cards-label";
   const hand = room.your_hand || [];
   label.textContent = room.paused ? "牌局已暂停"
+    : room.spectator ? `观战视角 · 剩 ${hand.length} 张`
     : isMyTurn()
     ? `轮到你出牌 · 剩 ${hand.length} 张`
     : `你的手牌 · 剩 ${hand.length} 张`;
@@ -802,7 +804,8 @@ function renderGuandanTable() {
   if (!hand.length) {
     const waiting = document.createElement("span");
     waiting.className = "my-cards-label";
-    waiting.textContent = room.status === "playing" ? "你已出完，等待本局结束…" : "等待下一局发牌…";
+    waiting.textContent = room.spectator || room.status !== "playing"
+      ? "等待下一局发牌…" : "你已出完，等待本局结束…";
     myCards.append(waiting);
   }
   const wildRank = wildRankForMe();
@@ -812,7 +815,7 @@ function renderGuandanTable() {
     node.className = "gd-hand-card";
     node.dataset.index = index;
     node.setAttribute("aria-pressed", String(selectedIndices.has(index)));
-    node.disabled = gdActionLock || room.paused;
+    node.disabled = gdActionLock || room.paused || Boolean(room.spectator);
     const cardNode = gcardNode(card, {
       wild: isWildCard(card, wildRank),
       picked: selectedIndices.has(index),
@@ -838,7 +841,7 @@ function renderGuandanTable() {
 
   const resolved = resolvedSelection();
   if (!room.paused) {
-    if (isMyTurn()) {
+    if (!room.spectator && isMyTurn()) {
       dock.append(gdActionBarNode(resolved));
       const remaining = (turnDeadline - Date.now()) / 1000;
       if (remaining > 0) startHallTicker(fill, remaining);

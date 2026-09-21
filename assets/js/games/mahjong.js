@@ -5,7 +5,7 @@
 
 import {
   displayNameOf, elements, formatCoins, playerAvatarNode, ratingBadge, renderGameView, requestProfile,
-  send, startHallTicker, state,
+  selfUsername, send, startHallTicker, state,
 } from "../core.js";
 import { registerGame } from "../registry.js";
 import { openChatOverlay, reapplySeatBubbles } from "../room-chat.js";
@@ -128,7 +128,7 @@ function meldNode(meld, opts = {}) {
 ========================================================= */
 
 function mjAct(payload) {
-  if (actionLock) return;
+  if (actionLock || state.myRoom?.spectator) return;
   actionLock = send({ type: "poker_action", ...payload });
   if (actionLock) {
     document.querySelectorAll(".mj-dock button, .mj-self-controls button, .mj-hand button").forEach((b) => { b.disabled = true; });
@@ -142,12 +142,13 @@ document.addEventListener("gameactionerror", () => {
 });
 
 function isMyTurn() {
-  return Boolean(state.currentUser) && state.myRoom.to_act === state.currentUser.username;
+  const me = selfUsername();
+  return Boolean(me) && state.myRoom.to_act === me;
 }
 
 function mySeatIndex() {
   const players = state.myRoom.players || [];
-  return Math.max(0, players.findIndex((p) => p.username === state.currentUser?.username));
+  return Math.max(0, players.findIndex((p) => p.username === selfUsername()));
 }
 
 function claimTile() {
@@ -274,31 +275,33 @@ function statusNode() {
 }
 
 function playerHeadNode(p, isMe) {
+  const isSpectator = Boolean(state.myRoom?.spectator);
   const head = document.createElement("div");
   head.className = "mj-player-head";
-  const player = isMe
+  // 观战时"我"是被看玩家：展示其真实昵称与头像，不混入本地账号信息。
+  const player = isMe && !isSpectator
     ? { ...p, ...state.currentUser, avatar: p?.avatar || state.currentUser?.avatar || "" }
     : p;
   const avatar = playerAvatarNode(player);
   const wind = document.createElement("span");
   wind.className = "mj-wind";
   wind.textContent = isMe
-    ? (state.myRoom.players?.[mySeatIndex()]?.seat_wind || "东")
-    : p.seat_wind;
-  if (isMe ? state.myRoom.players?.[mySeatIndex()]?.is_dealer : p.is_dealer) {
+    ? (state.myRoom.players?.[mySeatIndex()]?.seat_wind || p?.seat_wind || "东")
+    : p?.seat_wind;
+  if (isMe ? state.myRoom.players?.[mySeatIndex()]?.is_dealer : p?.is_dealer) {
     wind.classList.add("dealer");
     wind.title = "庄家";
   }
   const name = document.createElement("span");
   name.className = "mj-player-name";
-  name.textContent = isMe
+  name.textContent = isMe && !isSpectator
     ? (state.currentUser?.nickname || state.currentUser?.username || "我")
-    : p.nickname;
+    : (p?.nickname || displayNameOf(p?.username) || "我");
   head.append(avatar, wind, name);
-  if (!isMe) head.append(ratingBadge(p.rating));
+  if (!isMe) head.append(ratingBadge(p?.rating));
   const flowers = document.createElement("span");
   flowers.className = "mj-player-flowers";
-  const flowerCount = isMe ? (state.myRoom.your_flowers || []).length : p.flowers;
+  const flowerCount = isMe ? (state.myRoom.your_flowers || []).length : p?.flowers || 0;
   flowers.textContent = flowerCount ? `🌸${flowerCount}` : "";
   flowers.title = `花牌 ${flowerCount} 张`;
   head.append(flowers);
@@ -356,10 +359,10 @@ function myAreaNode() {
   const area = document.createElement("div");
   area.className = "mj-me";
   if (!room.paused && ((room.phase === "discard" && isMyTurn())
-    || room.claim?.waiting?.includes(state.currentUser?.username))) {
+    || room.claim?.waiting?.includes(selfUsername()))) {
     area.classList.add("active");
   }
-  area.dataset.username = state.currentUser?.username;
+  area.dataset.username = selfUsername();
   area.dataset.seat = me;
   area.append(playerHeadNode(room.players?.[me] || null, true));
   return area;
@@ -581,7 +584,7 @@ function actionsNode() {
     "primary", canDiscard,
     () => mjAct({ action: "discard", index: [...selected][0] }),
     "先点选一张手牌，再点打出");
-  discard.hidden = room.phase === "claim";
+  discard.hidden = room.spectator || room.phase === "claim";
   bar.append(discard);
 
   const chis = chiOptions();
@@ -748,7 +751,7 @@ function renderMahjongTable() {
 
   const dock = document.createElement("div");
   dock.className = "casual-dock mj-dock";
-  dock.classList.toggle("is-my-turn", !room.paused
+  dock.classList.toggle("is-my-turn", !room.spectator && !room.paused
     && ((isMyTurn() && room.phase === "discard") || Boolean(room.your_options?.claim)));
 
   const dockHead = document.createElement("div");
@@ -758,6 +761,7 @@ function renderMahjongTable() {
   const hand = room.your_hand || [];
   const claimMine = room.your_options?.claim;
   label.textContent = room.paused ? "牌局已暂停，等待继续"
+    : room.spectator ? `观战视角 · ${hand.length} 张`
     : room.your_options?.submitted ? "已确认操作，等待其他玩家响应"
     : room.your_options?.passed ? "已过，等待其他玩家响应"
     : room.claim && claimMine
@@ -825,7 +829,7 @@ function renderMahjongTable() {
     node.className = "mj-hand-card";
     node.dataset.index = index;
     node.setAttribute("aria-pressed", String(selected.has(index)));
-    node.disabled = actionLock || room.paused;
+    node.disabled = actionLock || room.paused || Boolean(room.spectator);
     if (index === room.your_draw_index) {
       node.classList.add("drawn");
       node.title = "刚摸到的牌";

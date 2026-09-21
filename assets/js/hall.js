@@ -1,6 +1,7 @@
 /* Game hall: game navigation, room discovery and room creation. */
 
 import { openLogin } from "./auth.js";
+import { confirmDialog } from "./dialog.js";
 import { elements, formatCoins, renderGameView, send, state } from "./core.js";
 import { onMessage, registerView } from "./registry.js";
 import { ratingCard } from "./rating.js";
@@ -19,6 +20,18 @@ function button(label, className, onClick) {
   node.textContent = label;
   node.addEventListener("click", onClick);
   return node;
+}
+
+async function joinRoom(room) {
+  // 开局后的房间只能观战进入；等待中的房间照常作为玩家加入。
+  if (room.status === "playing" || room.status === "settled") {
+    const ok = await confirmDialog("牌局进行中，将以观战身份进入，可随时退出。", {
+      title: "观战进入",
+    });
+    if (ok) send({ type: "join_room", room_id: room.id, spectate: true });
+    return;
+  }
+  send({ type: "join_room", room_id: room.id });
 }
 
 function renderEntry() {
@@ -105,7 +118,7 @@ function roomRow(room) {
   const action = document.createElement("div");
   action.className = "hall-room-cell hall-room-action";
   action.setAttribute("role", "cell");
-  const join = button("进入", "hall-join", () => send({ type: "join_room", room_id: room.id }));
+  const join = button("进入", "hall-join", () => joinRoom(row._room || room));
   action.append(join);
   row.append(action);
   row._cells = values;
@@ -115,6 +128,7 @@ function roomRow(room) {
 }
 
 function updateRoomRow(row, room) {
+  row._room = room;
   const cells = row._cells;
   cells.room.textContent = room.name || "好友房";
   cells.owner.textContent = room.owner_name || "—";
@@ -123,6 +137,13 @@ function updateRoomRow(row, room) {
   const status = room.status === "playing" ? "游戏中" : "等待中";
   cells.status.textContent = status;
   cells.status.dataset.status = room.status === "playing" ? "playing" : "waiting";
+  if (room.status === "playing" || room.status === "settled") {
+    // 开局后进入一律观战，满员与否不再影响入口。
+    row._join.disabled = false;
+    row._join.textContent = "观战";
+    row._join.title = "观战这场对局";
+    return;
+  }
   const full = room.players.length >= gameMetaById(room.game).seats;
   row._join.disabled = full;
   row._join.textContent = full ? "已满" : "进入";

@@ -83,6 +83,7 @@ class BaseRoom:
         self.paused = False
         self.seating = []                # 座位顺序即加入顺序
         self.members = {}                # username -> {"stack": float, "paid": float}
+        self.spectators = {}             # username -> 被观看的成员；观战者不买入、不占座
         self.chat = deque(maxlen=30)     # 房间聊天，内存态，随房间销毁
         self.timers = {}                 # key -> asyncio.TimerHandle
 
@@ -168,6 +169,31 @@ class BaseRoom:
 
     def members_with_chips(self):
         return [name for name in self.seating if self.members[name]["stack"] > 0]
+
+    # ---- 观战 ----
+    def has_spectator(self, username):
+        return username in self.spectators
+
+    def add_spectator(self, username, watched=None):
+        """记录观战者及其观看目标；目标缺省取首位成员。"""
+        if watched not in self.members:
+            watched = self.seating[0] if self.seating else self.owner
+        self.spectators[username] = watched
+        return watched
+
+    def remove_spectator(self, username):
+        return self.spectators.pop(username, None)
+
+    def spectator_view(self, username):
+        """观战者视图：被看玩家的第一视角，但剥离一切可操作字段。"""
+        watched = self.spectators.get(username)
+        if watched not in self.members:
+            watched = self.add_spectator(username)
+        view = self.view_for(watched)
+        view.pop("your_options", None)
+        view["spectator"] = True
+        view["watching"] = watched
+        return view
 
     def stacks_changed(self):
         """筹码发生变动后调用；宿主注入的 set_escrow 负责持久化托管。"""

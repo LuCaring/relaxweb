@@ -4,7 +4,7 @@
 
 import {
   $, AUTH_TOKEN_KEY, SITE, connectGame, elements, leaveRoom, send, setManageMenu,
-  setSignedIn, setUserMenu, state, stopHallTicker, transferSelect,
+  setSignedIn, setSpectateMenu, setUserMenu, state, stopHallTicker, transferSelect,
 } from "./core.js";
 import {
   openFinance, openLogin, setAuthMode, submitAuth, submitTransfer, switchFinanceTab,
@@ -72,9 +72,13 @@ elements.manageRestartButton.addEventListener("click", async () => {
     send({ type: "restart_game" });
   }
 });
+elements.spectateButton.addEventListener("click", () => {
+  setSpectateMenu(elements.spectateMenu.hidden);
+});
 document.addEventListener("click", (event) => {
   if (!elements.userArea.contains(event.target)) setUserMenu(false);
   if (!elements.roomManage.contains(event.target)) setManageMenu(false);
+  if (!elements.spectateManage.contains(event.target)) setSpectateMenu(false);
 });
 elements.password.addEventListener("keydown", (event) => {
   if (event.key === "Enter" && !event.isComposing) submitAuth();

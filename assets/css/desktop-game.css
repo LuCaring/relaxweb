@@ -90,6 +90,7 @@
     .compact-room-chat .room-chat-list:empty::before { padding: 18px 6px; color: #9fb7d2; }
     .compact-room-chat .rc-message { margin: 9px 0; }
     .compact-room-chat .rc-name { color: #ffdc8b; }
+    .compact-room-chat .rc-name.rc-spectator { color: #93a0b4; }
     .compact-room-chat .rc-time { color: #8ea8c6; }
     .compact-room-chat .rc-text { color: #edf4ff; }
     /* The shared overlay composer is light; compact chats need an opaque dark

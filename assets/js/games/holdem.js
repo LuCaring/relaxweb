@@ -1,6 +1,6 @@
 /* 德州扑克牌桌：座位下注、动作条、公共牌与手牌回顾。 */
 
-import { displayNameOf, elements, formatCoins, ratingBadge, renderGameView, send, startHallTicker, state } from "../core.js";
+import { displayNameOf, elements, formatCoins, ratingBadge, renderGameView, selfUsername, send, startHallTicker, state } from "../core.js";
 import { registerGame } from "../registry.js";
 import { openChatOverlay, reapplySeatBubbles } from "../room-chat.js";
 
@@ -43,8 +43,12 @@ function turnNotice(dock, myTurn) {
   const active = myTurn && !state.myRoom.paused && Boolean(state.myRoom.your_options);
   dock.classList.toggle("is-my-turn", active);
   if (!active) {
-    const me = state.myRoom.players.find((p) => p.username === state.currentUser?.username);
-    text.textContent = state.myRoom.paused ? "牌局已暂停" : me?.folded ? "你已弃牌 · 等待本手结束" : me?.allin ? "你已全下 · 等待摊牌" : `等待 ${displayNameOf(state.myRoom.to_act) || "其他玩家"} 行动`;
+    const me = state.myRoom.players.find((p) => p.username === selfUsername());
+    if (state.myRoom.spectator) {
+      text.textContent = state.myRoom.paused ? "牌局已暂停" : `观战中 · 等待 ${displayNameOf(state.myRoom.to_act) || "其他玩家"} 行动`;
+    } else {
+      text.textContent = state.myRoom.paused ? "牌局已暂停" : me?.folded ? "你已弃牌 · 等待本手结束" : me?.allin ? "你已全下 · 等待摊牌" : `等待 ${displayNameOf(state.myRoom.to_act) || "其他玩家"} 行动`;
+    }
     return;
   }
   const deadline = Date.now() + Math.max(0, state.myRoom.turn_left || 0) * 1000;
@@ -79,7 +83,7 @@ function seatNode(p) {
   seat.className = "seat";
   if (state.myRoom.to_act === p.username) seat.classList.add("active");
   if (p.folded) seat.classList.add("folded");
-  if (state.currentUser && p.username === state.currentUser.username) seat.classList.add("me");
+  if (p.username === selfUsername()) seat.classList.add("me");
   const name = document.createElement("div");
   name.className = "seat-name";
   name.textContent = p.nickname;
@@ -124,11 +128,11 @@ function seatNode(p) {
 }
 
 function actionBarNode(options) {
-  const me = state.myRoom.players.find((p) => p.username === state.currentUser?.username);
+  const me = state.myRoom.players.find((p) => p.username === selfUsername());
   const bar = document.createElement("div");
   bar.className = "action-bar";
   const act = (payload) => {
-    if (bar.dataset.pending) return;
+    if (state.myRoom?.spectator || bar.dataset.pending) return;
     if (send({ type: "poker_action", ...payload })) {
       bar.dataset.pending = "true";
       bar.querySelectorAll("button, input").forEach((control) => { control.disabled = true; });
@@ -364,7 +368,7 @@ function renderPokerTable() {
   const seats = document.createElement("div");
   seats.className = "poker-seats";
   const players = state.myRoom.players;
-  const myIndex = Math.max(0, players.findIndex((p) => p.username === state.currentUser?.username));
+  const myIndex = Math.max(0, players.findIndex((p) => p.username === selfUsername()));
   players.forEach((p, index) => {
     const seat = seatNode(p);
     const angle = ((index - myIndex + players.length) % players.length) * Math.PI * 2 / players.length;
@@ -415,7 +419,7 @@ function renderPokerTable() {
   lastHoleKey = holeKey;
   dock.append(myCards);
 
-  const myTurn = Boolean(state.currentUser) && state.myRoom.to_act === state.currentUser.username;
+  const myTurn = Boolean(selfUsername()) && state.myRoom.to_act === selfUsername();
   const countdown = document.createElement("div");
   countdown.className = "countdown";
   const fill = document.createElement("div");

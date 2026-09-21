@@ -239,6 +239,8 @@ function playCue(name) {
 }
 
 function currentUsername() {
+  // 观战时不下场：不触发“轮到你”之类的提示音。
+  if (state.myRoom?.spectator) return null;
   return state.currentUser?.username || null;
 }
 

@@ -1864,7 +1864,7 @@ room_seq = 0
 
 def find_user_room(username):
     for room in game_rooms.values():
-        if room.has_member(username):
+        if room.has_member(username) or room.has_spectator(username):
             return room
     return None
 
@@ -1875,7 +1875,8 @@ def attach_host(room):
     def member_sockets():
         for socket, client_state in list(clients.items()):
             user = client_state.get("user")
-            if user and room.has_member(user["username"]):
+            if user and (room.has_member(user["username"])
+                         or room.has_spectator(user["username"])):
                 yield socket
 
     async def broadcast_payload(payload):
@@ -1889,8 +1890,13 @@ def attach_host(room):
         targets = []
         for socket, client_state in list(clients.items()):
             user = client_state.get("user")
-            if user and room.has_member(user["username"]):
-                targets.append((socket, room.view_for(user["username"])))
+            if not user:
+                continue
+            username = user["username"]
+            if room.has_member(username):
+                targets.append((socket, room.view_for(username)))
+            elif room.has_spectator(username):
+                targets.append((socket, room.spectator_view(username)))
         await asyncio.gather(*(send_json(socket, view) for socket, view in targets))
 
     async def on_rooms_changed():
@@ -1989,7 +1995,22 @@ async def dissolve_room(room, reason):
     await broadcast_room_list()
 
 
+async def dissolve_empty_room(room):
+    """成员走光后没有可看的对局：移除房间并让残留观战者返回大厅。"""
+    room.close()
+    game_rooms.pop(room.id, None)
+    await room.broadcast_payload({"type": "room_closed", "reason": "对局已结束"})
+    await broadcast_room_list()
+
+
 async def leave_room_internal(room, username):
+    if room.has_spectator(username):
+        room.remove_spectator(username)
+        logger.info("%s stopped watching game room %s", username, room.id)
+        await send_to_user(username, {"type": "room_closed", "reason": "已退出观战"})
+        if not room.members:
+            await dissolve_empty_room(room)
+        return
     await room.finish_pending_settlement()
     if room.in_hand() and room.has_member(username):
         room.settle_leaving_rating(username)
@@ -2004,9 +2025,7 @@ async def leave_room_internal(room, username):
     logger.info("%s left game room %s", username, room.id)
     await send_to_user(username, {"type": "room_closed", "reason": "已离桌"})
     if not room.members:
-        room.close()
-        game_rooms.pop(room.id, None)
-        await broadcast_room_list()
+        await dissolve_empty_room(room)
         return
     if mid_hand:
         await room.progress_game()
@@ -2030,7 +2049,10 @@ async def handle_get_room(websocket, state, data):
         return
     room = find_user_room(user["username"])
     if room:
-        await send_json(websocket, room.view_for(user["username"]))
+        if room.has_spectator(user["username"]):
+            await send_json(websocket, room.spectator_view(user["username"]))
+        else:
+            await send_json(websocket, room.view_for(user["username"]))
         await send_json(
             websocket,
             {
@@ -2124,6 +2146,27 @@ async def handle_join_room(websocket, state, data):
     if not room:
         await send_json(websocket, {"type": "game_error", "message": "房间不存在或已解散"})
         return
+    if data.get("spectate"):
+        # 开局后进入一律观战：不买入、不占座，随时可退出。
+        if room.status not in ("playing", "settled"):
+            await send_json(websocket, {"type": "game_error", "message": "对局尚未开始，暂不能观战"})
+            return
+        watched = data.get("watch")
+        room.add_spectator(username, watched if isinstance(watched, str) else None)
+        logger.info("%s watches game room %s", username, room.id)
+        await send_json(websocket, {"type": "game_joined", "room": room.spectator_view(username)})
+        await send_json(
+            websocket,
+            {
+                "type": "room_chat_history",
+                "room_id": room.id,
+                "messages": list(room.chat),
+            },
+        )
+        return
+    if room.status != "waiting":
+        await send_json(websocket, {"type": "game_error", "message": "游戏已开始，请以观战身份进入"})
+        return
     if len(room.seating) >= getattr(room, "max_seats", GAME_MAX_PLAYERS):
         await send_json(websocket, {"type": "game_error", "message": "房间已满"})
         return
@@ -2200,7 +2243,8 @@ async def handle_poker_action(websocket, state, data):
         return
     action = str(data.get("action", ""))
     room = find_user_room(user["username"])
-    if not room or not room.in_hand():
+    # 观战者只能看：所有对局动作仅对成员生效
+    if not room or not room.has_member(user["username"]) or not room.in_hand():
         return
     # 不做限流：出牌/摸牌/补喊是毫秒级连招（UNO 摸到可出牌立刻出、
     # 快节奏下转眼又轮到自己），且引擎按回合校验，垃圾动作无效且廉价
@@ -2237,7 +2281,7 @@ async def handle_settle_vote(websocket, state, data):
     if not user:
         return
     room = find_user_room(user["username"])
-    if not room or room.status not in ("playing", "settled"):
+    if not room or not room.has_member(user["username"]) or room.status not in ("playing", "settled"):
         return
     choice = str(data.get("choice") or "")
     if choice not in ("next", "dissolve"):
@@ -2260,7 +2304,7 @@ async def handle_hand_continue(websocket, state, data):
     if not user:
         return
     room = find_user_room(user["username"])
-    if not room or room.status != "playing":
+    if not room or not room.has_member(user["username"]) or room.status != "playing":
         return
     # 不限流：连得快时两手之间可能只隔几十毫秒，而 mark_ready 自身幂等
     await room.mark_ready(user["username"])
@@ -2282,6 +2326,25 @@ async def handle_restart_game(websocket, state, data):
         return
     logger.info("game room %s restarted by %s", room.id, user["username"])
     await room.restart()
+
+
+async def handle_watch_player(websocket, state, data):
+    """观战者切换第一视角：换发被看玩家的私有视图（不含可操作字段）。"""
+    user = state.get("user")
+    if not user:
+        return
+    room = find_user_room(user["username"])
+    if not room or not room.has_spectator(user["username"]):
+        await send_json(websocket, {"type": "game_error", "message": "你不在观战中"})
+        return
+    if rate_limited(state, "last_watch_switch", 0.2):
+        return
+    watched = str(data.get("username") or "")
+    if watched not in room.members:
+        await send_json(websocket, {"type": "game_error", "message": "该玩家已不在本房间"})
+        return
+    room.spectators[user["username"]] = watched
+    await send_json(websocket, room.spectator_view(user["username"]))
 
 
 # 常用汉字拼音首字母的 GB2312 区位上界（覆盖全部 6763 个一级/二级汉字）
@@ -2352,6 +2415,7 @@ async def handle_room_chat(websocket, state, data):
         "username": user["username"],
         "nickname": user.get("nickname") or "",
         "role": user["role"],
+        "spectator": room.has_spectator(user["username"]),
         "text": text,
         "time": time.strftime("%m/%d %H:%M"),
     }
@@ -2374,12 +2438,18 @@ async def delayed_room_cleanup(room_id, username):
     """断线宽限期内没有回到游戏厅（或直播间），再结算房间去留。"""
     await asyncio.sleep(GAME_DISCONNECT_GRACE)
     room = game_rooms.get(room_id)
-    if not room or not room.has_member(username):
+    if not room:
+        return
+    if not room.has_member(username) and not room.has_spectator(username):
         return
     for client_state in clients.values():
         other = client_state.get("user")
         if other and other["username"] == username:
             return
+    if room.has_spectator(username):
+        # 观战者断线不牵动对局，直接移除记录即可
+        room.remove_spectator(username)
+        return
     if room.owner == username:
         await dissolve_room(room, "房主离开游戏厅较久")
     else:
@@ -2596,6 +2666,7 @@ handlers = {
     "settle_vote": handle_settle_vote,
     "hand_continue": handle_hand_continue,
     "room_chat": handle_room_chat,
+    "watch_player": handle_watch_player,
     "list_users": handle_list_users,
 }
 
