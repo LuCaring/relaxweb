@@ -1,366 +1,332 @@
-# RelaxWeb · 直播间 + 游戏厅
+# RelaxWeb
 
-一个自托管的直播间：WebRTC 看直播、实时聊天与弹幕、金币系统（转账 / 竞猜 / 游戏厅），
-以及内置的两个多人小游戏——德州扑克与 UNO。后端 Python 3 标准库 + `websockets`，
-前端原生 ES Module，**没有构建步骤**，改完文件刷新页面即生效。
+RelaxWeb 是一个可自托管的直播间与游戏厅。它提供 WebRTC 直播、聊天与弹幕、邀请码账号、金币与竞猜，以及多人牌桌和单人庄园。后端使用 Python 与 SQLite，前端是原生 ES Module，部署时不需要前端构建。
 
-## 本地游戏 UI 预览
+## 服务器部署
 
-在仓库根目录运行（仅需 Python 3.9+，无需安装额外依赖）：
+### 1. 准备环境
+
+推荐使用 Debian / Ubuntu 服务器、Python 3.9+、systemd 和 nginx。直播功能还需要单独安装 [MediaMTX](https://github.com/bluenviron/mediamtx)；只使用聊天和游戏厅时可以不安装 MediaMTX，也不用启动 `live-auth`。
+
+```bash
+sudo apt update
+sudo apt install -y git python3 python3-pip python3-venv python3-websockets nginx sqlite3 ffmpeg
+sudo git clone <本仓库地址> /opt/relaxweb
+sudo chown -R <运行用户>:<运行用户> /opt/relaxweb
+cd /opt/relaxweb
+```
+
+如果发行版没有 `python3-websockets`，可创建虚拟环境并安装依赖，同时把三个 systemd 模板中的 `/usr/bin/python3` 改为虚拟环境里的 Python：
+
+```bash
+python3 -m venv .venv
+.venv/bin/pip install websockets
+```
+
+### 2. 配置站点
+
+```bash
+cp config.example.json config.json
+$EDITOR config.json
+```
+
+至少修改站点名称、推流密码和数据库位置：
+
+```json
+{
+  "site": {
+    "title": "我的直播间",
+    "brand": "Live",
+    "game_title": "游戏厅"
+  },
+  "servers": {
+    "chat_host": "0.0.0.0",
+    "chat_port": 8765,
+    "web_port": 8000,
+    "auth_host": "127.0.0.1",
+    "auth_port": 8001
+  },
+  "stream": {
+    "whep_port": 8889,
+    "path": "xiaopang",
+    "publish_user": "xiaopang",
+    "publish_password": "换成足够长的随机密码"
+  },
+  "database": {
+    "file": "/opt/relaxweb/data/users.db"
+  },
+  "economy": {
+    "new_user_coins": 1000
+  }
+}
+```
+
+创建数据库目录并限制权限：
+
+```bash
+install -d -m 700 /opt/relaxweb/data
+chmod 600 config.json
+```
+
+配置优先级是“环境变量 > `config.json` > 内置默认值”。可用的环境变量包括：
+
+| 环境变量 | 配置项 |
+| --- | --- |
+| `LIVE_CONFIG_FILE` | 配置文件路径 |
+| `LIVE_CHAT_HOST` / `LIVE_CHAT_PORT` | WebSocket 监听地址 / 端口 |
+| `LIVE_WEB_PORT` | 网页服务端口 |
+| `LIVE_AUTH_HOST` / `LIVE_AUTH_PORT` | MediaMTX 鉴权服务地址 / 端口 |
+| `LIVE_DB_FILE` | SQLite 文件路径 |
+| `NEW_USER_COINS` | 新用户初始金币 |
+| `STREAM_PUBLISH_USER` / `STREAM_PUBLISH_PASSWORD` | 推流用户名 / 密码 |
+
+`config.json` 不会被网页服务公开，也不应提交到版本库。浏览器只会收到站点文案、WebSocket 端口、WHEP 端口和流路径。
+
+### 3. 初始化数据库和首批邀请码
+
+首次执行管理命令时会自动建表：
+
+```bash
+cd /opt/relaxweb
+python3 manage_invite.py gen 5
+python3 manage_invite.py list
+```
+
+保存输出的邀请码。每个邀请码只能注册一个账号。注册首个账号后，可将其设为管理员：
+
+```bash
+python3 admin.py edit <用户名> role admin -y
+```
+
+### 4. 安装 systemd 服务
+
+项目包含三个服务模板：
+
+| 服务 | 用途 | 默认监听 |
+| --- | --- | --- |
+| `live-chat` | 账号、聊天、金币、竞猜和游戏 | `0.0.0.0:8765` |
+| `live-web` | 首页、游戏厅和静态资源 | `0.0.0.0:8000` |
+| `live-auth` | MediaMTX 外部鉴权，仅供本机调用 | `127.0.0.1:8001` |
+
+替换模板中的运行用户和绝对路径，再启用服务：
+
+```bash
+for name in live-chat live-web live-auth; do
+  sed 's|__USER__|<运行用户>|g; s|__APP_DIR__|/opt/relaxweb|g' \
+    "deploy/systemd/${name}.service.example" \
+    | sudo tee "/etc/systemd/system/${name}.service" >/dev/null
+done
+
+sudo systemctl daemon-reload
+sudo systemctl enable --now live-chat live-web live-auth
+sudo systemctl status live-chat live-web live-auth --no-pager
+```
+
+如果使用 `.venv`，安装前先把模板内的 `ExecStart=/usr/bin/python3` 改为 `ExecStart=/opt/relaxweb/.venv/bin/python`。
+
+如果按下文用 nginx 为 WebSocket 终止 TLS，还要在 `live-chat.service` 的 `[Service]` 中加入以下覆盖，让后端改为仅监听本机的内部端口；`config.json` 仍保留浏览器使用的外部端口 `8765`：
+
+```ini
+Environment=LIVE_CHAT_HOST=127.0.0.1
+Environment=LIVE_CHAT_PORT=18765
+```
+
+常用日志命令：
+
+```bash
+journalctl -u live-chat -f
+journalctl -u live-web -u live-auth --since today
+```
+
+### 5. 配置 MediaMTX 和推流
+
+在 MediaMTX 配置中完成三件事：
+
+1. 开启 WebRTC/WHEP。直接对外提供 HTTP 时端口与 `stream.whep_port` 一致（默认 `8889`）；使用下文的 nginx HTTPS 配置时，让 MediaMTX 改为仅监听 `127.0.0.1:18889`，浏览器外部端口仍是 `8889`。
+2. 把外部鉴权地址设为 `http://127.0.0.1:8001`。新版 MediaMTX 使用 `authMethod: http` 与 `authHTTPAddress`；旧版对应 `authExternalURL`，以所安装版本的示例配置为准。
+3. 公网部署时设置 WebRTC 对外可达的域名或 IP，并放行 MediaMTX 的 ICE/UDP 端口（常见默认值为 `8189/udp`）。
+
+流路径必须与 `config.json` 的 `stream.path` 相同。RTSP 推流示例：
+
+```bash
+ffmpeg -re -i <视频源> -c:v libx264 -c:a aac -f rtsp \
+  'rtsp://xiaopang:<推流密码>@<服务器地址>:8554/xiaopang'
+```
+
+推流账号与密码来自 `stream.publish_user` 和 `stream.publish_password`。观众拉流时使用登录会话鉴权，不需要知道推流密码。
+
+### 6. 域名、HTTPS 和反向代理
+
+网页在 HTTPS 下会分别连接：
+
+- `https://<域名>/`：站点页面；
+- `wss://<域名>:8765/`：聊天与游戏；
+- `https://<域名>:8889/<流路径>/whep`：直播信令。
+
+因此不能只代理网页的 443 端口；WebSocket 和 WHEP 端口也要提供有效证书。以下 nginx 示例保留项目默认端口，证书路径按实际环境修改：
+
+```nginx
+server {
+    listen 443 ssl http2;
+    server_name live.example.com;
+    ssl_certificate     /etc/letsencrypt/live/live.example.com/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/live.example.com/privkey.pem;
+
+    location / {
+        proxy_pass http://127.0.0.1:8000;
+        proxy_set_header Host $host;
+    }
+}
+
+server {
+    listen 8765 ssl;
+    server_name live.example.com;
+    ssl_certificate     /etc/letsencrypt/live/live.example.com/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/live.example.com/privkey.pem;
+
+    location / {
+        proxy_pass http://127.0.0.1:18765;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+        proxy_set_header Host $host;
+        proxy_read_timeout 3600s;
+    }
+}
+
+server {
+    listen 8889 ssl;
+    server_name live.example.com;
+    ssl_certificate     /etc/letsencrypt/live/live.example.com/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/live.example.com/privkey.pem;
+
+    location / {
+        proxy_pass http://127.0.0.1:18889;
+        proxy_set_header Host $host;
+        proxy_set_header Authorization $http_authorization;
+    }
+}
+```
+
+检查并加载配置：
+
+```bash
+sudo nginx -t
+sudo systemctl reload nginx
+```
+
+防火墙通常需要开放 `443/tcp`、`8765/tcp`、`8889/tcp` 和 MediaMTX 的 WebRTC UDP 端口。内部端口 `8000`、`8001`、`18765`、`18889` 不应直接暴露公网；`8554/tcp` 只向可信推流端开放。若不使用直播，只需网页和 WebSocket。
+
+### 7. 部署验收
+
+```bash
+curl -I http://127.0.0.1:8000/
+python3 admin.py status
+systemctl is-active live-chat live-web live-auth
+```
+
+然后访问 `https://<域名>/`，依次验证注册、登录、聊天和 `/game` 游戏厅。启用直播时再验证推流、播放及浏览器控制台中是否存在 WHEP、证书或 ICE 错误。
+
+### 8. 更新、备份和恢复
+
+更新前先备份数据库和配置：
+
+```bash
+cd /opt/relaxweb
+sudo sqlite3 data/users.db ".backup '/var/backups/relaxweb-users-$(date +%F-%H%M).db'"
+sudo cp -a config.json /var/backups/relaxweb-config.json
+
+git pull --ff-only
+sudo systemctl restart live-chat live-web live-auth
+python3 admin.py status
+```
+
+数据库升级在服务启动时自动完成，不需要手工建表。恢复数据库时先停止 `live-chat`，替换数据库文件并确认文件属主，再启动服务：
+
+```bash
+sudo systemctl stop live-chat
+sudo cp /var/backups/<备份文件>.db /opt/relaxweb/data/users.db
+sudo chown <运行用户>:<运行用户> /opt/relaxweb/data/users.db
+sudo systemctl start live-chat
+```
+
+## 管理入口
+
+### 网页管理
+
+登录后，直播间的账号菜单可修改资料、查看财务、转账、领取每日奖励、生成邀请码及注销账号；游戏厅账号菜单提供财务和每日奖励入口。每个账号最多保留 5 个未使用邀请码，可在直播间的“邀请码”窗口生成并复制给新用户。
+
+竞猜由任意登录用户发起，并由发起者封盘、结账或流局。`admin` 与 `streamer` 角色用于身份标识及受保护的管理协议；用户、角色、密码和金币的日常运维统一通过服务器命令行完成。角色不能在网页自行申请。
+
+### 服务器命令行
+
+所有命令都应在应用目录中、以能够读写数据库的运行用户执行：
+
+```bash
+python3 admin.py status                         # 服务、系统、数据库、在线与近期错误
+python3 admin.py restart -y                     # 重启三个项目服务，需要免密 sudo
+python3 admin.py list                           # 所有用户和金币概览
+python3 admin.py list <用户名>                  # 用户余额及最近流水
+python3 admin.py set <用户名> <数量>             # 设置金币
+python3 admin.py add <用户名> <数量>             # 增加金币
+python3 admin.py sub <用户名> <数量>             # 扣除金币
+python3 admin.py edit <用户名> nickname <昵称>   # 修改昵称
+python3 admin.py edit <用户名> role admin -y     # 设置角色：user/admin/streamer
+python3 admin.py edit <用户名> password <新密码> # 重置密码，至少 6 位
+python3 admin.py edit <用户名> username <新名字> # 修改用户名并迁移关联数据
+python3 admin.py delete <用户名> -y              # 删除账号及关联数据
+
+python3 manage_invite.py gen 5                  # 生成服务器邀请码
+python3 manage_invite.py list                   # 查看邀请码及使用状态
+```
+
+`restore`、`restore-all` 和 `clear-log` 会物理删除金币流水，`delete` 会物理删除账号数据；执行前应先备份数据库。删除或改名正在牌局中的用户前，应先让其离桌或解散房间。
+
+## 用户注册与参与流程
+
+1. 已有用户在账号菜单的“邀请码”窗口生成邀请码，或由管理员运行 `python3 manage_invite.py gen` 生成。
+2. 新用户打开站点，切换到“注册”，填写邀请码、用户名和密码。用户名支持 2–20 位中文、英文、数字、下划线或连字符；密码至少 6 位。
+3. 注册成功后自动登录并获得 `economy.new_user_coins` 设置的初始金币。邀请码立即失效，不能重复使用。
+4. 首页可观看直播、发送聊天与弹幕、参与竞猜，并在账号菜单中编辑昵称/头像、查看财务、转账和领取每日奖励。
+5. 点击“游戏厅”或直接访问 `/game`。单人庄园可直接进入；多人游戏可创建房间、选择底注和买入，也可加入现有房间。
+6. 牌局开始后再进入房间会成为观战者，不买入、不占座且不能操作牌局；观战者可以切换玩家视角并参与房间聊天。
+7. 离桌时筹码自动结算回钱包。正常完成的多人牌局会更新共享段位和相关排行榜。
+
+登录会话默认有效 30 天并自动恢复。用户应自行保管密码；管理员只能重置密码，无法读取原密码。
+
+## 功能与玩法概览
+
+- **直播间**：MediaMTX 推流、WebRTC/WHEP 播放、实时聊天、弹幕、在线列表和历史消息。
+- **账号与金币**：邀请码注册、个人资料、金币转账与流水、签到抽奖、德扑流水奖励、资产榜和共享段位榜。
+- **竞猜**：登录用户可发起问题、金币下注；发起者负责封盘结算或流局退款。
+- **德州扑克**：无限注、盲注轮转、边池和全下结算，支持 2–9 人。
+- **UNO**：经典功能牌、UNO 漏喊质疑和剩牌赔付，支持 2–9 人。
+- **掼蛋**：四人组队、双副牌、级牌与炸弹规则，从 2 升级到 A。
+- **国标麻将**：四人吃碰杠胡、八番起和、花牌与常用番种计分。
+- **休闲庄园**：单人种植、钓鱼、采矿、土地升级和收藏，使用同一账号金币与仓库。
+
+具体规则、可选项和结算提示以创建房间页面及牌桌内说明为准。
+
+## 本地运行与开发
+
+不配置 MediaMTX 也可以开发聊天和游戏功能：
+
+```bash
+python3 -m pip install websockets
+cp config.example.json config.json
+python3 manage_invite.py gen 3
+python3 chat_server.py
+# 另一个终端
+python3 deploy/serve.py
+```
+
+打开 `http://127.0.0.1:8000/`。只预览游戏 UI 时可运行：
 
 ```bash
 python3 scripts/preview_ui.py
 ```
 
-会启动本地服务并自动打开浏览器，直接进入掼蛋牌桌，无需登录或凑齐玩家。
-在 Linux 上启动时会自动终止**同一仓库**之前的 `preview_ui.py` 进程，换端口启动也会替换；
-不会终止其他占用端口的服务或其他仓库的预览。自动化测试并行运行时可传 `--no-replace` 保留旧实例。
-其他系统可使用 `--no-replace` 并手动停止旧预览。
-工具栏可以切换掼蛋、麻将、德扑、UNO，以及普通牌桌、长昵称/拥挤牌面、等待开局、暂停场景；
-也可以切换玩家／观战视角、观看目标、桌面/手机/横屏尺寸、显示聊天气泡、重置场景或单独打开牌桌。
-观战支持四种游戏的普通、拥挤及暂停场景，手牌等信息来自所选玩家的真实引擎视图；
-局内「更换玩家」与工具栏同步，观战聊天带身份标注，对局操作只读。等待开局场景仅提供玩家视角。
-修改 `assets/`、`game.html` 或预览工具页面后自动刷新，保留当前游戏、场景、尺寸及观战目标。
-
-```bash
-python3 scripts/preview_ui.py --game mahjong             # 直接预览麻将
-python3 scripts/preview_ui.py --game guandan --scene dense # 长昵称和长手牌
-python3 scripts/preview_ui.py --port 0 --no-open          # 自动选空闲端口，只打印地址
-python3 scripts/preview_ui.py --game mahjong --mobile    # 直接查看手机竖屏 UI
-python3 scripts/preview_ui.py --game mahjong --landscape # 直接查看手机横屏 UI
-python3 scripts/preview_ui.py --game mahjong --lan       # 同一 Wi-Fi 下用真机访问
-python3 scripts/preview_ui.py --game mahjong --spectator # 直接进入观战，默认看 p0
-python3 scripts/preview_ui.py --game uno --watch p2 --mobile # 手机观战第三位玩家
-```
-
-默认地址为 `http://127.0.0.1:8010/`，按 `Ctrl+C` 停止。没有桌面浏览器的环境可手动打开终端打印的地址。
-这是使用真实前端和游戏引擎视图生成的**布局样例**：选牌、提示、聊天、暂停可以测试，出牌等操作会显示记录并解除按钮锁，
-不推进完整对局。倒计时延长至一天，便于持续观察。修改 Python 样例生成逻辑后需重启脚本。
-工具栏提供「手机预览」「横竖屏切换」，桌面浏览器中按真实 CSS 视口尺寸检查布局；
-触摸、软键盘和移动浏览器差异请用真机验证。`--lan` 会监听局域网并打印手机访问地址，
-手机与电脑连接同一网络后打开该地址即可；真机页面按手机自身宽高显示牌桌。
-默认只绑定本机地址，屏蔽真实 WebSocket，不读取账号数据库，也不连接生产服务。
-
-预览工具回归测试（需要本地 Playwright 和 Chrome，可设置 `NODE_PATH`、`CHROME_PATH`）：
-
-```bash
-node tests/test_ui_preview.cjs
-python3 tests/test_preview_startup.py # 进程替换、端口复用与局域网监听
-```
-
-## 功能
-
-- **直播**：MediaMTX 推流，页面用 WebRTC（WHEP）拉流；播放器支持音量、静音、全屏、弹幕开关
-- **账号**：邀请码注册、会话 token 自动续期、资料编辑（昵称/头像）、注销账号
-- **聊天**：聊天室 + 弹幕（含流主/管理员标识）、在线列表、历史消息
-- **金币**：注册奖励、转账（带拼音排序的收款人选择）、金币流水明细
-- **签到抽奖**：每日签到领 5 次免费机会，可一直累积；每抽必得 20–500 金币，
-  超过 100 金币的概率为 12%，直播间与游戏厅的账号菜单均可进入
-- **竞猜**：主播/管理员出题，观众下注，开奖后按注额分配
-- **游戏厅**：德州扑克（盲注轮转、边池、全下跑马、一手结束后结算投票）与 UNO（剩牌赔付），
-  房间制、金币买入、离桌自动结算，手机横屏有专门布局
-- **观战**：开局后进入房间即以观战身份观看，不买入、不占座；默认看第一位玩家，
-  顶栏「更换玩家」可切换第一视角，除不能操作外布局与该玩家一致；
-  观战者可在房间聊天（灰色 id 标注「（观战）」，发言不弹座位气泡），可随时退出
-- **段位**：所有账号从 1000 分起步，所有游戏共用段位；按每局收益率计分，
-  加分/扣分系数为 2:1，牌桌展示段位，结算展示明细，大厅可查最近 20 局
-- **休闲庄园**：单人像素经营，24 种作物、24 种鱼与 4 种稀有收藏物；
-  离线种植、土地升级、张力钓鱼、分层采矿与炸弹风险，接入现有金币和仓库。
-  支持键鼠、左 Shift 疾跑与手机摇杆；[经济规则与验证](docs/estate-economy.md)。
-
-## 每日签到与抽奖
-
-点击账号菜单中的「每日奖励 / 抽奖 → 签到抽奖」。按**北京时间（UTC+8）每天 00:00**划分签到日，
-每个账号每天手动签到一次，领取 **5 次**抽奖机会。不补签过去日期，未使用机会不会清零或过期，
-可以跨天叠加；每抽消耗 1 次，必得整数金币：
-
-| 金币区间（包含端点） | 概率 |
-| --- | --- |
-| 20–100 | 88% |
-| 101–200 | 10% |
-| 201–500 | 2% |
-
-先抽取区间，再在区间内等概率选取整数，超过 100 金币合计 **12%**。
-中奖金币立即加入账户余额，财务明细记为「签到抽奖」；抽奖面板展示最近 10 次中奖记录。
-抽奖不消耗金币，不影响段位。
-
-服务端使用 `secrets` 生成结果，忽略客户端提交的日期、奖励金额与次数。
-启动时自动添加持久化表与机会余额，已有账号初始机会为 0，可在上线当天签到领取；
-再次启动保留累计机会和签到记录，无需定时任务。
-签到以「用户 ID + 北京日期」去重；抽奖以「用户 ID + 请求 ID」去重，
-扣机会、发金币和记录流水在同一写事务完成，避免多标签页重复领取或超额抽奖。
-浏览器在当前标签页的会话存储中保留未确认的抽奖请求 ID，断线、刷新后用同一 ID 恢复结果。
-关闭标签页后可在最近中奖记录及财务明细查看已到账奖励。
-
-## 每日德扑流水奖励
-
-直播间和游戏厅的账号菜单「每日奖励 / 抽奖 → 德扑流水」展示当天累计下注流水和四档领取按钮。
-
-| 当天德扑下注流水达到 | 可领取金币 |
-| --- | --- |
-| 100 | 20 |
-| 200 | 40 |
-| 500 | 100 |
-| 1000 | 200 |
-
-每档每天可手动领取一次，档位独立、可叠加，达到 1000 后共可领取 **360 金币**。
-北京时间每天 00:00 重置进度与领取状态，未领奖励不结转；跨日牌局按**结算日**累计。
-正常结束的德扑牌局累计玩家实际投入的盲注、跟注、加注、全下金额（含弃牌或提前离桌者在该手的投入），
-不按盈利或输赢计算。买入、尚未结算、流局、重开、重启退款、UNO、竞猜、转账和奖励本身不累计。
-
-上线后从 0 开始统计，不回填历史。下注流水随段位/筹码结算同一事务持久化，按「手牌 ID + 用户 ID」去重；
-领取按「用户 ID + 北京日期 + 档位」去重，领取记录、金币余额和财务明细同事务提交。
-重复请求、多个标签页并发或重连不会重复发奖；奖励直接进入账户金币，财务明细显示「每日德扑流水奖励」，不影响段位。
-结算或领取后自动同步该账号各页面的进度，重新打开面板也会刷新；每日重置无需定时任务。
-
-## 资产排行榜
-
-游戏厅「资产排行榜 → 查看资产排行」向登录用户展示所有账号的当前钱包金币，按余额降序排列，
-同额并列、同额玩家按用户名稳定排列，每页 100 位，可翻页查看全部用户，并单独展示自己的名次。
-不包含牌局筹码或未结算竞猜。打开、手动刷新及重连时读取最新余额；刷新和同账号重连保留页码。
-接口：登录后发送 `{"type":"get_asset_leaderboard","offset":0,"request_id":"asset-1"}`，
-返回 `asset_leaderboard`，包含 `entries`、`self`、`total`、`limit`、`offset` 和回显的 `request_id`；
-每条记录仅含 `username`、`nickname`、`coins`、`rank`。
-
-## 段位计分
-
-以**每一局牌**为单位：开局扣盲注之前的筹码为本金 `B`，结算后筹码为 `F`，
-收益率 `r = (F - B) / B`。再来一局用新的开局筹码，不重复使用最初进房买入金额。
-
-```text
-r >= 0：Δ = round_half_up(min(40, 40 × r))
-r <  0：Δ = round_half_up(max(-20, 20 × r))
-新分数 = max(0, 旧分数 + Δ)
-```
-
-使用十进制四舍五入（负数恰逢半分也向远离零的方向取整）。系数是 2:1，
-让相同幅度的盈利更容易积累分数；整数取整后，极小收益的实际加扣分未必严格为 2:1。
-保本为 0 分；不足半分也记为 0，不设“赢一点至少加 1”的额外奖励。
-单局上限 +40、下限 −20，防止一次大底池跨越多个段位；总分最低 0，明细显示实际扣分。
-
-| 开局筹码 | 结算筹码 | 收益率 | 积分变化 |
-| --- | --- | --- | --- |
-| 100 | 120 | +20% | +8 |
-| 100 | 80 | −20% | −4 |
-| 100 | 200 | +100% | +40 |
-| 100 | 0 | −100% | −20 |
-| 1000 | 1200 | +20% | +8 |
-
-| 段位 | 分数 |
-| --- | --- |
-| 青铜 | 0–799 |
-| 白银 | 800–1199（初始 1000） |
-| 黄金 | 1200–1599 |
-| 铂金 | 1600–1999 |
-| 钻石 | 2000–2399 |
-| 大师 | 2400+ |
-
-游戏厅「我的段位 → 查看段位排行」可查看全站积分榜：按段位分从高到低分页展示，每页 100 位，
-可以翻页查看所有玩家。同分并列（例如第 1、1、3 名），同分玩家按用户名稳定排列，跨页保持全站名次；
-自己的名次单独展示。所有账号均参与，包括初始 1000 分、尚未结算牌局的玩家。
-排行榜打开时会随段位结算批量刷新，也可手动刷新；刷新和同账号重连保留当前页码。
-榜单向所有登录用户公开用户名、昵称、段位分、已结算局数及下述德扑累计指标，
-段位榜不展示金币余额、底牌或其他玩家的逐局明细。
-六个段位分别使用铜盾、银章、金星、铂金翼章、蓝色钻石、紫色王冠标志；排行页可查看全部标志与分数门槛，
-大厅、房间座位、结算和两个页面的账号菜单使用相同标志，并保留段位文字与分数。
-
-这是偏成长的收益积分：相同收益率不因注额大小改变得分，没有额外胜场奖励或对手分差修正，
-也不是零和的实力估计。参数设计参考 [Elo 的 K 系数控制单场影响](https://www.chess.com/terms/elo-rating-chess)
-这一思路，收益率公式与 2:1 比例是本项目自己的规则，并非 Elo/Glicko 算法。
-
-- 正常结算立即计分；离桌、解散、重复请求不会再次结算同一手同一玩家。
-- 中途离桌（含断线宽限期到期）按实际退回的筹码立即结算。德州已投入筹码仍留在底池；
-  UNO 沿用原额退出规则，未发生筹码损益时记 0 分，不额外处罚。
-- 尚未开局、进行中的流局或重开、服务重启退款不产生积分；此前已完成/已离桌的积分保留。
-- 金币转账、竞猜及管理员调币不影响积分。服务端读取真实筹码，客户端不能提交积分。
-- 启动自动给已有账号添加初始分，不回填历史牌局；新账号使用同样的初始分。
-  `rating_history` 持久化完整审计流水，以随机手牌 ID + 用户 ID 去重，避免房间编号重用碰撞；
-  正常结算的积分与筹码托管在同一数据库事务写入。大厅仅展示本人的最近 20 条记录。
-
-## 德扑公开统计
-
-排行榜默认展示德扑手数、盈利胜率、弃牌率、得分期望与 BB/100，
-「更多德扑指标与口径」可展开净收益、VPIP/PFR、看翻牌率、摊牌指标与 AF，每项同时展示分子/分母。
-**统计从功能启用时开始**：启用时间持久化并显示在排行页，不回填缺少完整行动数据的旧牌局；
-已有段位分、共享计分公式和历史流水不变。其他游戏影响共享段位，但不计入德扑指标的样本。
-
-设 `H` 为有效已结算德扑手数（含提前离桌结算），`Nᵢ` 为第 i 手结算筹码减去扣盲注前筹码，
-`Δᵢ` 为实际应用的段位分变化（含总分最低 0 的裁剪），`BBᵢ` 为该手的大盲金额：
-
-| 指标 | 计算口径 |
-| --- | --- |
-| 德扑手数 | `H`，不是所有游戏共用的已结算局数 |
-| 盈利胜率 | `Nᵢ > 0` 的手数 / `H`；平分保本不算赢，拿到部分底池但净亏也不算赢 |
-| 弃牌率 | 弃牌手数 / `H`；分开记录主动、超时、离桌弃牌，已弃牌再离桌不重复归因 |
-| 得分期望 | `ΣΔᵢ / H`，单位分/手，是实际历史均值，**不是理论 EV 或 All-in EV** |
-| 净收益 / 手均净收益 | `ΣNᵢ` / `ΣNᵢ ÷ H`，单位筹码 / 筹码每手 |
-| BB/100 | `100 × Σ(Nᵢ / BBᵢ) / H`，各手单独用对应大盲归一化，不混算不同盲注级别 |
-| VPIP（主动入池率） | 翻牌前主动投入筹码的手数 / `H`；强制盲注不算，小盲补齐和主动全下跟注算 |
-| PFR（翻前加注率） | 翻牌前实际加注手数 / `H`；每手最多计一次，短码全下跟注不算加注 |
-| 看翻牌率 | 发出翻牌时仍未弃牌的手数 / `H`，包括已经全下的玩家 |
-| WTSD（摊牌率） | 看到翻牌且实际参加摊牌的手数 / 看到翻牌手数；对手全弃获胜不是摊牌 |
-| 摊牌盈利率 | 实际摊牌且 `Nᵢ > 0` 的手数 / 实际摊牌手数 |
-| AF（翻牌后激进因子） | 翻牌后下注、加注**次数** / 翻牌后跟注次数；不计翻牌前行为、过牌和弃牌 |
-
-分母为 0 时 API 返回 `null`，页面显示 `—`；有翻牌后进攻、没有跟注时额外返回 `af_no_calls=true`，
-页面显示 `∞（无跟注）`，不会传输非标准 JSON 的 Infinity。0 手显示暂无数据，1–99 手提示小样本。
-无效操作、未完成的流局/重开、服务重启退款均不计手数；此前已经离桌结算的摘要保留。
-实时胜率（equity）、All-in EV、3-bet、c-bet 和周/月榜不在此版本范围。
-
-### 存储与接口
-
-- [统计存储模块](holdem_stats.py) 自动创建 `holdem_hand_stats`（逐手摘要）、`holdem_player_stats`（累计汇总）
-  和 `holdem_stats_metadata`（一次性启用时间）；金额以整数分保存，不保存底牌或完整牌堆。
-- 逐手摘要以 `(hand_id, user_id)` 唯一去重；段位、历史流水、统计摘要、累计值、每日下注流水和结算筹码托管在同一事务提交。
-  每日下注流水仅归属本手结算记录对应的用户 ID，提前离桌后注销再同名注册不会继承旧手流水。
-  新摘要才累加汇总，失败全部回滚。结算写入失败时冻结已完成的动作，每 2 秒重试原结算；
-  重发动作不改变结果，离桌/重开/解散前必须完成待结算手，避免重复退款。暂停会暂停重试，恢复后继续。
-- 账号注销和管理员删除均清除摘要与汇总。网页注销需先离开或解散房间，且会使其他已登录连接退出，
-  防止同名新账号继承旧牌局；管理员在使用 CLI 删除/改名之前也应先处理活跃房间，不能直接改运行中的参局身份。
-- 运维需要重建累计值时，可在备份数据库并持有 SQLite 写事务后调用
-  `holdem_stats.rebuild_holdem_stats(conn)`，只从新摘要重建，不改段位或旧流水。
-- 登录后发送 `{"type":"get_rating_leaderboard","offset":100,"request_id":"rating-2"}`：
-  固定每页 100 位；省略 offset 为第一页；非整数重置为 0，负数截为 0，非整页向下对齐，越界截到末页。
-  返回 `offset`、`limit`、`total`、`stats_since`、回显 `request_id`、`entries`、`self` 和 `tiers`。
-  `entries` / `self` 的 `holdem_stats` 包含上述累计分子、分母和派生值；概率均为 0–1。
-  本人由登录态确定，不接受客户端上传指标或指定另一人的私人数据。
-- 榜单先计算全站并列名次，再分页，在同一读事务中批量获取本页和本人累计统计；不逐人扫描历史。
-  前端用请求关联 ID 拒绝旧响应，批量段位更新使用 150ms 去抖，翻页/离页/退出不被旧消息覆盖。
-
-升级时先备份 SQLite，再部署代码并重启 WebSocket 服务（首次初始化建表，无需手工回填），
-最后刷新页面加载新前端；不要仅更新前端而继续运行不回显 `request_id` 的旧服务端。
-
-## 目录结构
-
-```
-chat_server.py        聊天/账号/金币/竞猜/游戏厅的 WebSocket 服务
-auth_server.py        拉流鉴权（仅监听本机，供 MediaMTX authExternalUrl 调用）
-config.py             配置加载：config.json + 环境变量覆盖
-admin.py              金币管理命令行（list/set/add/sub/restore）
-manage_invite.py      邀请码管理命令行（gen/list）
-games/                游戏引擎（纯逻辑，可脱离网络单测）
-  base.py             房间基类：成员、计时器、注册表
-  holdem.py           德州扑克：牌力、边池、状态机
-  uno.py              UNO：牌堆、出牌判定、一局流程
-deploy/
-  serve.py            静态服务：白名单 + 注入客户端配置
-  systemd/            systemd 单元模板
-  README.md           部署说明（配置、单元安装、反代、推流）
-assets/
-  css/                样式，按功能/游戏拆分（dialog.css、games/poker.css、games/uno.css …）
-  js/                 游戏厅前端模块（core/registry/hall/room/dialog/games/*）
-  js/dialog-global.js 把弹层挂到 window.LiveDialog，供直播间的经典脚本调用
-  app.js reader.js    直播间前端（含 WebRTC 播放器与弹幕）
-  transfer-select.js  转账收款人选择组件
-index.html            直播间页面      game.html  游戏厅页面
-tests/                引擎单元测试与前端模块静态检查
-live-test/            联调与协议测试（git submodule，独立仓库）
-```
-
-## 快速开始（本地）
-
-```bash
-python3 -m pip install --user websockets
-
-# 1) 配置
-cp config.example.json config.json
-$EDITOR config.json            # 至少改 stream.publish_password
-
-# 2) 建库并生成邀请码（首次运行会自动建表）
-python3 manage_invite.py gen 3
-
-# 3) 起服务（两个终端，或直接用 systemd，见 deploy/README.md）
-python3 chat_server.py         # ws://localhost:8765
-python3 deploy/serve.py        # http://localhost:8000
-
-# 4) 打开 http://localhost:8000 ，用邀请码注册账号
-```
-
-直播间需要 MediaMTX 提供推流与拉流；只玩聊天与游戏厅不需要它。
-
-## 配置
-
-所有部署相关参数集中在 `config.json`（**不进版本库**，模板见 `config.example.json`）：
-
-| 配置项 | 说明 |
-| --- | --- |
-| `site.title` / `site.brand` / `site.game_title` | 浏览器标题与页面品牌文案 |
-| `servers.chat_host` / `servers.chat_port` | 聊天与游戏服务监听地址、端口 |
-| `servers.web_port` | 静态页面端口 |
-| `servers.auth_host` / `servers.auth_port` | 拉流鉴权监听地址、端口 |
-| `stream.whep_port` / `stream.path` | 页面拉流地址（`http://<host>:<whep_port>/<path>/whep`） |
-| `stream.publish_user` / `stream.publish_password` | 推流账号与口令（鉴权服务用它校验） |
-| `database.file` | SQLite 数据库路径 |
-| `economy.new_user_coins` | 新用户注册赠送金币 |
-
-环境变量优先级高于配置文件，便于临时覆盖与 CI：
-`LIVE_CONFIG_FILE`、`LIVE_CHAT_HOST`、`LIVE_CHAT_PORT`、`LIVE_WEB_PORT`、
-`LIVE_AUTH_HOST`、`LIVE_AUTH_PORT`、`LIVE_DB_FILE`、`NEW_USER_COINS`、
-`STREAM_PUBLISH_USER`、`STREAM_PUBLISH_PASSWORD`。
-
-页面里的 `window.LIVE_CONFIG` 由 `deploy/serve.py` 注入，只包含展示文案与端口，
-**不包含推流口令**；`config.json` 本身也不对外提供（静态服务只放行 `assets/` 下的静态资源）。
-
-## UNO 漏喊质疑
-
-玩家出牌后剩 1 张时，有 2 秒保护期点击「UNO!」。保护期结束仍未喊，其他在局玩家可点击该座位的「质疑漏喊 +2」，成功后对方罚摸两张，不改变当前出牌顺序。不会自动罚牌；补喊与质疑按服务器先收到的有效操作裁决，重复质疑不会重复罚牌。暂停会冻结保护期。此规则针对漏喊 UNO，不是对 +4 出牌合法性的质疑。
-
-桌面 UNO 使用围桌座位及常驻聊天室；方向箭头、出摸牌、反转、禁止与 +2/+4 动效由服务器公开事件驱动。系统开启减少动画时保留静态提示。
-
-## 测试
-
-```bash
-python3 tests/test_games.py            # 引擎纯逻辑（不需要起服务）
-python3 tests/test_frontend.py         # 前端模块静态检查（import/导出、state 前缀、禁用原生弹窗、页面资源）
-python3 tests/test_mahjong.py          # 麻将牌型、吃碰杠胡与结算
-python3 tests/test_guandan.py          # 掼蛋牌型、组队升级与结算
-python3 tests/test_table_regressions.py # 选牌比较、抢杠、绝张、声明状态与非法下标
-python3 tests/test_table_leave_protocol.py # 临时库与真实 WebSocket：非房主退出、暂停、声明窗、多页面通知和退款
-python3 tests/test_ratings.py          # 共享段位公式、结算、迁移、幂等与真实协议（需 websockets）
-python3 tests/test_holdem_rewards.py   # 每日德扑流水、四档领取、并发/回滚、跨日、引擎与真实协议
-python3 tests/test_asset_leaderboard.py # 资产榜余额排序、分页、并列名次与真实协议
-python3 tests/test_holdem_stats.py     # 德扑指标、行动分类、离桌/全下、原子性、分页与真实协议
-node --experimental-vm-modules tests/test_rating_leaderboard_state.cjs # 无第三方依赖的分页/请求状态测试
-python3 tests/test_rewards.py          # 签到日期/概率、累计机会、并发去重、扣次入账原子性
-python3 tests/test_rewards_protocol.py # 临时数据库 + 真实 WebSocket 签到/抽奖联调
-
-git submodule update --init live-test  # 协议级联调脚本
-bash live-test/reset.sh                # 重置测试库、重建测试账号、重启服务
-python3 live-test/proto_test.py        # 聊天/账号/房间生命周期等 16 项协议测试
-python3 live-test/uno_proto_test.py    # UNO 协议测试
-python3 tests/test_uno_challenge.py    # 保护期/并发/暂停/功能牌事件
-python3 tests/test_uno_challenge_protocol.py # 本地真实 WebSocket 质疑联调
-```
-
-写 UI 自动化测试时注意：页面里所有提示/确认都是自绘弹层，不是原生弹窗，
-点 `#liveDialog` 里的 `.live-dialog-confirm` / `.live-dialog-cancel` 即可（也可按 Enter / Esc），
-不会出现阻塞主线程、让测试卡住的原生对话框。
-
-浏览器回归：启动 `python3 deploy/serve.py` 后，用安装了 Playwright 的 Node 环境运行
-`node tests/test_desktop.cjs`、`node tests/test_ratings.cjs`、`node tests/test_rating_leaderboard.cjs`、
-`node tests/test_asset_leaderboard.cjs` 和 `node tests/test_mobile_settlement.cjs`。
-每日奖励面板可运行 `node tests/test_rewards.cjs` 与 `node tests/test_holdem_rewards.cjs`；后者覆盖两个页面的
-进度、领取/重连/跨日状态与手机原生触摸滚动、领取按钮。
-手机结算回归使用触摸滑动和坐标点击，验证长结算页底部的继续/解散按钮可达。
-可通过 `NODE_PATH` 指定 Playwright 包路径、`CHROME_PATH` 指定 Chrome 可执行文件。
-[排行榜浏览器回归](tests/test_rating_leaderboard.cjs) 还支持 `RATING_TEST_URL` 指定静态服务地址（默认 `http://localhost:8000`），
-以及 `RANKING_SCREENSHOT=/tmp/holdem-stats` 导出桌面和移动端截图；测试使用模拟 WebSocket，不修改真实账号数据。
-[德扑服务端专项测试](tests/test_holdem_stats.py) 使用临时数据库与随机本地端口，不需要启动线上服务或重置用户数据库。
-
-`node tests/test_table_ui.cjs` 覆盖麻将和掼蛋的实际选牌、出牌、提示、双击、聊天弹层、
-离桌结算按钮，以及 320/390/844/1024/1440 像素布局；同时对比 Python 与 JavaScript
-牌型判定。使用服务端生成的视图和模拟账号，不依赖真实用户；可用 `PYTHON` 指定 Python，
-`TEST_BASE_URL` 指定静态服务地址，`TABLE_SCREENSHOT_DIR` 保存界面截图。
-
-## 部署
-
-见 [deploy/README.md](deploy/README.md)：systemd 单元安装、nginx 反代、推流命令。
-
-## 数据库与用户数据
-
-- 数据库为单文件 SQLite（默认 `users.db`），**已在 `.gitignore` 中**，不会进版本库
-- 口令只存 PBKDF2 哈希与盐，会话 token 只存 SHA-256 哈希
-- 备份时直接复制该文件即可；`admin.py restore` 可把金币一键还原
+systemd 模板位于 [deploy/systemd/](deploy/systemd/)，测试代码与覆盖范围见 [tests/](tests/)。
 
 ## 许可
 
