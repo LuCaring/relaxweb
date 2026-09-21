@@ -1,5 +1,12 @@
 /* 两个页面共用的每日奖励面板；进度、领取状态与金额均以服务端为准。 */
 (() => {
+  const coinsFmt = new Intl.NumberFormat("en-US", {
+    minimumFractionDigits: 2, maximumFractionDigits: 2,
+  });
+  const wholeFmt = new Intl.NumberFormat("en-US", { maximumFractionDigits: 2 });
+  const fmtCoins = (value) => coinsFmt.format(Number(value || 0));
+  const fmtWhole = (value) => wholeFmt.format(Number(value || 0));
+
   function create({send, onCoins}) {
     let username = "";
     let snapshot = null;
@@ -65,7 +72,7 @@
 
     function render() {
       tickets.textContent = snapshot ? String(snapshot.tickets) : "—";
-      coins.textContent = snapshot ? Number(snapshot.coins).toFixed(2) : "—";
+      coins.textContent = snapshot ? fmtCoins(snapshot.coins) : "—";
       day.textContent = snapshot ? `${snapshot.day} · 北京时间 · ${snapshot.checked_in ? "今日已签到" : "今日尚未签到"}` : "正在读取签到状态…";
       checkin.disabled = busy || !snapshot || snapshot.checked_in;
       checkin.textContent = snapshot?.checked_in ? "今日已签到" : "签到领取 5 次";
@@ -74,25 +81,25 @@
       const turnover = snapshot?.holdem_turnover;
       dialog.querySelector("#holdemRewardsDay").textContent = snapshot
         ? `${snapshot.day} · 北京时间 · 正常结算后更新进度` : "正在读取今日进度…";
-      dialog.querySelector("#holdemTurnoverAmount").textContent = turnover ? Number(turnover.amount).toFixed(2) : "—";
+      dialog.querySelector("#holdemTurnoverAmount").textContent = turnover ? fmtCoins(turnover.amount) : "—";
       holdemTiers.replaceChildren();
       for (const tier of turnover?.tiers || []) {
         const row = document.createElement("div");
         row.className = "holdem-reward-tier";
         const info = document.createElement("div");
         const label = document.createElement("strong");
-        label.textContent = `下注满 ${tier.threshold} · 奖励 ${tier.amount} 金币`;
+        label.textContent = `下注满 ${fmtWhole(tier.threshold)} · 奖励 ${fmtWhole(tier.amount)} 金币`;
         const progress = document.createElement("progress");
         progress.max = tier.threshold;
         progress.value = Math.min(turnover.amount, tier.threshold);
-        progress.setAttribute("aria-label", `${tier.threshold} 下注流水进度`);
+        progress.setAttribute("aria-label", `${fmtWhole(tier.threshold)} 下注流水进度`);
         info.append(label, progress);
         const claim = document.createElement("button");
         claim.type = "button";
         claim.dataset.threshold = String(tier.threshold);
         claim.disabled = busy || !tier.claimable;
         claim.textContent = tier.claimed ? "已领取" : tier.claimable
-          ? `领取 ${tier.amount} 金币` : `还差 ${Math.max(0, tier.threshold - turnover.amount).toFixed(2)}`;
+          ? `领取 ${fmtWhole(tier.amount)} 金币` : `还差 ${fmtCoins(Math.max(0, tier.threshold - turnover.amount))}`;
         claim.addEventListener("click", () => request({type: "claim_holdem_reward", threshold: tier.threshold, day: snapshot.day}));
         row.append(info, claim);
         holdemTiers.append(row);
@@ -198,17 +205,17 @@
         feedback.textContent = data.awarded ? `签到成功，获得 ${data.awarded} 次抽奖机会！` : "今天已经签到过了，明天再来。";
       } else if (data.type === "lottery_result") {
         if (data.request_id === pendingDraw) { savePending(""); finish(); }
-        feedback.textContent = `抽中 ${data.amount} 金币，已到账！${data.replayed ? "（已恢复上次结果）" : ""}`;
+        feedback.textContent = `抽中 ${fmtWhole(data.amount)} 金币，已到账！${data.replayed ? "（已恢复上次结果）" : ""}`;
       } else if (data.type === "holdem_reward_result") {
         finish();
-        feedback.textContent = data.replayed ? `今日 ${data.threshold} 档奖励已领取，不会重复发放。`
-          : `已领取 ${data.amount} 金币，已到账！`;
+        feedback.textContent = data.replayed ? `今日 ${fmtWhole(data.threshold)} 档奖励已领取，不会重复发放。`
+          : `已领取 ${fmtWhole(data.amount)} 金币，已到账！`;
       }
       const prizes = dialog.querySelector("#rewardsPrizes");
       prizes.replaceChildren();
       for (const tier of data.prize_tiers || []) {
         const item = document.createElement("li");
-        item.textContent = `${tier.min}–${tier.max} 金币：${tier.percent}%`;
+        item.textContent = `${fmtWhole(tier.min)}–${fmtWhole(tier.max)} 金币：${tier.percent}%`;
         prizes.append(item);
       }
       const records = dialog.querySelector("#rewardsHistory");
@@ -216,7 +223,7 @@
       for (const entry of data.history || []) {
         const item = document.createElement("li");
         const time = new Date(entry.created_at * 1000).toLocaleString("zh-CN", {timeZone: "Asia/Shanghai"});
-        item.textContent = `${time} · +${entry.amount} 金币`;
+        item.textContent = `${time} · +${fmtWhole(entry.amount)} 金币`;
         records.append(item);
       }
       if (!data.history?.length) records.textContent = "还没有抽奖记录，签到后试试手气吧。";

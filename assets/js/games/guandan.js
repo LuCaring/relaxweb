@@ -2,7 +2,7 @@
    牌型判定逻辑与 games/guandan.py 保持一致：客户端只做预校验和提示，
    服务器仍是唯一裁判。 */
 
-import { displayNameOf, elements, formatCoins, playerAvatarNode, ratingBadge, renderGameView, requestProfile, selfUsername, send, startHallTicker, state } from "../core.js";
+import { displayNameOf, elements, formatCoins, formatCoinsWhole, playerAvatarNode, ratingBadge, renderGameView, requestProfile, selfUsername, send, startHallTicker, state } from "../core.js";
 import { registerGame } from "../registry.js";
 import { openChatOverlay, reapplySeatBubbles } from "../room-chat.js";
 
@@ -718,7 +718,7 @@ function renderGuandanTable() {
   const myTeam = room.my_team ?? 0;
   const levelText = [myTeam, 1 - myTeam].map((team) => RANK_CHARS[levels[team]] || levels[team]).join("对");
   const left = document.createElement("span");
-  left.textContent = `第 ${room.hand_no || "-"} 局 · 底注 ${room.blind} · 级 ${levelText}`
+  left.textContent = `第 ${room.hand_no || "-"} 局 · 底注 ${formatCoinsWhole(room.blind)} · 级 ${levelText}`
     + (room.rules?.wild ? " · 逢人配开" : " · 逢人配关")
     + (room.rules?.ace_strict ? " · 严格过A" : " · 宽松过A");
   const right = document.createElement("span");

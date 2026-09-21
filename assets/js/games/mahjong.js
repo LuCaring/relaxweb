@@ -4,7 +4,7 @@
    全部打出的牌。起和判定与番种计算以服务器为准。 */
 
 import {
-  displayNameOf, elements, formatCoins, playerAvatarNode, ratingBadge, renderGameView, requestProfile,
+  displayNameOf, elements, formatCoins, formatCoinsWhole, playerAvatarNode, ratingBadge, renderGameView, requestProfile,
   selfUsername, send, startHallTicker, state,
 } from "../core.js";
 import { registerGame } from "../registry.js";
@@ -195,7 +195,7 @@ function topbarNode() {
   const left = document.createElement("span");
   left.className = "mj-topbar-info";
   const rules = room.rules || {};
-  left.textContent = `国标麻将 · ${rules.min_fan ?? 8}番起和 · 底注 ${room.blind}`;
+  left.textContent = `国标麻将 · ${rules.min_fan ?? 8}番起和 · 底注 ${formatCoinsWhole(room.blind)}`;
   left.title = `庄家 ${displayNameOf(room.dealer)}`
     + (rules.flowers ? " · 花牌开" : " · 花牌关")
     + (rules.chow ? " · 吃开" : " · 吃关");

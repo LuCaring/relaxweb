@@ -1415,7 +1415,7 @@ async def handle_transfer_coins(websocket, state, data):
     await send_json(websocket, {"type": "transfer_success", "coins": sender_balance})
     await push_balance(row[0], target_balance)
     await broadcast_system(
-        f"💰 {display_name(sender)} 转账 {amount:.2f} 金币给 {display_name(row[0])}",
+        f"💰 {display_name(sender)} 转账 {amount:,.2f} 金币给 {display_name(row[0])}",
         danmaku=True,
     )
 
@@ -1645,7 +1645,7 @@ async def handle_place_bet(websocket, state, data):
             if amount > balance:
                 raise ValueError("金币不足")
             if balance >= BET_MIN_STAKE and amount < BET_MIN_STAKE:
-                raise ValueError(f"最低投注 {BET_MIN_STAKE:.0f} 金币")
+                raise ValueError(f"最低投注 {BET_MIN_STAKE:,.0f} 金币")
             if balance < BET_MIN_STAKE and amount < balance:
                 raise ValueError("金币不足 10 时只能全部投上")
             new_balance = adjust_coins(
@@ -1959,7 +1959,7 @@ async def rebuy_members(room):
         except ValueError:
             logger.info("%s 金币不足，未能重新买入 %s", username, room.id)
             await send_to_user(username, {"type": "game_error",
-                                          "message": f"金币不足 {room.buy_in:.2f}，已离桌"})
+                                          "message": f"金币不足 {room.buy_in:,.2f}，已离桌"})
             await leave_room_internal(room, username)
             continue
         room.add_chips(username, room.buy_in)
@@ -2096,7 +2096,7 @@ async def handle_create_room(websocket, state, data):
     if buy_in is None or buy_in < blind * 20:
         await send_json(
             websocket,
-            {"type": "game_error", "message": f"买入至少需要 {blind * 20:.0f} 金币（20 倍小盲注）"},
+            {"type": "game_error", "message": f"买入至少需要 {blind * 20:,.0f} 金币（20 倍小盲注）"},
         )
         return
     # 玩法自定义规则原样交给房间类清洗（各引擎自己 sanitize）
@@ -2185,7 +2185,7 @@ async def handle_join_room(websocket, state, data):
                 "SELECT coins FROM users WHERE username = ?", (username,)
             ).fetchone()[0] or 0.0
             if balance < buy_in:
-                raise ValueError(f"金币不足，进入该房间需要买入 {buy_in:.2f} 金币")
+                raise ValueError(f"金币不足，进入该房间需要买入 {buy_in:,.2f} 金币")
             adjust_coins(
                 conn, username, -buy_in, "game_buyin", f"游戏厅买入：{room.name}",
                 ref=f"room:{room.id}:{username}",

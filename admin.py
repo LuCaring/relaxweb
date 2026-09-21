@@ -140,7 +140,7 @@ def cmd_list(username=None):
             row = get_user(conn, username)
             if not row:
                 fail("用户不存在")
-            print(f"用户 {row[0]}  昵称 {row[1] or '-'}  金币 {row[2]:.2f}")
+            print(f"用户 {row[0]}  昵称 {row[1] or '-'}  金币 {row[2]:,.2f}")
             rows = conn.execute(
                 "SELECT amount, balance, kind, detail, created_at "
                 "FROM coin_transactions WHERE username = ? "
@@ -151,7 +151,7 @@ def cmd_list(username=None):
                 print("（无金币记录）")
                 return
             for amount, balance, kind, detail, _ in rows:
-                print(f"  {amount:+.2f}  余额 {balance:.2f}  [{kind}] {detail}")
+                print(f"  {amount:+,.2f}  余额 {balance:,.2f}  [{kind}] {detail}")
             return
         rows = conn.execute(
             "SELECT username, nickname, coins FROM users ORDER BY username"
@@ -159,8 +159,8 @@ def cmd_list(username=None):
         total = 0.0
         for name, nickname, coins in rows:
             total += coins or 0.0
-            print(f"{name}  {nickname or '-'}  {coins:.2f}")
-        print(f"-- 共 {len(rows)} 名用户，金币总量 {total:.2f}")
+            print(f"{name}  {nickname or '-'}  {coins:,.2f}")
+        print(f"-- 共 {len(rows)} 名用户，金币总量 {total:,.2f}")
 
 
 def cmd_adjust(mode, username, raw):
@@ -177,13 +177,13 @@ def cmd_adjust(mode, username, raw):
         else:
             delta = round(amount - (row[2] or 0.0), 2)
             if delta == 0:
-                print(f"完成：{username} 金币已为 {amount:.2f}（无变化）")
+                print(f"完成：{username} 金币已为 {amount:,.2f}（无变化）")
                 return
         try:
             balance = adjust_coins(conn, username, delta, "admin", "管理员调整")
         except ValueError as error:
             fail(str(error))
-        print(f"完成：{username} 当前金币 {balance:.2f}")
+        print(f"完成：{username} 当前金币 {balance:,.2f}")
 
 
 def cmd_restore(username=None, assume_yes=False):
@@ -191,7 +191,7 @@ def cmd_restore(username=None, assume_yes=False):
         with database() as conn:
             count = conn.execute("SELECT COUNT(*) FROM users").fetchone()[0]
         if not confirm(
-            f"将 {count} 名用户的金币全部重置为 {NEW_USER_COINS:.0f} "
+            f"将 {count} 名用户的金币全部重置为 {NEW_USER_COINS:,.0f} "
             "并删除全部金币记录？",
             assume_yes,
         ):
@@ -202,7 +202,7 @@ def cmd_restore(username=None, assume_yes=False):
             conn.execute("UPDATE users SET coins = ?", (NEW_USER_COINS,))
             conn.execute("DELETE FROM coin_transactions")
         print(
-            f"完成：{count} 名用户金币已重置为 {NEW_USER_COINS:.2f}，"
+            f"完成：{count} 名用户金币已重置为 {NEW_USER_COINS:,.2f}，"
             "金币记录已全部删除"
         )
         return
@@ -215,7 +215,7 @@ def cmd_restore(username=None, assume_yes=False):
             (NEW_USER_COINS, username),
         )
         conn.execute("DELETE FROM coin_transactions WHERE username = ?", (username,))
-    print(f"完成：{username} 金币已重置为 {NEW_USER_COINS:.2f}，其金币记录已删除")
+    print(f"完成：{username} 金币已重置为 {NEW_USER_COINS:,.2f}，其金币记录已删除")
 
 
 def cmd_clear_log(assume_yes=False):
@@ -275,7 +275,7 @@ def cmd_delete(username, assume_yes=False):
                 counts.append((table, n))
     print(
         f"将删除用户 {row[0]}（昵称 {row[1] or '-'}，角色 {row[2]}，"
-        f"金币 {row[3]:.2f}）："
+        f"金币 {row[3]:,.2f}）："
     )
     for table, n in counts:
         print(f"  {table}: {n} 条")
@@ -439,7 +439,7 @@ def cmd_status():
     with database() as conn:
         users = conn.execute("SELECT COUNT(*) FROM users").fetchone()[0]
         coins = conn.execute("SELECT ROUND(SUM(coins), 2) FROM users").fetchone()[0]
-        print(f"  用户 {users} 名，金币总量 {coins or 0:.2f}")
+        print(f"  用户 {users} 名，金币总量 {coins or 0:,.2f}")
         bet = conn.execute(
             "SELECT id, question, creator, created_at FROM bets "
             "WHERE status = 'open' ORDER BY id DESC LIMIT 1"

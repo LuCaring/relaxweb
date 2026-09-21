@@ -1,6 +1,6 @@
 /* Waiting room layout and stable, username-keyed seat nodes. */
 
-import { elements, formatCoins, isRoomOwner, ratingBadge, send, state, stopHallTicker } from "./core.js";
+import { elements, formatCoins, formatCoinsWhole, isRoomOwner, ratingBadge, send, state, stopHallTicker } from "./core.js";
 import { gameMetaById } from "./game-config.js";
 import { gameView } from "./registry.js";
 import { chatOpenButton } from "./room-chat.js";
@@ -131,7 +131,7 @@ function refreshWaitingRoom(root) {
   const capacity = meta.seats;
   root.dataset.game = room.game_type;
   root.querySelector(".waiting-room-title").textContent = `等待玩家加入（${room.players.length}/${capacity}）`;
-  root.querySelector(".waiting-room-info").textContent = `${meta.icon} ${meta.name}  ·  ${game?.stakeLabel || "底注"} ${room.blind}  ·  买入 ${formatCoins(room.buy_in)}  ·  房主 ${room.owner_name}`;
+  root.querySelector(".waiting-room-info").textContent = `${meta.icon} ${meta.name}  ·  ${game?.stakeLabel || "底注"} ${formatCoinsWhole(room.blind)}  ·  买入 ${formatCoins(room.buy_in)}  ·  房主 ${room.owner_name}`;
   const rule = startRule(room, meta);
   const missing = Math.max(0, rule.minimum - rule.count);
   const centerText = missing

@@ -1,6 +1,6 @@
 /* 德州扑克牌桌：座位下注、动作条、公共牌与手牌回顾。 */
 
-import { displayNameOf, elements, formatCoins, ratingBadge, renderGameView, selfUsername, send, startHallTicker, state } from "../core.js";
+import { displayNameOf, elements, formatCoins, formatCoinsWhole, ratingBadge, renderGameView, selfUsername, send, startHallTicker, state } from "../core.js";
 import { registerGame } from "../registry.js";
 import { openChatOverlay, reapplySeatBubbles } from "../room-chat.js";
 
@@ -324,7 +324,7 @@ function renderPokerTable() {
   const topbar = document.createElement("div");
   topbar.className = "poker-topbar";
   const left = document.createElement("span");
-  left.textContent = `第 ${state.myRoom.hand_no || "-"} 手 · 盲注 ${state.myRoom.blind}/${state.myRoom.blind * 2}`;
+  left.textContent = `第 ${state.myRoom.hand_no || "-"} 手 · 盲注 ${formatCoinsWhole(state.myRoom.blind)}/${formatCoinsWhole(state.myRoom.blind * 2)}`;
   const right = document.createElement("span");
   right.textContent = state.myRoom.paused ? "⏸ 已暂停" : (STAGE_NAMES[state.myRoom.stage] || "");
   topbar.append(left, right);

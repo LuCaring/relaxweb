@@ -114,7 +114,13 @@ def main():
 
     # 1. 导出校验
     exported = {
-        name: set(re.findall(r"(?m)^export (?:async )?(?:function|const|let|class) ([A-Za-z_$][\w$]*)", text))
+        name: (
+            set(re.findall(r"(?m)^export (?:async )?(?:function|const|let|class) ([A-Za-z_$][\w$]*)", text))
+            # `export { a, b as c }`（含 `export { … } from "…"` 再导出）
+            | {n.split(" as ")[-1].strip()
+               for m in re.findall(r"(?m)^export\s*\{([^}]+)\}", text)
+               for n in m.split(",") if n.strip()}
+        )
         for name, text in raw.items()
     }
     bad = []

@@ -1,6 +1,6 @@
 /* Room creation form and per-game drafts. */
 
-import { elements, formatCoins, renderGameView, send, state } from "./core.js";
+import { elements, formatCoins, formatCoinsWhole, renderGameView, send, state } from "./core.js";
 import { registerView } from "./registry.js";
 import { fillBlindOptions, gameMetaById, minimumBuyIn } from "./game-config.js";
 
@@ -106,7 +106,7 @@ function updateCreateSummary() {
   minimum.textContent = `最低买入 ${formatCoins(min)} 金币（底注的 20 倍）`;
   summary.querySelector(".create-summary-game").textContent = game.name;
   summary.querySelector(".create-summary-name").textContent = name.value.trim() || "未命名房间";
-  summary.querySelector(".create-summary-blind").textContent = `${game.id === "holdem" ? "盲注" : game.id === "uno" ? "每张赔付" : "底注"} ${blind.value}`;
+  summary.querySelector(".create-summary-blind").textContent = `${game.id === "holdem" ? "盲注" : game.id === "uno" ? "每张赔付" : "底注"} ${formatCoinsWhole(blind.value)}`;
   summary.querySelector(".create-summary-buyin").textContent = `${formatCoins(Number(buyin.value) || 0)} 金币`;
   summary.querySelector(".create-summary-seats").textContent = `${game.seats} 个座位`;
   const ruleSummary = game.id === "guandan"

@@ -1,6 +1,6 @@
 /* UNO 牌桌：手牌、出牌区、行动条与牌局回顾。 */
 
-import { displayNameOf, elements, formatCoins, ratingBadge, renderGameView, requestProfile, selfUsername, send, startHallTicker, state } from "../core.js";
+import { displayNameOf, elements, formatCoins, formatCoinsWhole, ratingBadge, renderGameView, requestProfile, selfUsername, send, startHallTicker, state } from "../core.js";
 import { animateUnoEvent } from "./uno-effects.js";
 import { registerGame } from "../registry.js";
 import { openChatOverlay, reapplySeatBubbles } from "../room-chat.js";
@@ -257,7 +257,7 @@ function renderUnoTable() {
   const topbar = document.createElement("div");
   topbar.className = "poker-topbar";
   const left = document.createElement("span");
-  left.textContent = `第 ${state.myRoom.hand_no || "-"} 局 · 每张赔付 ${state.myRoom.blind}`;
+  left.textContent = `第 ${state.myRoom.hand_no || "-"} 局 · 每张赔付 ${formatCoinsWhole(state.myRoom.blind)}`;
   const right = document.createElement("span");
   right.textContent = state.myRoom.paused
     ? "⏸ 已暂停"

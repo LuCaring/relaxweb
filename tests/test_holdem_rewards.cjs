@@ -54,8 +54,8 @@ const assert = require('node:assert/strict');
       assert.equal(await page.locator('[data-threshold="100"]').innerText(), '已领取');
       assert.equal(await page.locator('[data-threshold="200"]').isEnabled(), true);
       assert.match(await page.locator('#rewardsFeedback').innerText(), /已领取 20 金币/);
-      assert.equal(await page.locator('#rewardsCoins').innerText(), '1020.00');
-      if (path === 'game.html') assert.equal(await page.locator('#coinBalance').innerText(), '1020.00');
+      assert.equal(await page.locator('#rewardsCoins').innerText(), '1,020.00');
+      if (path === 'game.html') assert.equal(await page.locator('#coinBalance').innerText(), '1,020.00');
       await deliver({type: 'finance', coins: 1020, transactions: [{amount: 20, balance: 1020,
         kind: 'holdem_daily_reward', detail: '每日德扑下注流水满 100 奖励', created_at: 1000}]});
       assert.match(await page.locator('#financeList').textContent(), /每日德扑流水奖励/);

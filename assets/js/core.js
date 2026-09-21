@@ -2,6 +2,9 @@
 
 import { dispatchMessage, onMessage, renderView } from "./registry.js";
 import { alertDialog, confirmDialog } from "./dialog.js";
+import { formatCoins, formatCoinsWhole } from "./format.js";
+
+export { formatCoins, formatCoinsWhole };
 
 export const $ = (id) => document.getElementById(id);
 
@@ -79,10 +82,6 @@ export const rewardsPanel = window.DailyRewards.create({
 
 let manageMenuOpen = false;
 let spectateMenuOpen = false;
-
-export function formatCoins(value) {
-  return Number(value || 0).toFixed(2);
-}
 
 export function ratingBadge(rating) {
   const badge = document.createElement("span");
