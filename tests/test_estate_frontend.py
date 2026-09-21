@@ -71,6 +71,9 @@ class EstateFrontendTests(unittest.TestCase):
         self.assertEqual(png_size(ROOT / "assets/estate/signs/estate-sign.png"), (2048, 768))
         for building in ("seed-shop", "warehouse", "mine"):
             self.assertEqual(png_size(ROOT / f"assets/estate/buildings/{building}.png"), (1536, 1024))
+        self.assertEqual(png_size(ROOT / "assets/estate/buildings/store.png"), (1448, 1086))
+        self.assertEqual(png_size(ROOT / "assets/estate/pets/doudou-sheet.png"), (1254, 1254))
+        self.assertEqual(png_size(ROOT / "assets/estate/pets/doudou-sleep-sheet.png"), (2172, 724))
 
         attribution = self.read("assets/estate/ATTRIBUTION.md")
         self.assertIn("休闲庄园原创像素素材", attribution)
@@ -210,15 +213,30 @@ class EstateFrontendTests(unittest.TestCase):
         self.assertIn("拜访其他庄园", ui)
         self.assertIn("返回我的庄园", view)
         self.assertIn("estateStore.players", estate_map)
+        self.assertIn("width: 1280, height: 720", estate_map)
+        self.assertIn("1262", server)
+        self.assertIn("702", server)
 
     def test_custom_buildings_use_fixed_place_names(self):
         assets = self.read("assets/js/estate/assets.js")
         estate_map = self.read("assets/js/estate/map.js")
+        ui = self.read("assets/js/estate/ui.js")
         self.assertIn("BUILDING_ASSETS", assets)
-        for path in ("seed-shop.png", "warehouse.png", "mine.png"):
+        for path in ("seed-shop.png", "warehouse.png", "mine.png", "store.png"):
             self.assertIn(path, assets)
-        for name in ('"种子铺"', '"仓库"', '"矿洞"'):
+        for name in ('"种子铺"', '"仓库"', '"矿洞"', '"商店"'):
             self.assertIn(name, estate_map)
+        self.assertIn("general_store", ui)
+        self.assertIn("豆豆", ui)
+        self.assertIn("estate_pet", ui)
+        self.assertIn("PET_SLEEP_SPRITE", assets)
+        self.assertIn('pet.mode = "sleeping"', estate_map)
+        self.assertIn("distance > 220", estate_map)
+        self.assertIn("blockingArea", estate_map)
+        self.assertIn("collides(pet.x + moveX, pet.y, 9)", estate_map)
+        self.assertIn("blockedSince", estate_map)
+        self.assertIn('const pet = { x: 280, y: 455', estate_map)
+        self.assertIn("trimsRightFrameArtifacts", assets)
 
     def test_javascript_parses(self):
         for path in (ROOT / "assets/js/estate").glob("*.js"):

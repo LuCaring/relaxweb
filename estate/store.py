@@ -71,7 +71,7 @@ def plot_index(value):
 
 PROFILE_COLUMNS = (
     "level", "xp", "warehouse_level", "plot_count",
-    "reserved_capacity", "version", "created_at", "updated_at",
+    "reserved_capacity", "pet_level", "version", "created_at", "updated_at",
 )
 
 

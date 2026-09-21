@@ -219,6 +219,13 @@ MINING_LEVELS = {
         "weights": [18, 12, 20, 24, 10, 3]},
 }
 
+PET_LEVELS = {
+    1: {"name": "豆豆", "buy_price": 10000.0, "defend_chance": .15, "upgrade_price": 20000.0},
+    2: {"name": "豆豆", "defend_chance": .20, "upgrade_price": 40000.0},
+    3: {"name": "豆豆", "defend_chance": .30, "upgrade_price": 100000.0},
+    4: {"name": "豆豆", "defend_chance": .40, "upgrade_price": None},
+}
+
 
 def item_id(kind, key):
     """物品 ID 统一为 ``<kind>:<key>``，解析见 :func:`item_info`。"""
@@ -310,6 +317,7 @@ def public_catalog():
         "minerals": {key: {"id": key, "item_id": mineral_item(key), **value}
                      for key, value in MINERALS.items()},
         "mining_levels": MINING_LEVELS,
+        "pet_levels": PET_LEVELS,
         # 客户端要用它推进钓鱼进度条并预判结局；不下发就会各自硬编码一份。
         "fishing_rules": {
             "steps": FISHING_STEPS,

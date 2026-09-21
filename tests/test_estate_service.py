@@ -9,6 +9,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from estate.catalog import CROPS, crop_item, grow_seconds, seed_item
 from estate.farming import buy, harvest, plant, sell, sell_all
+from estate.pets import buy_or_upgrade_pet
 from estate.schema import init_estate
 from estate.store import EstateError, ensure_estate, estate_state
 
@@ -87,6 +88,18 @@ class EstateServiceTests(unittest.TestCase):
             self.conn.execute("SELECT COUNT(*) FROM estate_actions").fetchone()[0], 0
         )
         self.assertEqual(self.conn.execute("SELECT coins FROM users WHERE username='bob'").fetchone()[0], 500)
+
+    def test_buy_and_upgrade_doudou(self):
+        result = self.call(buy_or_upgrade_pet, "alice", "pet-buy-0001", NOW, adjust_coins)
+        self.assertEqual((result["pet_level"], result["cost"]), (1, 10000.0))
+        self.conn.execute("UPDATE users SET coins=200000 WHERE username='alice'")
+        expected = ((2, 20000.0), (3, 40000.0), (4, 100000.0))
+        for index, pair in enumerate(expected, 2):
+            result = self.call(buy_or_upgrade_pet, "alice", f"pet-upgrade-000{index}", NOW, adjust_coins)
+            self.assertEqual((result["pet_level"], result["cost"]), pair)
+        with self.assertRaises(EstateError) as error:
+            self.call(buy_or_upgrade_pet, "alice", "pet-upgrade-max", NOW, adjust_coins)
+        self.assertEqual(error.exception.code, "pet_max_level")
 
     def test_plant_mature_harvest_and_sell(self):
         self.buy_seed()

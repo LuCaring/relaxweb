@@ -32,6 +32,7 @@ from estate import (
     EstateError,
     buy as estate_buy,
     buy_tool as estate_buy_tool,
+    buy_or_upgrade_pet as estate_buy_or_upgrade_pet,
     estate_state,
     finish_fishing as estate_finish_fishing,
     finish_mining as estate_finish_mining,
@@ -90,11 +91,12 @@ ESTATE_PLOT_POSITIONS = (
     (530, 300), (330, 396), (430, 396), (530, 396),
 )
 ESTATE_BLOCKS = ((32, 24, 250, 168), (675, 30, 245, 160),
-                 (24, 326, 230, 155), (680, 302, 280, 298))
+                 (24, 326, 230, 155), (680, 302, 280, 298),
+                 (982, 42, 266, 198))
 
 
 def valid_estate_position(x, y):
-    if not (18 <= x <= 942 and 24 <= y <= 582):
+    if not (18 <= x <= 1262 and 24 <= y <= 702):
         return False
     return not any(x + 12 > bx and x - 12 < bx + width
                    and y + 12 > by and y - 12 < by + height
@@ -1169,11 +1171,11 @@ async def handle_estate_steal_crop(websocket, state, data):
             conn.execute("BEGIN IMMEDIATE")
             now = int(time.time())
             result = estate_steal_crop(conn, user["username"], request_id, owner,
-                                       plot_id, now)
+                                       plot_id, now, adjust_coins)
             snapshot = public_estate_state(conn, user["username"], owner, now)
         await send_json(websocket, {"type": "estate_steal_result", "result": result,
                                     "state": snapshot, "request_id": request_id})
-        if not result.get("replayed"):
+        if not result.get("replayed") and result.get("outcome") == "stolen":
             await broadcast_estate_channel(owner, {"type": "estate_crop_stolen",
                 "plot_id": result["plot_id"], "visitor_username": user["username"]},
                 exclude=websocket)
@@ -1253,6 +1255,8 @@ async def handle_estate_action(websocket, state, data, action):
             elif action == "repair_tool":
                 result = estate_repair_tool(conn, username, request_id,
                                             data.get("tool_type"), now, adjust_coins)
+            elif action == "pet":
+                result = estate_buy_or_upgrade_pet(conn, username, request_id, now, adjust_coins)
             elif action == "start_fishing":
                 result = estate_start_fishing(conn, username, request_id,
                                               data.get("bait_id"), now)
@@ -1338,6 +1342,10 @@ async def handle_estate_upgrade_tool(websocket, state, data):
 
 async def handle_estate_repair_tool(websocket, state, data):
     await handle_estate_action(websocket, state, data, "repair_tool")
+
+
+async def handle_estate_pet(websocket, state, data):
+    await handle_estate_action(websocket, state, data, "pet")
 
 
 async def handle_estate_start_fishing(websocket, state, data):
@@ -2631,6 +2639,7 @@ handlers = {
     "estate_buy_tool": handle_estate_buy_tool,
     "estate_upgrade_tool": handle_estate_upgrade_tool,
     "estate_repair_tool": handle_estate_repair_tool,
+    "estate_pet": handle_estate_pet,
     "estate_start_fishing": handle_estate_start_fishing,
     "estate_finish_fishing": handle_estate_finish_fishing,
     "estate_start_mining": handle_estate_start_mining,

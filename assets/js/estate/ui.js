@@ -1,6 +1,6 @@
 "use strict";
 
-import { confirmDialog } from "../dialog.js";
+import { alertDialog, confirmDialog } from "../dialog.js";
 import { cropAsset, cropStage, inventoryAsset, toolAsset } from "./assets.js";
 import { catalogEntry, formatDuration, repairCost, reservedSlots } from "./rules.js";
 import { estateCommand, estateRequest, pendingEstateAction } from "./protocol.js";
@@ -111,11 +111,33 @@ export function createEstateUI(root, activities = {}) {
     });
   }
 
+  function renderGeneralStore() {
+    const snapshot = estateStore.snapshot; if (!snapshot) return;
+    show("商店");
+    const level = Number(snapshot.profile.pet_level || 0);
+    const rules = snapshot.catalog.pet_levels;
+    if (!level) {
+      sheetBody.append(note("豆豆会跟随主人。有人来偷菜时，它有 15% 概率阻止偷窃，并让对方掉落金币。"));
+      sheetBody.append(itemCard({ icon: "🐕", title: "豆豆", meta: "宠物 · Lv.1 · 防守概率 15%",
+        controls: [button("10000 金币 · 带豆豆回家",
+          () => estateCommand("estate_pet"), { className: "estate-button estate-button-gold" })] }));
+      return;
+    }
+    const current = catalogEntry(rules, level);
+    const next = catalogEntry(rules, level + 1);
+    sheetBody.append(itemCard({ icon: "🐕", title: `豆豆 Lv.${level}`,
+      meta: `偷菜防守概率 ${Math.round(current.defend_chance * 100)}%`,
+      controls: next ? [button(`${current.upgrade_price} 金币 · 升到 Lv.${level + 1}`,
+        () => estateCommand("estate_pet"), { className: "estate-button estate-button-gold" })]
+        : [button("已经达到最高等级", () => {}, { disabled: true })] }));
+    sheetBody.append(note("防守成功会保住作物，消耗对方一次偷菜机会，并把对方掉落的 1–1000 金币交给主人。"));
+  }
+
   function renderWarehouse() {
     const snapshot = estateStore.snapshot; if (!snapshot) return;
     show("仓库");
     if (!snapshot.inventory.length) {
-      sheetBody.append(note("谷仓空空的，先去商店买种子吧。"));
+      sheetBody.append(note("谷仓空空的，先去种子铺买种子吧。"));
     }
     for (const item of snapshot.inventory) {
       const controls = [];
@@ -283,14 +305,20 @@ export function createEstateUI(root, activities = {}) {
         : `${crop.name}还在生长，距离成熟 ${formatDuration(plot.ready_at - estateNow())}。`));
       sheetBody.append(button(ready ? "偷走全部收成" : "尚未成熟", async () => {
         try {
-          await estateRequest("estate_steal_crop", {
+          const result = await estateRequest("estate_steal_crop", {
             owner_username: estateStore.visit.owner_username, plot_id: plot.index,
           });
           closeSheet();
+          if (result?.outcome === "defended") {
+            void alertDialog(`豆豆发现了你！作物没有偷到，并掉落了 ${result.coins_dropped} 金币。`,
+              { title: "偷菜失败" });
+          } else {
+            void alertDialog(`成功获得 ${result.quantity} 个${result.crop_name}。`, { title: "偷菜成功" });
+          }
         } catch { /* 协议层统一提示 */ }
       }, { className: "estate-button estate-button-gold",
         disabled: !ready || limits.visitor_remaining < 1 || limits.owner_remaining < 1 }));
-      sheetBody.append(note(`你今天还能从这里偷 ${limits.visitor_remaining ?? 0} 块；`
+      sheetBody.append(note(`你今天还能在这里尝试 ${limits.visitor_remaining ?? 0} 次；`
         + `该庄园今日还可被偷 ${limits.owner_remaining ?? 0} 块。`));
       return;
     }
@@ -380,8 +408,15 @@ export function createEstateUI(root, activities = {}) {
     const rows = estateStore.notifications;
     if (!rows.length) { sheetBody.append(note("最近 30 天没有失窃记录。")); return; }
     for (const row of rows) {
-      sheetBody.append(itemCard({ title: `${row.visitor_username} 偷走了 ${row.crop_name}`,
-        meta: `数量 ${row.quantity} · ${new Date(row.created_at * 1000).toLocaleString("zh-CN")}` }));
+      const defended = row.outcome === "defended";
+      const title = row.role === "owner"
+        ? (defended ? `豆豆赶跑了 ${row.visitor_username}` : `${row.visitor_username} 偷走了 ${row.crop_name}`)
+        : (defended ? `偷取 ${row.owner_username} 的${row.crop_name}失败`
+          : `成功偷走 ${row.owner_username} 的${row.crop_name}`);
+      const meta = defended ? `豆豆守住了作物 · 掉落 ${row.coins_dropped} 金币`
+        : `数量 ${row.quantity}`;
+      sheetBody.append(itemCard({ title,
+        meta: `${meta} · ${new Date(row.created_at * 1000).toLocaleString("zh-CN")}` }));
     }
     const unread = rows.filter((row) => !row.read).map((row) => row.id);
     if (unread.length) estateCommand("estate_mark_notifications_read", { ids: unread });
@@ -390,6 +425,7 @@ export function createEstateUI(root, activities = {}) {
   /** 面板分派表：`render()` 与 `interact()` 共用同一条链。 */
   const PANELS = {
     shop: () => renderShop(),
+    general_store: () => renderGeneralStore(),
     warehouse: () => renderWarehouse(),
     fishing: () => renderFishing(),
     mining: () => renderMining(),

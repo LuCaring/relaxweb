@@ -10,6 +10,7 @@ def init_estate(conn):
             warehouse_level INTEGER NOT NULL DEFAULT 1 CHECK(warehouse_level >= 1),
             plot_count INTEGER NOT NULL DEFAULT 0 CHECK(plot_count >= 0),
             reserved_capacity INTEGER NOT NULL DEFAULT 0 CHECK(reserved_capacity >= 0),
+            pet_level INTEGER NOT NULL DEFAULT 0 CHECK(pet_level BETWEEN 0 AND 4),
             version INTEGER NOT NULL DEFAULT 1 CHECK(version >= 1),
             created_at INTEGER NOT NULL,
             updated_at INTEGER NOT NULL
@@ -18,6 +19,8 @@ def init_estate(conn):
     profile_columns = {row[1] for row in conn.execute("PRAGMA table_info(estate_profiles)")}
     if "reserved_capacity" not in profile_columns:
         conn.execute("ALTER TABLE estate_profiles ADD COLUMN reserved_capacity INTEGER NOT NULL DEFAULT 0")
+    if "pet_level" not in profile_columns:
+        conn.execute("ALTER TABLE estate_profiles ADD COLUMN pet_level INTEGER NOT NULL DEFAULT 0")
     conn.execute("""
         CREATE TABLE IF NOT EXISTS estate_plots (
             username TEXT NOT NULL COLLATE NOCASE,
@@ -130,3 +133,10 @@ def init_estate(conn):
         "CREATE INDEX IF NOT EXISTS idx_estate_thefts_unread "
         "ON estate_thefts(owner_username, read_at, created_at)"
     )
+    theft_columns = {row[1] for row in conn.execute("PRAGMA table_info(estate_thefts)")}
+    if "outcome" not in theft_columns:
+        conn.execute("ALTER TABLE estate_thefts ADD COLUMN outcome TEXT NOT NULL DEFAULT 'stolen'")
+    if "coins_dropped" not in theft_columns:
+        conn.execute("ALTER TABLE estate_thefts ADD COLUMN coins_dropped REAL NOT NULL DEFAULT 0")
+    if "visitor_read_at" not in theft_columns:
+        conn.execute("ALTER TABLE estate_thefts ADD COLUMN visitor_read_at INTEGER")

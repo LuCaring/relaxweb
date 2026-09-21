@@ -2,8 +2,11 @@
 
 const ROOT = "assets/estate/xiaopang";
 export const ESTATE_SIGN = "assets/estate/signs/estate-sign.png";
+export const PET_SPRITE = "assets/estate/pets/doudou-sheet.png";
+export const PET_SLEEP_SPRITE = "assets/estate/pets/doudou-sleep-sheet.png";
 export const BUILDING_ASSETS = {
   shop: "assets/estate/buildings/seed-shop.png",
+  generalStore: "assets/estate/buildings/store.png",
   warehouse: "assets/estate/buildings/warehouse.png",
   mining: "assets/estate/buildings/mine.png",
 };
@@ -120,6 +123,47 @@ export function drawPlayerAsset(ctx, player, tick) {
     ctx.drawImage(record.image, sx, sy, sw, sh, 0, 0, width, height);
   } else {
     ctx.drawImage(record.image, sx, sy, sw, sh, x, y, width, height);
+  }
+  ctx.restore();
+  return true;
+}
+
+export function drawPetAsset(ctx, pet, tick) {
+  const sleeping = pet.mode === "sleeping";
+  const sleepRecord = sleeping ? cachedImage(PET_SLEEP_SPRITE) : null;
+  const hasSleepSheet = Boolean(sleepRecord?.ready && !sleepRecord.failed);
+  const record = hasSleepSheet ? sleepRecord : cachedImage(PET_SPRITE);
+  if (!record?.ready || record.failed) return false;
+  const rows = { down: 0, left: 1, right: 2, up: 3 };
+  const row = hasSleepSheet ? 0 : (rows[pet.direction] ?? 0);
+  const moving = pet.walking > 0 && tick - (pet.lastMove || 0) < 160;
+  const column = hasSleepSheet ? Math.floor(tick / 650) % 4
+    : moving ? Math.floor(pet.walking * .7) % 4 : 0;
+  const cellWidth = record.image.naturalWidth / 4;
+  const regularCellHeight = record.image.naturalHeight / 4;
+  const trimsRightFrameArtifacts = !hasSleepSheet && row === rows.right;
+  // 睡觉原稿上下保留了大量透明区；统一裁掉空白并保留相同脚底线，
+  // 避免逐帧按内容裁切造成呼吸动画忽大忽小。
+  const sourceY = hasSleepSheet ? 64 : row * regularCellHeight;
+  // 原始向右行走四帧底部各有两块脱离角色的黑色残留像素；只缩短这行的
+  // 源裁切高度，目标尺寸按同比缩短，角色本身的大小与脚底锚点保持不变。
+  const sourceHeight = hasSleepSheet ? 644 : trimsRightFrameArtifacts ? 285 : regularCellHeight;
+  const baseHeight = sleeping && !hasSleepSheet ? 38 : 54;
+  const height = trimsRightFrameArtifacts
+    ? Math.round(baseHeight * sourceHeight / regularCellHeight) : baseHeight;
+  const width = Math.round(cellWidth / sourceHeight * height);
+  const x = Math.round(pet.x - width / 2);
+  const y = Math.round(pet.y + 12 - height);
+  ctx.save();
+  ctx.imageSmoothingEnabled = false;
+  ctx.drawImage(record.image, column * cellWidth, sourceY, cellWidth, sourceHeight,
+    x, y, width, height);
+  if (sleeping) {
+    const bob = Math.sin(tick / 550) * 2;
+    ctx.font = 'bold 11px "Microsoft YaHei", sans-serif';
+    ctx.fillStyle = "#fff3c2"; ctx.strokeStyle = "#42513e"; ctx.lineWidth = 2;
+    ctx.strokeText("Zzz", pet.x + 15, pet.y - 34 + bob);
+    ctx.fillText("Zzz", pet.x + 15, pet.y - 34 + bob);
   }
   ctx.restore();
   return true;

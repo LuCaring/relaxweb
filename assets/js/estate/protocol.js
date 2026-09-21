@@ -21,6 +21,7 @@ const SOUND_CUES = {
   estate_buy_tool: "shop",
   estate_upgrade_tool: "shop",
   estate_repair_tool: "shop",
+  estate_pet: "shop",
 };
 
 function requestId(prefix) {
@@ -95,6 +96,14 @@ onMessage("estate_visit_state", (data) => {
 
 onMessage("estate_steal_result", (data) => {
   settleRequest(data.request_id, { result: data.result });
+  if (data.result?.coins_dropped && estateStore.homeSnapshot) {
+    estateStore.homeSnapshot.coins = Math.max(0,
+      Number(estateStore.homeSnapshot.coins || 0) - Number(data.result.coins_dropped));
+    if (state.currentUser) {
+      state.currentUser.coins = estateStore.homeSnapshot.coins;
+      updateCoinChip();
+    }
+  }
   setVisitSnapshot({ ...data.state, players: [...estateStore.players.values()] });
 });
 

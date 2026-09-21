@@ -15,6 +15,7 @@ from estate.visits import (
     day_key, list_estates, mark_notifications_read, notifications,
     public_estate_state, steal_crop,
 )
+from chat_server import valid_estate_position
 
 
 class EstateVisitTests(unittest.TestCase):
@@ -22,7 +23,7 @@ class EstateVisitTests(unittest.TestCase):
         self.conn = sqlite3.connect(":memory:")
         self.conn.execute("CREATE TABLE users(username TEXT PRIMARY KEY, password_hash TEXT, salt TEXT, created_at INTEGER, coins REAL)")
         init_estate(self.conn)
-        for username in ("alice", "bob", "carol", "dave"):
+        for username in ("alice", "bob", "carol", "dave", "erin"):
             self.conn.execute(
                 "INSERT INTO users(username,password_hash,salt,created_at,coins) "
                 "VALUES (?,?,?,0,10000)", (username, "", ""),
@@ -51,6 +52,13 @@ class EstateVisitTests(unittest.TestCase):
             "SELECT COUNT(*) FROM estate_plots WHERE username='alice'"
         ).fetchone()[0], 12)
 
+    def test_expanded_map_position_validation(self):
+        self.assertTrue(valid_estate_position(970, 260))
+        self.assertTrue(valid_estate_position(1200, 400))
+        self.assertFalse(valid_estate_position(1100, 120))  # 商店建筑内部
+        self.assertFalse(valid_estate_position(1270, 400))  # 超出右边界
+        self.assertFalse(valid_estate_position(600, 710))   # 超出下边界
+
     def test_level_three_required_and_directory_excludes_self(self):
         self.conn.execute("UPDATE estate_profiles SET level=2 WHERE username='alice'")
         with self.assertRaises(EstateError) as error:
@@ -76,19 +84,44 @@ class EstateVisitTests(unittest.TestCase):
         mark_notifications_read(self.conn, "bob", [rows[0]["id"]], self.now)
         self.assertTrue(notifications(self.conn, "bob", self.now)[0]["read"])
 
-    def test_per_visitor_limit_is_three_and_owner_limit_is_six(self):
+    def test_per_visitor_limit_is_two_and_owner_limit_is_six(self):
         for index in range(7):
             self.mature("bob", index)
-        for index in range(3):
+        for index in range(2):
             steal_crop(self.conn, "alice", f"steal-alice-{index:03}", "bob", index, self.now)
         with self.assertRaises(EstateError) as error:
-            steal_crop(self.conn, "alice", "steal-alice-004", "bob", 3, self.now)
+            steal_crop(self.conn, "alice", "steal-alice-004", "bob", 2, self.now)
         self.assertEqual(error.exception.code, "visitor_limit")
-        for index in range(3, 6):
+        for index in range(2, 4):
             steal_crop(self.conn, "carol", f"steal-carol-{index:03}", "bob", index, self.now)
+        for index in range(4, 6):
+            steal_crop(self.conn, "dave", f"steal-dave-{index:03}", "bob", index, self.now)
         with self.assertRaises(EstateError) as error:
-            steal_crop(self.conn, "dave", "steal-dave-006", "bob", 6, self.now)
+            steal_crop(self.conn, "erin", "steal-erin-006", "bob", 6, self.now)
         self.assertEqual(error.exception.code, "owner_protected")
+
+    def test_doudou_defends_crop_and_transfers_dropped_coins(self):
+        self.mature("bob", 0)
+        self.conn.execute("UPDATE estate_profiles SET pet_level=1 WHERE username='bob'")
+
+        def adjust(conn, username, delta, kind, detail="", ref=""):
+            balance = conn.execute("SELECT coins FROM users WHERE username=?", (username,)).fetchone()[0]
+            updated = balance + delta
+            conn.execute("UPDATE users SET coins=? WHERE username=?", (updated, username))
+            return updated
+
+        rolls = iter((1, 777))
+        result = steal_crop(self.conn, "alice", "defended-0001", "bob", 0, self.now,
+                            adjust, lambda low, high: next(rolls))
+        self.assertEqual(result["outcome"], "defended")
+        self.assertEqual(result["coins_dropped"], 777)
+        self.assertEqual(self.conn.execute("SELECT coins FROM users WHERE username='alice'").fetchone()[0], 9223)
+        self.assertEqual(self.conn.execute("SELECT coins FROM users WHERE username='bob'").fetchone()[0], 10777)
+        self.assertEqual(self.conn.execute("SELECT crop_id FROM estate_plots WHERE username='bob' AND plot_index=0").fetchone()[0], "wheat")
+        owner_notice = notifications(self.conn, "bob", self.now)[0]
+        visitor_notice = notifications(self.conn, "alice", self.now)[0]
+        self.assertEqual((owner_notice["outcome"], owner_notice["role"]), ("defended", "owner"))
+        self.assertEqual(visitor_notice["role"], "visitor")
 
     def test_warehouse_full_does_not_consume_plot_or_limit(self):
         self.mature("bob", 0)

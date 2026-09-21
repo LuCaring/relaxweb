@@ -6,17 +6,18 @@ import {
   drawSignpost, drawTree, drawWater, pixelRect,
 } from "./art.js";
 import {
-  BUILDING_ASSETS, cropAsset, cropStage, drawAsset, drawPlayerAsset, ESTATE_SIGN,
+  BUILDING_ASSETS, cropAsset, cropStage, drawAsset, drawPetAsset, drawPlayerAsset, ESTATE_SIGN,
 } from "./assets.js";
 import { drawSprite, stableSprite } from "./sprites.js";
 
-const WORLD = { width: 960, height: 600 };
+const WORLD = { width: 1280, height: 720 };
 const BLOCKS = [
   { x: 32, y: 24, w: 250, h: 168 },
   { x: 675, y: 30, w: 245, h: 160 },
   { x: 24, y: 326, w: 230, h: 155 },
   { x: 680, y: 302, w: 280, h: 298 },
-  { x: 0, y: 0, w: 960, h: 18 },
+  { x: 982, y: 42, w: 266, h: 198 },
+  { x: 0, y: 0, w: 1280, h: 18 },
 ];
 const PLOT_POSITIONS = [
   [330, 108], [430, 108], [530, 108], [330, 204],
@@ -28,6 +29,7 @@ const ZONES = [
   { kind: "warehouse", label: "仓库", x: 790, y: 208 },
   { kind: "fishing", label: "静谧湖钓场", x: 650, y: 430 },
   { kind: "mining", label: "矿洞", x: 140, y: 500 },
+  { kind: "general_store", label: "商店", x: 1115, y: 266 },
 ];
 
 // 角色与交互参数：数值本身就是手感，集中命名便于调整。
@@ -113,6 +115,8 @@ function drawGround(ctx, tick) {
   }
   drawPathSurface(ctx, 0, 500, 680, 42, "horizontal");
   drawPathSurface(ctx, 250, 450, 46, 92, "vertical");
+  drawPathSurface(ctx, 618, 238, 500, 42, "horizontal");
+  drawPathSurface(ctx, 1094, 218, 46, 62, "vertical");
   drawWater(ctx, 690, 310, 270, 290, tick);
   for (let y = 316; y < 585; y += 30) {
     pixelRect(ctx, 678, y, 5, 17, "#5c9a49"); pixelRect(ctx, 684, y + 4, 3, 15, "#80b955");
@@ -202,16 +206,23 @@ function nearTarget(player, snapshot) {
   return best;
 }
 
-function collides(x, y) {
+function blockingArea(x, y, box = PLAYER_BOX) {
   if (x < EDGE.left || y < EDGE.top
-    || x > WORLD.width - EDGE.right || y > WORLD.height - EDGE.bottom) return true;
-  return BLOCKS.some((block) => x + PLAYER_BOX > block.x && x - PLAYER_BOX < block.x + block.w
-    && y + PLAYER_BOX > block.y && y - PLAYER_BOX < block.y + block.h);
+    || x > WORLD.width - EDGE.right || y > WORLD.height - EDGE.bottom) return { edge: true };
+  return BLOCKS.find((block) => x + box > block.x && x - box < block.x + block.w
+    && y + box > block.y && y - box < block.y + block.h) || null;
+}
+
+function collides(x, y, box = PLAYER_BOX) {
+  return Boolean(blockingArea(x, y, box));
 }
 
 export function createEstateMap(canvas, input, onInteract, onTarget, onMove = () => {}) {
   const ctx = canvas.getContext("2d");
   const player = { x: 275, y: 440, facing: 1, direction: "down", walking: 0, lastMove: 0 };
+  const pet = { x: 280, y: 455, direction: "right", walking: 0, lastMove: 0,
+    mode: "idle", nextDecision: performance.now() + 7000, sleepUntil: 0,
+    blockedSince: 0, detourAxis: null, detourSign: 0 };
   let frame = 0;
   let last = performance.now();
   let target = null;
@@ -239,6 +250,8 @@ export function createEstateMap(canvas, input, onInteract, onTarget, onMove = ()
       () => drawBuilding(ctx, 684, 28, 230, 164, "#dca75d", "#844237", "仓库"));
     drawBuildingAsset(ctx, "mining", { x: 24, y: 326, width: 230, height: 155 }, "矿洞", 38,
       () => drawBuilding(ctx, 24, 326, 230, 155, "#776d66", "#4d4655", "矿洞", "#b9a7bd"));
+    drawBuildingAsset(ctx, "generalStore", { x: 982, y: 42, width: 266, height: 198 }, "商店", 77,
+      () => drawBuilding(ctx, 982, 42, 266, 198, "#d29b58", "#41613a", "商店"));
     drawFence(ctx, 302, 72, 316);
     drawFence(ctx, 302, 478, 316);
     drawEstateSign(ctx, estateStore.snapshot?.profile?.username);
@@ -255,6 +268,11 @@ export function createEstateMap(canvas, input, onInteract, onTarget, onMove = ()
     for (let x = 6; x < 650; x += 72) {
       drawTree(ctx, x, 540 + (x % 3) * 3, x % 2, performance.now());
     }
+    for (let x = 22; x < WORLD.width - 30; x += 86) {
+      drawTree(ctx, x, 660 + (x % 4) * 4, x % 2, performance.now());
+    }
+    drawBush(ctx, 970, 270, true); drawBush(ctx, 1218, 274);
+    drawCrate(ctx, 1198, 240); drawCrate(ctx, 1224, 244);
     [[292, 30, 29], [317, 43, 2], [638, 64, 16], [650, 214, 93], [278, 500, 94]].forEach(([x, y, sprite]) => {
       drawSprite(ctx, "town", sprite, x, y, 2.5);
     });
@@ -278,6 +296,17 @@ export function createEstateMap(canvas, input, onInteract, onTarget, onMove = ()
       ctx.strokeRect(target.x - 24, target.y - 24, 48, 48); ctx.setLineDash([]);
     }
     if (!drawPlayerAsset(ctx, player, performance.now())) drawCharacter(ctx, player, performance.now());
+    const petLevel = Number(estateStore.snapshot?.profile?.pet_level || 0);
+    if (petLevel > 0) {
+      const visiblePet = estateStore.visit
+        ? { x: 650, y: 285, direction: "left", walking: 0, lastMove: 0 }
+        : pet;
+      drawPetAsset(ctx, visiblePet, performance.now());
+      ctx.font = 'bold 11px "Microsoft YaHei", sans-serif'; ctx.textAlign = "center";
+      ctx.lineWidth = 3; ctx.strokeStyle = "#26372d"; ctx.fillStyle = "#fff3c2";
+      ctx.strokeText(`豆豆 Lv.${petLevel}`, visiblePet.x, visiblePet.y - 49);
+      ctx.fillText(`豆豆 Lv.${petLevel}`, visiblePet.x, visiblePet.y - 49);
+    }
     ctx.setTransform(1, 0, 0, 1, 0, 0);
   }
 
@@ -294,6 +323,81 @@ export function createEstateMap(canvas, input, onInteract, onTarget, onMove = ()
       if (Math.abs(dx) > Math.abs(dy)) {
         player.facing = Math.sign(dx); player.direction = dx < 0 ? "left" : "right";
       } else player.direction = dy < 0 ? "up" : "down";
+    }
+    if (!estateStore.visit && Number(estateStore.snapshot?.profile?.pet_level || 0) > 0) {
+      const petDx = player.x - pet.x; const petDy = player.y - pet.y;
+      const distance = Math.hypot(petDx, petDy);
+      if (distance > 220) {
+        pet.mode = "following"; pet.sleepUntil = 0;
+      } else if (pet.mode === "sleeping" && now >= pet.sleepUntil) {
+        pet.mode = "idle"; pet.nextDecision = now + 4000 + Math.random() * 5000;
+      } else if (pet.mode === "idle" && now >= pet.nextDecision && distance < 160) {
+        if (Math.random() < .38) {
+          pet.mode = "sleeping"; pet.sleepUntil = now + 10000 + Math.random() * 20000;
+        } else pet.nextDecision = now + 4000 + Math.random() * 7000;
+      } else if (pet.mode !== "sleeping" && distance > 160) {
+        pet.mode = "following";
+      }
+      if (pet.mode === "following" && distance > 58) {
+        const petSpeed = Math.min(150, Math.max(92, distance * 2.2));
+        const step = Math.min(distance - 38, petSpeed * dt);
+        const moveX = petDx / distance * step; const moveY = petDy / distance * step;
+        let movedX = 0; let movedY = 0;
+        if (pet.detourAxis) {
+          const detourStep = petSpeed * dt * pet.detourSign;
+          if (pet.detourAxis === "y" && !collides(pet.x, pet.y + detourStep, 9)) {
+            pet.y += detourStep; movedY = detourStep;
+          } else if (pet.detourAxis === "x" && !collides(pet.x + detourStep, pet.y, 9)) {
+            pet.x += detourStep; movedX = detourStep;
+          }
+          if (!blockingArea(pet.x + moveX, pet.y + moveY, 9)) {
+            pet.detourAxis = null; pet.detourSign = 0;
+          }
+        } else {
+          if (moveX && !collides(pet.x + moveX, pet.y, 9)) {
+            pet.x += moveX; movedX = moveX;
+          }
+          if (moveY && !collides(pet.x, pet.y + moveY, 9)) {
+            pet.y += moveY; movedY = moveY;
+          }
+        }
+        if (!movedX && !movedY) {
+          const obstacle = blockingArea(pet.x + moveX, pet.y + moveY, 9);
+          if (obstacle && !obstacle.edge && !pet.detourAxis) {
+            const horizontalClearance = Math.min(
+              Math.abs(pet.x - (obstacle.x - 11)), Math.abs(pet.x - (obstacle.x + obstacle.w + 11)));
+            const verticalClearance = Math.min(
+              Math.abs(pet.y - (obstacle.y - 11)), Math.abs(pet.y - (obstacle.y + obstacle.h + 11)));
+            pet.detourAxis = verticalClearance <= horizontalClearance ? "y" : "x";
+            if (pet.detourAxis === "y") {
+              pet.detourSign = Math.abs(pet.y - obstacle.y) <= Math.abs(pet.y - (obstacle.y + obstacle.h)) ? -1 : 1;
+            } else {
+              pet.detourSign = Math.abs(pet.x - obstacle.x) <= Math.abs(pet.x - (obstacle.x + obstacle.w)) ? -1 : 1;
+            }
+          }
+          const detourStep = petSpeed * dt * pet.detourSign;
+          if (pet.detourAxis === "y" && !collides(pet.x, pet.y + detourStep, 9)) {
+            pet.y += detourStep; movedY = detourStep;
+          } else if (pet.detourAxis === "x" && !collides(pet.x + detourStep, pet.y, 9)) {
+            pet.x += detourStep; movedX = detourStep;
+          }
+        }
+        if (movedX || movedY) {
+          pet.blockedSince = 0; pet.walking += dt * 10; pet.lastMove = now;
+          pet.direction = Math.abs(movedX) > Math.abs(movedY)
+            ? (movedX < 0 ? "left" : "right") : (movedY < 0 ? "up" : "down");
+        } else {
+          pet.blockedSince ||= now;
+          if (now - pet.blockedSince > 4500 && distance > 420) {
+            const safeSpots = [[-42, 18], [42, 18], [0, 48], [0, -48]];
+            const safe = safeSpots.find(([ox, oy]) => !collides(player.x + ox, player.y + oy, 9));
+            if (safe) { pet.x = player.x + safe[0]; pet.y = player.y + safe[1]; }
+            pet.blockedSince = 0; pet.detourAxis = null; pet.detourSign = 0;
+          }
+        }
+      } else if (pet.mode === "following") {
+        pet.mode = "idle"; pet.nextDecision = now + 5000 + Math.random() * 7000;
+      }
     }
     if (now - lastSent >= 100) { onMove({ ...player, moving: Boolean(dx || dy) }); lastSent = now; }
     const nextTarget = nearTarget(player, estateStore.snapshot);

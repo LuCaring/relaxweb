@@ -31,5 +31,7 @@
 - 使用文件：`xiaopang/` 下的作物、鱼类、收藏品、矿物和鱼竿透明 PNG。
 - 修改情况：游戏直接使用压缩包内的 `game-ready` 规范图；运行时仅进行最近邻缩放，没有重新生成或平滑处理。
 - `signs/estate-sign.png`：用户提供的庄园木牌透明 PNG，运行时动态绘制当前用户名。
-- `buildings/seed-shop.png`、`warehouse.png`、`mine.png`：用户提供的种子铺、仓库与矿洞透明 PNG；运行时在空白招牌上绘制固定场所名称。
+- `buildings/seed-shop.png`、`warehouse.png`、`mine.png`、`store.png`：用户提供的种子铺、仓库、矿洞与商店透明 PNG；运行时在空白招牌上绘制固定场所名称。
+- `pets/doudou-sheet.png`：用户提供的宠物“豆豆”四方向透明行走图集。
+- `pets/doudou-sleep-sheet.png`：用户提供的豆豆四帧趴睡呼吸动画图集。
 - 未接入内容：人物整图及矿镐、鱼饵、矿格、炸弹和特效总览仅为参考图，未复制到运行时资源。
