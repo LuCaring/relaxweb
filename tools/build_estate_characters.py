@@ -2,7 +2,8 @@
 """Normalize the supplied estate character sheets. Requires Pillow >= 9.
 
 Sources remain untouched. Supplied PNGs live in assets/estate/characters/sources/.
-This is a nearest-neighbour import, not newly drawn 96-frame character art.
+The atlas keeps four source pixels for each logical game pixel so detailed
+supplied artwork remains crisp when the map scales it down for display.
 """
 from pathlib import Path
 import json
@@ -10,8 +11,12 @@ from PIL import Image, PngImagePlugin
 
 ROOT = Path(__file__).resolve().parent.parent
 OUTPUT = ROOT / "assets/estate/characters"
-FRAME = (36, 48)
-ANCHOR = (18, 46)
+ASSET_SCALE = 4
+LOGICAL_FRAME = (36, 48)
+LOGICAL_ANCHOR = (18, 46)
+FRAME = tuple(value * ASSET_SCALE for value in LOGICAL_FRAME)
+ANCHOR = tuple(value * ASSET_SCALE for value in LOGICAL_ANCHOR)
+SPACING = ASSET_SCALE
 ANIMATIONS = ["idle_down", "idle_up", "idle_right", "walk_down", "walk_up", "walk_right"]
 
 
@@ -94,11 +99,11 @@ CHARACTERS = {
 
 
 def clean(image):
-    """Discard low-alpha generation halos and bright red cutting marks."""
+    """Remove only unmistakable red cutting marks; preserve source antialiasing."""
     result = image.convert("RGBA")
     result.putdata([
-        (r, g, b, 255) if a >= 200 and not (r > 180 and g < 85 and b < 100)
-        else (0, 0, 0, 0)
+        (0, 0, 0, 0) if r > 220 and g < 35 and b < 45 and a > 0
+        else (r, g, b, a)
         for r, g, b, a in result.getdata()
     ])
     box = result.getbbox()
@@ -117,58 +122,61 @@ def build(character_id, spec):
     source = Image.open(spec["source"]).convert("RGBA")
     crops = [[clean(source.crop(box)) for box in row] for row in spec["boxes"]]
     # Generated sources use different scales between animation rows. Normalize
-    # each track to 44px high, sharing its scale across poses (no frame-by-frame
-    # size pumping). Compress only over-wide hair to respect the 32px envelope.
+    # each track to 176px high, sharing its scale across poses (no frame-by-frame
+    # size pumping). The 4x atlas retains facial and clothing details that were
+    # previously destroyed by the 44px/24-colour conversion.
     frames = []
     for row_index, row in enumerate(crops):
-        sy = 44 / max(c.height for c in row)
-        sx = min(sy, 32 / max(c.width for c in row))
+        sy = (44 * ASSET_SCALE) / max(c.height for c in row)
+        sx = min(sy, (32 * ASSET_SCALE) / max(c.width for c in row))
         frames.append([])
         for index, crop in enumerate(row):
-            sprite = crop.resize((round(crop.width * sx), round(crop.height * sy)), Image.Resampling.NEAREST)
+            sprite = crop.resize(
+                (round(crop.width * sx), round(crop.height * sy)),
+                Image.Resampling.LANCZOS,
+            )
             sprite = sprite.crop(sprite.getbbox())
-            height = 43 if row_index < 3 and index == 1 else max(43, sprite.height)
+            height = 43 * ASSET_SCALE if row_index < 3 and index == 1 else max(43 * ASSET_SCALE, sprite.height)
             if height != sprite.height:
-                sprite = sprite.resize((sprite.width, height), Image.Resampling.NEAREST)
+                sprite = sprite.resize((sprite.width, height), Image.Resampling.LANCZOS)
             frame = Image.new("RGBA", FRAME)
-            frame.paste(sprite, (ANCHOR[0] - sprite.width // 2, ANCHOR[1] + 1 - sprite.height))
+            frame.alpha_composite(
+                sprite,
+                (ANCHOR[0] - sprite.width // 2, ANCHOR[1] + ASSET_SCALE - sprite.height),
+            )
             frames[-1].append(frame)
 
-    # Shared 24-colour palette across every pose, with no dithering or alpha fringe.
-    pixels = [pixel[:3] for row in frames for frame in row for pixel in frame.getdata() if pixel[3]]
-    sample = Image.new("RGB", (len(pixels), 1))
-    sample.putdata(pixels)
-    palette = sample.quantize(colors=24, method=Image.Quantize.MEDIANCUT)
-    atlas = Image.new("RGBA", (295, 293))
+    atlas = Image.new("RGBA", (
+        (FRAME[0] + SPACING) * 8 - SPACING,
+        (FRAME[1] + SPACING) * len(ANIMATIONS) - SPACING,
+    ))
     for row_index, row in enumerate(frames):
         for index, frame in enumerate(row):
-            alpha = frame.getchannel("A")
-            frame = frame.convert("RGB").quantize(palette=palette, dither=Image.Dither.NONE).convert("RGBA")
-            frame.putalpha(alpha)
-            # Zero invisible RGB as well, keeping the gutters genuinely empty.
-            frame.putdata([pixel if pixel[3] else (0, 0, 0, 0) for pixel in frame.getdata()])
             frames[row_index][index] = frame
-            atlas.paste(frame, (index * 37, row_index * 49))
+            atlas.alpha_composite(frame, (index * (FRAME[0] + SPACING), row_index * (FRAME[1] + SPACING)))
 
     dest = OUTPUT / character_id
     dest.mkdir(parents=True, exist_ok=True)
     save_png(atlas, dest / "character.png")
-    # Four-times nearest-neighbour preview; crop only the transparent side padding.
-    preview = frames[0][0].resize((144, 192), Image.Resampling.NEAREST).crop((8, 0, 136, 192))
-    portrait = frames[0][0].crop((2, 1, 34, 33)).resize((64, 64), Image.Resampling.NEAREST)
+    # Preview is now a direct crop of the high-resolution frame. Portrait uses
+    # high-quality reduction instead of enlarging the old 32px crop.
+    preview = frames[0][0].crop((8, 0, 136, 192))
+    portrait = frames[0][0].crop((8, 4, 136, 132)).resize((64, 64), Image.Resampling.LANCZOS)
     save_png(preview, dest / "preview.png")
     save_png(portrait, dest / "portrait.png")
     manifest = {
         "id": character_id, "name": spec["name"], "image": "character.png",
-        "frameWidth": 36, "frameHeight": 48, "anchorX": 18, "anchorY": 46,
-        "spacing": 1, "columns": 8, "collision": {"width": 14, "height": 10},
+        "frameWidth": FRAME[0], "frameHeight": FRAME[1],
+        "anchorX": ANCHOR[0], "anchorY": ANCHOR[1],
+        "assetScale": ASSET_SCALE, "spacing": SPACING, "columns": 8,
+        "collision": {"width": 14, "height": 10},
         "animations": {name: {"row": i, "frames": 2 if name.startswith("idle") else 4,
                                "fps": 2.5 if name.startswith("idle") else 8}
                        for i, name in enumerate(ANIMATIONS)},
         "fallbacks": {"run": "walk"},
     }
     (dest / "character.json").write_text(json.dumps(manifest, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
-    print(f"Built {character_id}: 18 frames, {atlas.width}x{atlas.height}, RGBA, 24 colours")
+    print(f"Built {character_id}: 18 frames, {atlas.width}x{atlas.height}, high-resolution RGBA")
 
 
 if __name__ == "__main__":

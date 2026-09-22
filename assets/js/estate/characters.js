@@ -22,8 +22,11 @@ export function loadCharacter(id) {
       const response = await fetch(characterAsset(safeId, "character.json"));
       if (!response.ok) throw new Error("角色配置加载失败");
       const manifest = await response.json();
-      if (manifest.id !== safeId || manifest.frameWidth !== 36 || manifest.frameHeight !== 48
-          || manifest.anchorX !== 18 || manifest.anchorY !== 46 || !manifest.animations?.idle_down) {
+      const assetScale = Number(manifest.assetScale || 1);
+      if (manifest.id !== safeId || manifest.frameWidth / assetScale !== 36
+          || manifest.frameHeight / assetScale !== 48
+          || manifest.anchorX / assetScale !== 18 || manifest.anchorY / assetScale !== 46
+          || !manifest.animations?.idle_down) {
         throw new Error("角色图集格式不正确");
       }
       const image = new Image();
@@ -76,12 +79,15 @@ export function drawCharacterSkin(ctx, id, player, tick, options = {}) {
   const value = cache.get(safeId)?.value;
   if (!value) return false;
   const frame = characterFrame(value.manifest, player, tick, options.animation);
+  const assetScale = Number(value.manifest.assetScale || 1);
   const scale = options.scale ?? CHARACTER_SCALE;
-  const width = Math.round(frame.width * scale); const height = Math.round(frame.height * scale);
-  const x = Math.round(player.x - frame.anchorX * scale);
-  const y = Math.round(player.y - frame.anchorY * scale);
+  const width = Math.round(frame.width / assetScale * scale);
+  const height = Math.round(frame.height / assetScale * scale);
+  const x = Math.round(player.x - frame.anchorX / assetScale * scale);
+  const y = Math.round(player.y - frame.anchorY / assetScale * scale);
   ctx.save();
-  ctx.imageSmoothingEnabled = false;
+  ctx.imageSmoothingEnabled = assetScale > 1;
+  if (assetScale > 1) ctx.imageSmoothingQuality = "high";
   if (options.shadow !== false) {
     ctx.fillStyle = "#42613a";
     ctx.fillRect(Math.round(player.x - 9 * scale), Math.round(player.y - scale), Math.round(18 * scale), Math.round(3 * scale));

@@ -22,12 +22,12 @@ print(json.dumps(estate_state(conn, 'alice', int(time.time()))))
   const { characterFrame } = await import(pathToFileURL(path.join(ROOT, 'assets/js/estate/characters.js')));
   const manifest = JSON.parse(await fs.readFile(path.join(ROOT, 'assets/estate/characters/berry/character.json')));
   assert.equal(characterFrame(manifest, { direction: 'down' }, 0).sx, 0);
-  assert.equal(characterFrame(manifest, { direction: 'down' }, 500).sx, 37);
-  assert.equal(characterFrame(manifest, { direction: 'up' }, 0).sy, 49);
-  assert.equal(characterFrame(manifest, { direction: 'left' }, 125, 'walk').sy, 245);
+  assert.equal(characterFrame(manifest, { direction: 'down' }, 500).sx, 148);
+  assert.equal(characterFrame(manifest, { direction: 'up' }, 0).sy, 196);
+  assert.equal(characterFrame(manifest, { direction: 'left' }, 125, 'walk').sy, 980);
   assert.equal(characterFrame(manifest, { direction: 'left' }, 125, 'walk').flipX, true);
-  assert.deepEqual([0,125,250,375].map(t => characterFrame(manifest, { direction: 'down' }, t, 'walk').sx), [0,37,74,111]);
-  assert.equal(characterFrame(manifest, { direction: 'up' }, 0, 'run').sy, 196);
+  assert.deepEqual([0,125,250,375].map(t => characterFrame(manifest, { direction: 'down' }, t, 'walk').sx), [0,148,296,444]);
+  assert.equal(characterFrame(manifest, { direction: 'up' }, 0, 'run').sy, 784);
   assert.equal(characterFrame(manifest, { direction: 'down' }, 0, 'harvest').sy, 0);
   const browser = await chromium.launch({ headless: true, executablePath: process.env.CHROME_PATH || '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome', args: ['--no-sandbox'] });
   try {
@@ -131,7 +131,7 @@ print(json.dumps(estate_state(conn, 'alice', int(time.time()))))
     await page.waitForFunction(() => document.querySelector('.estate-wardrobe-status').textContent.includes('已保存到账号'));
     await page.waitForFunction(() => spriteDraws.at(-1).src.includes('/steve/'));
     assert.equal(await page.locator('[data-skin-id="steve"] .estate-skin-badge').innerText(), '已穿戴');
-    assert.equal(await page.evaluate(() => spriteDraws.at(-1).smoothing), false);
+    assert.equal(await page.evaluate(() => spriteDraws.at(-1).smoothing), true);
     // Replayed action result must never override the authoritative profile.
     await respond(page, 'xiaofei', { result: { action: 'set_skin', skin_id: 'steve', replayed: true } });
     await page.waitForFunction(() => spriteDraws.at(-1).src.includes('/xiaofei/'));

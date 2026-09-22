@@ -65,7 +65,8 @@ class CharacterAssetTests(unittest.TestCase):
                 manifest = json.loads((CHARACTERS / key / 'character.json').read_text(encoding='utf-8'))
                 self.assertEqual(manifest['id'], key)
                 self.assertEqual(manifest['name'], SKINS[key]['name'])
-                self.assertEqual([manifest[k] for k in ('frameWidth', 'frameHeight', 'anchorX', 'anchorY', 'columns', 'spacing')], [36, 48, 18, 46, 8, 1])
+                self.assertEqual(manifest['assetScale'], 4)
+                self.assertEqual([manifest[k] for k in ('frameWidth', 'frameHeight', 'anchorX', 'anchorY', 'columns', 'spacing')], [144, 192, 72, 184, 8, 4])
                 self.assertEqual(manifest['collision'], {'width': 14, 'height': 10})
                 self.assertEqual(manifest['fallbacks'], {'run': 'walk'})
                 self.assertEqual(sum(a['frames'] for a in manifest['animations'].values()), 18)
@@ -76,27 +77,25 @@ class CharacterAssetTests(unittest.TestCase):
         for key in IDS:
             with self.subTest(character=key):
                 width, height, pixels = png(CHARACTERS / key / 'character.png')
-                self.assertEqual((width, height), (295, 293))
+                self.assertEqual((width, height), (1180, 1172))
                 opaque = {p for row in pixels for p in row if p[3]}
-                self.assertLessEqual(len(opaque), 24)
-                self.assertTrue(all(p[3] in (0, 255) for row in pixels for p in row))
-                self.assertNotIn((0, 0, 0, 255), opaque)
-                self.assertFalse(any(r > 180 and g < 85 and b < 100 for r, g, b, a in opaque))
+                self.assertGreater(len(opaque), 256)
+                self.assertGreater(len({p[3] for row in pixels for p in row}), 2)
                 for y, row in enumerate(pixels):
                     for x, p in enumerate(row):
-                        if y % 49 == 48 or x % 37 == 36 or x // 37 >= (2 if y // 49 < 3 else 4):
+                        if y % 196 >= 192 or x % 148 >= 144 or x // 148 >= (2 if y // 196 < 3 else 4):
                             self.assertEqual(p, (0, 0, 0, 0), (key, x, y))
                 for row in range(6):
                     for col in range(2 if row < 3 else 4):
-                        occupied = [(x, y) for y in range(48) for x in range(36) if pixels[row * 49 + y][col * 37 + x][3]]
+                        occupied = [(x, y) for y in range(192) for x in range(144) if pixels[row * 196 + y][col * 148 + x][3]]
                         self.assertTrue(occupied)
                         xs, ys = zip(*occupied)
-                        self.assertGreaterEqual(min(xs), 2)
-                        self.assertLessEqual(max(xs), 33)
+                        self.assertGreaterEqual(min(xs), 4)
+                        self.assertLessEqual(max(xs), 139)
                         self.assertGreaterEqual(min(ys), 1)
-                        self.assertEqual(max(ys), 46, (key, row, col))
-                        self.assertGreaterEqual(max(ys) - min(ys) + 1, 43)
-                        self.assertLessEqual(max(ys) - min(ys) + 1, 46)
+                        self.assertEqual(max(ys), 187, (key, row, col))
+                        self.assertGreaterEqual(max(ys) - min(ys) + 1, 172)
+                        self.assertLessEqual(max(ys) - min(ys) + 1, 188)
 
     def test_portrait_and_preview_are_transparent_rgba(self):
         for key in IDS:
@@ -105,7 +104,9 @@ class CharacterAssetTests(unittest.TestCase):
                     width, height, rows = png(CHARACTERS / key / name)
                     self.assertEqual((width, height), size)
                     alphas = {pixel[3] for row in rows for pixel in row}
-                    self.assertEqual(alphas, {0, 255})
+                    self.assertIn(0, alphas)
+                    self.assertIn(255, alphas)
+                    self.assertGreater(len(alphas), 2)
 
 
 if __name__ == '__main__':

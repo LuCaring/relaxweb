@@ -27,7 +27,7 @@
 
 ## 本次交付的素材范围
 
-八个角色各提供 18 帧最小可用集，共 144 帧；每个角色目录包含图集、JSON、64×64 透明头像和 128×192 透明正面预览。
+八个角色各提供 18 帧最小可用集，共 144 帧；每个角色目录包含 4 倍高清 RGBA 图集、JSON、64×64 透明头像和 128×192 透明正面预览。地图按高质量缩小显示，衣橱直接使用高清帧，避免低分辨率图集放大后模糊。
 
 ```text
 assets/estate/characters/<character_id>/
@@ -57,7 +57,7 @@ python -m pip install 'Pillow>=9'
 python tools/build_estate_characters.py
 ```
 
-输入为未修改的[小女孩原图](../assets/estate/xiaopang/player/character-sheet.png)，以及 `assets/estate/characters/sources/` 中史蒂夫、DVA、小小格温、杰米、小菲、威虫和小小胖的用户原稿。脚本按已核对的区域取帧；只有三方向连续帧的原稿会复用前两帧作为待机动作，左向统一镜像右向。转换会去除低 Alpha 杂点与鲜红生成边，最近邻归一化尺寸、使用共享调色板，输出固定网格。后续更精细的手工绘图可以直接替换同规格输出，无需改地图代码。
+输入为未修改的[小女孩原图](../assets/estate/xiaopang/player/character-sheet.png)，以及 `assets/estate/characters/sources/` 中史蒂夫、DVA、小小格温、杰米、小菲、威虫和小小胖的用户原稿。脚本按已核对的区域取帧；只有三方向连续帧的原稿会复用前两帧作为待机动作，左向统一镜像右向。转换只移除明确的鲜红裁切标记，保留原稿完整色彩和半透明抗锯齿边缘，并用 Lanczos 生成 4 倍高清固定网格。后续更精细的手工绘图可以直接替换同规格输出，无需改地图代码。
 
 ## 服务端协议
 
