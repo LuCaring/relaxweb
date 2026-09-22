@@ -15,6 +15,9 @@ from estate.catalog import (
 )
 
 
+COLLECTIBLE_ITEMS = frozenset(collectible_item(key) for key in FISHING_TREASURES)
+
+
 class EstateError(ValueError):
     def __init__(self, code, message):
         super().__init__(message)
@@ -200,6 +203,18 @@ def inventory_used(conn, username):
     return int(row[0] or 0)
 
 
+def normalize_collectibles(conn, username):
+    """旧存档中的同类收藏品只保留一件，立即释放重复占用的仓位。"""
+    if not COLLECTIBLE_ITEMS:
+        return
+    placeholders = ",".join("?" for _ in COLLECTIBLE_ITEMS)
+    conn.execute(
+        f"UPDATE estate_inventory SET quantity=1 "
+        f"WHERE username=? AND quantity>1 AND item_id IN ({placeholders})",
+        (username, *sorted(COLLECTIBLE_ITEMS)),
+    )
+
+
 def capacity(profile):
     try:
         return WAREHOUSE_LEVELS[profile["warehouse_level"]]["capacity"]
@@ -220,7 +235,11 @@ def change_inventory(conn, username, item_id, delta):
         (username, item_id),
     ).fetchone()
     current = int(row[0]) if row else 0
+    if item_id in COLLECTIBLE_ITEMS:
+        current = min(current, 1)
     updated = current + int(delta)
+    if item_id in COLLECTIBLE_ITEMS and delta > 0:
+        updated = 1
     if updated < 0:
         raise estate_error(("inventory_short", "库存数量不足"))
     if updated == 0:
@@ -234,7 +253,7 @@ def change_inventory(conn, username, item_id, delta):
             "ON CONFLICT(username,item_id) DO UPDATE SET quantity=excluded.quantity",
             (username, item_id, updated),
         )
-    if delta > 0 and item_id in {collectible_item(key) for key in FISHING_TREASURES}:
+    if delta > 0 and item_id in COLLECTIBLE_ITEMS:
         conn.execute("INSERT OR IGNORE INTO estate_collections VALUES (?,?)", (username, item_id))
     return updated
 
@@ -450,6 +469,7 @@ def estate_state(conn, username, now):
     """组装客户端所需的完整快照；读取本身也幂等建档并清扫过期钓鱼局。"""
     now = int(now)
     ensure_estate(conn, username, now)
+    normalize_collectibles(conn, username)
     sweep_expired_fishing(conn, username, now)
     refresh_daily_pickaxe(conn, username, now)
     fishing_daily = fishing_daily_state(conn, username, now)

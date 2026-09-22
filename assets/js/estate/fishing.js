@@ -94,6 +94,8 @@ export function openFishingGame(root, session, options = {}) {
     card.querySelector("h2").textContent = caught ? (result.catch_name || result.fish_name) : result.outcome === "snapped" ? "鱼线断了" : "鱼儿逃走了";
     card.querySelector("p").textContent = result.released
       ? "今日普通鱼获保留额度已用完，本次渔获已放归静谧湖。收集品获取不受影响。"
+      : result.duplicate_collectible
+      ? `重复收藏品，仓库中已保留 1 件 · 获得 ${result.xp_awarded} 经验`
       : caught
       ? `已放入仓库 · 获得 ${result.xp_awarded} 经验`
       : "鱼饵和耐久已经消耗，控制张力后再试一次。";

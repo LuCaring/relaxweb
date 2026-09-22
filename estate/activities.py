@@ -298,7 +298,12 @@ def finish_fishing(conn, username, request_id, session_id, trace, now):
                 catch_id = row[0].split(":", 1)[1]
                 catch = FISHING_TREASURES[catch_id]
                 item = collectible_item(catch_id)
-                payload.update({"catch_kind": "collectible", "collectible_id": catch_id})
+                duplicate = conn.execute(
+                    "SELECT 1 FROM estate_inventory WHERE username=? AND item_id=? AND quantity>0",
+                    (username, item),
+                ).fetchone() is not None
+                payload.update({"catch_kind": "collectible", "collectible_id": catch_id,
+                                "duplicate_collectible": duplicate})
                 change_inventory(conn, username, item, 1)
                 payload["level"] = award_xp(conn, username, catch["xp"])
             else:
@@ -316,7 +321,7 @@ def finish_fishing(conn, username, request_id, session_id, trace, now):
                     change_inventory(conn, username, item, 1)
                     payload["level"] = award_xp(conn, username, catch["xp"])
             payload.update({"fish_name": catch["name"], "catch_name": catch["name"],
-                            "quantity": 0 if payload.get("released") else 1,
+                            "quantity": 0 if payload.get("released") or payload.get("duplicate_collectible") else 1,
                             "xp_awarded": 0 if payload.get("released") else catch["xp"],
                             "rarity": catch["rarity"], "difficulty": catch["difficulty"]})
         conn.execute("UPDATE estate_profiles SET reserved_capacity=max(0,reserved_capacity-1) "
