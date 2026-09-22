@@ -1,0 +1,475 @@
+/* 飞行棋场景：左侧正方形棋盘 + 右侧竖排操作列；
+   桌面端沿用麻将布局：整高房间聊天栏固定在右侧。 */
+
+.ludo-page {
+    --ludo-red: #e5484d;
+    --ludo-yellow: #eda512;
+    --ludo-blue: #3a7bd5;
+    --ludo-green: #2f9e63;
+    height: auto;
+    min-height: 0;
+    padding: 12px clamp(12px, 2.6vw, 28px) 16px;
+    background: radial-gradient(ellipse at 30% 0%, #3a6f9e55, transparent 60%),
+        radial-gradient(ellipse at 90% 100%, #3d5a4c55, transparent 55%),
+        linear-gradient(160deg, #24486b, #173a5b 65%, #102c4a);
+}
+
+.ludo-table {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    min-width: 0;
+    min-height: 0;
+}
+
+.ludo-topbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 14px;
+    color: #c6d9ea;
+    font-size: 12px;
+}
+
+.ludo-topbar-info {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    letter-spacing: .05em;
+}
+
+.ludo-topbar-right {
+    display: flex;
+    flex: none;
+    align-items: center;
+    gap: 8px;
+}
+
+.ludo-page .ludo-chat-toggle {
+    color: #e9f2ff;
+    background: #ffffff16;
+    border: 1px solid #ffffff25;
+    border-radius: 8px;
+    padding: 6px 12px;
+    min-height: 32px;
+}
+
+.ludo-status {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    color: #b9cde6;
+    font-size: 11px;
+    text-align: center;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+/* ---- 主区：棋盘居左，操作列竖放在右 ---- */
+
+.ludo-main {
+    display: grid;
+    flex: 1;
+    grid-template-columns: minmax(0, 1fr) clamp(170px, 24%, 250px);
+    gap: clamp(10px, 1.8vw, 24px);
+    align-items: center;
+    min-height: 0;
+}
+
+.ludo-board-wrap {
+    display: grid;
+    place-items: center;
+    min-width: 0;
+    min-height: 0;
+}
+
+.ludo-board {
+    position: relative;
+    display: grid;
+    grid-template-rows: repeat(15, 1fr);
+    grid-template-columns: repeat(15, 1fr);
+    aspect-ratio: 1;
+    width: min(100%, calc(100dvh - 230px), 760px);
+    padding: 6px;
+    border: 1px solid #ffffff2e;
+    border-radius: 16px;
+    background: #f6f2e7;
+    box-shadow: 0 14px 40px #071a2b55, inset 0 0 0 2px #ffffff66;
+    container-type: inline-size;
+}
+
+.ludo-cell {
+    position: relative;
+    border: 1px solid #00000026;
+    border-radius: 3px;
+}
+
+.ludo-cell.c0 { background: var(--ludo-red); }
+.ludo-cell.c1 { background: var(--ludo-yellow); }
+.ludo-cell.c2 { background: var(--ludo-blue); }
+.ludo-cell.c3 { background: var(--ludo-green); }
+.ludo-cell.runway { opacity: .78; box-shadow: inset 0 0 0 2px #ffffffa8; }
+
+.ludo-cell.launch { box-shadow: inset 0 0 0 2px #ffffffd9; }
+.ludo-cell.launch::after {
+    content: "起";
+    position: absolute;
+    inset: 0;
+    display: grid;
+    place-items: center;
+    color: #fff;
+    font-size: clamp(7px, 2.6cqw, 20px);
+    font-weight: 750;
+    text-shadow: 0 1px 2px #0007;
+}
+.ludo-cell.fly::after {
+    content: "✈";
+    position: absolute;
+    inset: 0;
+    display: grid;
+    place-items: center;
+    color: #fff;
+    font-size: clamp(8px, 3cqw, 22px);
+    text-shadow: 0 1px 2px #0007;
+}
+.ludo-cell.fly-dest { box-shadow: inset 0 0 0 2px #ffffff; }
+.ludo-cell.fly-dest::after {
+    content: "◎";
+    position: absolute;
+    inset: 0;
+    display: grid;
+    place-items: center;
+    color: #fff;
+    font-size: clamp(7px, 2.8cqw, 21px);
+    text-shadow: 0 1px 2px #0007;
+}
+
+.ludo-hangar {
+    border: 2px dashed #0000002e;
+    border-radius: 10px;
+    margin: 4%;
+}
+.ludo-hangar.h0 { grid-area: 1 / 1 / 7 / 7; background: #e5484d24; border-color: #e5484d73; }
+.ludo-hangar.h1 { grid-area: 1 / 10 / 7 / 16; background: #eda51224; border-color: #eda5127a; }
+.ludo-hangar.h2 { grid-area: 10 / 10 / 16 / 16; background: #3a7bd524; border-color: #3a7bd575; }
+.ludo-hangar.h3 { grid-area: 10 / 1 / 16 / 7; background: #2f9e6324; border-color: #2f9e6373; }
+
+.ludo-center {
+    display: grid;
+    place-items: center;
+    grid-area: 7 / 7 / 10 / 10;
+    border-radius: 8px;
+    background: #ffffff;
+    box-shadow: inset 0 0 0 2px #0000001f;
+}
+.ludo-center span {
+    display: grid;
+    place-items: center;
+    width: 78%;
+    aspect-ratio: 1;
+    border-radius: 50%;
+    background: conic-gradient(var(--ludo-red) 0 25%, var(--ludo-yellow) 0 50%,
+        var(--ludo-blue) 0 75%, var(--ludo-green) 0);
+    color: #fff;
+    font-size: clamp(9px, 3.6cqw, 26px);
+    font-weight: 750;
+    text-shadow: 0 1px 3px #0008;
+}
+
+/* ---- 名牌：钉在自家机场角落 ---- */
+
+.ludo-plate {
+    position: absolute;
+    z-index: 5;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    max-width: 36%;
+    padding: 3px 8px;
+    border: 1px solid #ffffff8c;
+    border-radius: 999px;
+    background: #fffffff2;
+    box-shadow: 0 2px 8px #0b1c2c38;
+    color: #1c2b3a;
+    font-size: 11px;
+    line-height: 1.4;
+    transform: translate(-50%, -50%);
+    white-space: nowrap;
+}
+.ludo-plate.plate-0 { left: 20%; top: 31.5%; }
+.ludo-plate.plate-1 { left: 80%; top: 31.5%; }
+.ludo-plate.plate-2 { left: 80%; top: 68.5%; }
+.ludo-plate.plate-3 { left: 20%; top: 68.5%; }
+.ludo-plate.active { outline: 2px solid #ffda82; box-shadow: 0 0 14px #ffda8299; }
+.ludo-avatar {
+    width: 18px;
+    height: 18px;
+    min-width: 18px;
+    margin: 0;
+    border: 0;
+    border-radius: 50%;
+    font-size: 10px;
+}
+.ludo-plate-name {
+    min-width: 0;
+    overflow: hidden;
+    font-weight: 650;
+    text-overflow: ellipsis;
+}
+.ludo-plate-stack { color: #8a6d1d; font-variant-numeric: tabular-nums; }
+.ludo-plate-progress { color: #1f7a4d; font-weight: 700; }
+
+/* ---- 飞机棋子 ---- */
+
+.ludo-plane {
+    position: absolute;
+    z-index: 6;
+    display: grid;
+    place-items: center;
+    aspect-ratio: 1;
+    width: 5%;
+    padding: 0;
+    border: 2px solid #fff;
+    border-radius: 50%;
+    box-shadow: 0 2px 6px #00000080;
+    color: #fff;
+    font-size: clamp(7px, 2.4cqw, 16px);
+    font-weight: 750;
+    transform: translate(-50%, -50%);
+    cursor: default;
+}
+.ludo-plane.p0 { background: var(--ludo-red); }
+.ludo-plane.p1 { background: var(--ludo-yellow); }
+.ludo-plane.p2 { background: var(--ludo-blue); }
+.ludo-plane.p3 { background: var(--ludo-green); }
+.ludo-plane.can-move {
+    cursor: pointer;
+    animation: ludoPlanePulse 1.1s ease-in-out infinite;
+}
+.ludo-plane.can-move:hover { transform: translate(-50%, -50%) scale(1.18); }
+@keyframes ludoPlanePulse {
+    0%, 100% { box-shadow: 0 2px 6px #00000080, 0 0 0 0 #ffda82cc; }
+    50% { box-shadow: 0 2px 6px #00000080, 0 0 0 5px #ffda8200; }
+}
+
+/* ---- 操作列 ---- */
+
+.ludo-side {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 12px;
+    max-height: 100%;
+    padding: 14px 12px;
+    border: 1px solid #ffffff1f;
+    border-radius: 16px;
+    background: #ffffff0e;
+}
+
+.ludo-hint {
+    color: #d7e5f2;
+    font-size: 12px;
+    line-height: 1.6;
+    text-align: center;
+}
+
+.ludo-dice-box { display: grid; place-items: center; min-height: 72px; }
+
+.ludo-dice {
+    display: grid;
+    grid-template-rows: repeat(3, 1fr);
+    grid-template-columns: repeat(3, 1fr);
+    gap: 2px;
+    width: 62px;
+    aspect-ratio: 1;
+    padding: 9px;
+    border-radius: 14px;
+    background: #fff;
+    box-shadow: 0 4px 14px #071a2b66;
+}
+.ludo-dice.idle { display: grid; place-items: center; font-size: 34px; }
+.ludo-dice span { border-radius: 50%; }
+.ludo-dice span.on { background: #1c2b3a; }
+
+.ludo-btn {
+    min-height: 44px;
+    min-width: 128px;
+    padding: 10px 16px;
+    border: 1px solid #cce2ff55;
+    border-radius: 12px;
+    background: linear-gradient(#6c95c4, #426d9f);
+    box-shadow: 0 4px 0 #0b25443d;
+    color: #fff;
+    font-size: 14px;
+    font-weight: 750;
+    cursor: pointer;
+}
+.ludo-btn.primary {
+    min-height: 52px;
+    border-color: #ffebae;
+    background: linear-gradient(#ffe8a1, #ffc757);
+    box-shadow: 0 4px 0 #8e560755, 0 4px 20px #ffda8210;
+    color: #684006;
+    font-size: 16px;
+}
+.ludo-btn:disabled {
+    opacity: .42;
+    box-shadow: none;
+    cursor: default;
+}
+.ludo-btn:focus-visible { outline: 3px solid #ffdf89; outline-offset: 3px; }
+
+.ludo-plane-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    width: 100%;
+}
+
+.ludo-last {
+    max-width: 100%;
+    overflow: hidden;
+    color: #9fb7d2;
+    font-size: 11px;
+    line-height: 1.5;
+    text-align: center;
+    text-overflow: ellipsis;
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+}
+
+.ludo-page .countdown {
+    width: 100%;
+    height: 3px;
+    background: #ffffff18;
+    border-radius: 9px;
+    overflow: hidden;
+}
+.ludo-page .countdown-fill { height: 100%; background: #ffce70; }
+
+/* ---- 结算回顾 ---- */
+
+.ludo-result { color: #334155; }
+.ludo-payout-note {
+    padding: 6px 0;
+    color: #7c6a3c;
+    font-size: 12px;
+}
+.ludo-ranking {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding: 8px 0 2px;
+}
+.ludo-ranking-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 7px 10px;
+    border-radius: 10px;
+    background: #f4f6f8;
+    font-size: 13px;
+}
+.ludo-ranking-row.champion { background: #fff6dc; }
+.ludo-ranking-name { flex: none; font-weight: 700; }
+.ludo-ranking-name::before {
+    content: "●";
+    margin-right: 6px;
+    font-size: 11px;
+}
+.ludo-ranking-name.p0::before { color: var(--ludo-red); }
+.ludo-ranking-name.p1::before { color: var(--ludo-yellow); }
+.ludo-ranking-name.p2::before { color: var(--ludo-blue); }
+.ludo-ranking-name.p3::before { color: var(--ludo-green); }
+.ludo-ranking-detail {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    color: #87909a;
+    font-size: 12px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.ludo-ranking-net { font-variant-numeric: tabular-nums; font-weight: 750; }
+.ludo-ranking-net.win { color: #157a4c; }
+.ludo-ranking-net.lose { color: #c0392b; }
+.ludo-ranking-net.flat { color: #87909a; }
+
+/* ---- 暂停浮层沿用 casual 的样式；这里只补窄屏适配 ---- */
+
+/* 桌面端与麻将一致：左侧牌桌 + 右侧整高聊天栏两个独立网格列 */
+@media (min-width: 1024px) {
+    .game-in-room:has(.ludo-page) .game-workspace {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) clamp(280px, 22vw, 360px);
+        gap: 16px;
+        align-items: start;
+        width: calc(100% - 32px);
+        margin: 12px auto 8px;
+    }
+    .game-in-room:has(.ludo-page) .desktop-room-chat {
+        position: sticky;
+        top: 84px;
+        height: calc(100dvh - 100px);
+        min-height: 0;
+    }
+    .game-in-room:has(.ludo-page) .desktop-room-chat .chat-input {
+        color: #233246;
+        caret-color: #233246;
+    }
+    .game-in-room:has(.ludo-page) .desktop-room-chat .chat-input::placeholder {
+        color: #5b6675;
+    }
+    .game-in-room .ludo-page .ludo-chat-toggle { display: none; }
+    .ludo-page {
+        padding: 10px 16px 14px;
+        border: 1px solid #66a0c244;
+        border-radius: 16px;
+    }
+}
+
+@media (max-width: 1023px) {
+    .ludo-main { grid-template-columns: minmax(0, 1fr); }
+    .ludo-board { width: min(100%, calc(100dvh - 330px), 560px); }
+    .ludo-side {
+        flex-direction: row;
+        flex-wrap: wrap;
+        justify-content: center;
+        padding: 10px;
+    }
+    .ludo-dice-box { min-height: 0; }
+    .ludo-dice { width: 46px; padding: 6px; }
+    .ludo-dice.idle { font-size: 24px; }
+    .ludo-btn { min-width: 0; }
+    .ludo-plane-list { flex-direction: row; flex-wrap: wrap; justify-content: center; width: auto; }
+    .ludo-last { flex-basis: 100%; }
+    .ludo-page .countdown { width: 100px; }
+}
+
+@media (max-width: 650px) {
+    .ludo-page { padding: 8px 8px 12px; }
+    .ludo-topbar { flex-wrap: wrap; gap: 6px; font-size: 10px; }
+    .ludo-topbar-info { flex: 1; letter-spacing: 0; }
+    .ludo-status { order: 1; flex-basis: 100%; text-align: left; }
+    .ludo-board { border-radius: 12px; padding: 4px; }
+    .ludo-plate { gap: 3px; padding: 2px 6px; font-size: 9px; max-width: 40%; }
+    .ludo-avatar { width: 14px; height: 14px; min-width: 14px; font-size: 8px; }
+    .ludo-plate-stack { display: none; }
+    .ludo-btn { min-height: 40px; font-size: 13px; }
+    .ludo-btn.primary { min-height: 46px; }
+}
+
+@media (orientation: landscape) and (max-height: 540px) {
+    .ludo-page { min-height: 330px; padding: 4px 18px 6px; }
+    .ludo-board { width: min(100%, calc(100dvh - 130px), 480px); }
+    .ludo-btn { min-height: 34px; font-size: 12px; }
+    .ludo-btn.primary { min-height: 40px; }
+    .ludo-dice { width: 40px; padding: 5px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .ludo-plane.can-move { animation: none; }
+}

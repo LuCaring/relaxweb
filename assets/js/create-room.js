@@ -14,7 +14,10 @@ function draftFor(gameId) {
   if (!createDrafts.has(gameId)) {
     createDrafts.set(gameId, {
       name: "", buyin: "100", blind: "5",
-      rules: { wild: 1, bomb: 8, ace: 1, min_fan: 8, flowers: 1, chow: 1, dianpao: 1 },
+      rules: {
+        wild: 1, bomb: 8, ace: 1, min_fan: 8, flowers: 1, chow: 1, dianpao: 1,
+        launch: 6, extra_roll: 1, jump4: 1, fly12: 1, payout: "champion",
+      },
     });
   }
   return createDrafts.get(gameId);
@@ -81,6 +84,14 @@ function createRules(game, draft, details) {
       labeledSelect("吃牌", "吃牌", [[1, "开启（仅上家）"], [0, "关闭"]], draft.rules.chow, save("chow")),
       labeledSelect("点炮计法", "点炮计法", [[1, "点炮者付三份（官方）"], [0, "点炮者付一份"]], draft.rules.dianpao, save("dianpao")),
     );
+  } else if (game.id === "ludo") {
+    rules.append(
+      labeledSelect("起飞点数", "起飞点数", [[6, "掷 6 起飞（经典）"], [5, "掷 5 或 6 起飞（快节奏）"]], draft.rules.launch, save("launch")),
+      labeledSelect("掷 6 连投", "掷6连投", [[1, "开启（连掷三个 6 受罚）"], [0, "关闭"]], draft.rules.extra_roll, save("extra_roll")),
+      labeledSelect("同色跳格", "同色跳格", [[1, "开启（落在己色格跳 4 格）"], [0, "关闭"]], draft.rules.jump4, save("jump4")),
+      labeledSelect("飞行捷径", "飞行捷径", [[1, "开启（飞行格直飞 12 格）"], [0, "关闭"]], draft.rules.fly12, save("fly12")),
+      labeledSelect("金币结算", "金币结算", [["champion", "冠军通吃（每家付一份底注）"], ["rank", "按名次递增（第 2/3/4 名付 1/2/3 份）"]], draft.rules.payout, save("payout", false)),
+    );
   } else {
     const text = document.createElement("p");
     text.className = "create-rules-note";
@@ -96,6 +107,7 @@ function createDescription(game) {
   if (game.id === "mahjong") return "国标麻将需 4 人开局。自摸三家各付一份，点炮按所选计法赔付；花牌每张 1 分计入总番。荒庄不计分且庄家连庄。";
   if (game.id === "guandan") return "掼蛋需 4 人开局，隔位玩家自动组队。各自从 2 打到 A，头游方获胜升级；线上暂不支持进贡还贡。";
   if (game.id === "uno") return "UNO 至少 2 人开局。一手结束后，赢家按各家剩余牌数乘以底注收注，离桌时按筹码自动结算。";
+  if (game.id === "ludo") return "飞行棋 2–4 人开局，按加入顺序执红黄蓝绿。先送 4 架飞机到家者夺冠，其余按到达进度排名；超终点的点数从终点反弹，落点敌机全部撞回机场。";
   return "德州扑克至少 2 名有筹码的玩家开局。开局后房主可结束牌局，所有人按当前筹码结算。";
 }
 
@@ -113,6 +125,8 @@ function updateCreateSummary() {
     ? `逢人配${draft.rules.wild ? "开" : "关"} · 炸弹${draft.rules.bomb ? `×${draft.rules.bomb === 999 ? "∞" : draft.rules.bomb}` : "不翻倍"} · ${draft.rules.ace ? "严格过 A" : "宽松过 A"}`
     : game.id === "mahjong"
       ? `${draft.rules.min_fan || 0} 番起和 · 花牌${draft.rules.flowers ? "开" : "关"} · 吃牌${draft.rules.chow ? "开" : "关"} · 点炮${draft.rules.dianpao ? "包三家" : "付一份"}`
+    : game.id === "ludo"
+      ? `掷${draft.rules.launch === 5 ? "5或6" : "6"}起飞 · ${draft.rules.extra_roll ? "掷6连投" : "不连投"} · 跳格${draft.rules.jump4 ? "开" : "关"} · 飞行${draft.rules.fly12 ? "开" : "关"} · ${draft.rules.payout === "rank" ? "按名次结算" : "冠军通吃"}`
       : game.id === "holdem" ? "无限注德州扑克" : "UNO 经典规则";
   summary.querySelector(".create-summary-rules").textContent = ruleSummary;
   buyin.min = String(min);
@@ -255,6 +269,13 @@ function renderCreate() {
       flowers: Boolean(Number(draft.rules.flowers)),
       chow: Boolean(Number(draft.rules.chow)),
       dianpao_full: Boolean(Number(draft.rules.dianpao)),
+    };
+    if (game.id === "ludo") payload.rules = {
+      launch: Number(draft.rules.launch),
+      extra_roll: Boolean(Number(draft.rules.extra_roll)),
+      jump4: Boolean(Number(draft.rules.jump4)),
+      fly12: Boolean(Number(draft.rules.fly12)),
+      payout: draft.rules.payout === "rank" ? "rank" : "champion",
     };
     createError = "";
     if (send(payload)) {

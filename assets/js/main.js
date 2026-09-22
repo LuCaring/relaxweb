@@ -19,6 +19,7 @@ import "./games/holdem.js";
 import "./games/uno.js";
 import "./games/guandan.js";
 import "./games/mahjong.js";
+import "./games/ludo.js";
 import "./estate/view.js";
 
 initializeGameAudio();

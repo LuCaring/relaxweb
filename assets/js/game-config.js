@@ -41,6 +41,14 @@ export const GAME_TYPES = [
     minStartPlayers: 4,
     desc: "144 张牌吃碰杠胡，圈风门风随庄轮转，76 个常用番种、花牌计分。自摸三家各付，点炮包三家。",
   },
+  {
+    id: "ludo",
+    name: "飞行棋 · 经典竞速",
+    icon: "✈️",
+    seats: 4,
+    minStartPlayers: 2,
+    desc: "掷点起飞、同色跳格、飞行捷径、撞机回机场。先送 4 架飞机到家者获胜，可冠军通吃或按名次结算底注。",
+  },
 ];
 
 export const ROOM_GAME_TYPES = GAME_TYPES.filter((game) => game.mode !== "solo");

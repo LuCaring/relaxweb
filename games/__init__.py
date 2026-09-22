@@ -9,5 +9,6 @@ from games import holdem  # noqa: F401  导入即注册 holdem
 from games import uno  # noqa: F401  导入即注册 uno
 from games import guandan  # noqa: F401  导入即注册 guandan
 from games import mahjong  # noqa: F401  导入即注册 mahjong
+from games import ludo  # noqa: F401  导入即注册 ludo
 
 __all__ = ["BaseRoom", "ROOM_TYPES", "create_room", "register_room_type"]
