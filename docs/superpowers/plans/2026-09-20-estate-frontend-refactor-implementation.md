@@ -2,7 +2,7 @@
 
 日期：2026-09-20
 依据：`docs/superpowers/specs/2026-09-20-estate-frontend-refactor-design.md`
-分支：`feat/xiaopang-estate-phase2`
+分支：`feat/nature-estate-phase2`
 范围：`assets/js/estate/*`、`estate/catalog.py::public_catalog()`（只增字段）、庄园前端测试
 
 ## 执行原则

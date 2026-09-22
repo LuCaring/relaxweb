@@ -12,7 +12,7 @@ from config import get, get_int
 HOST = str(get("servers.auth_host", env="LIVE_AUTH_HOST", default="127.0.0.1"))
 PORT = get_int("servers.auth_port", env="LIVE_AUTH_PORT", default=8001)
 DB_FILE = str(get("database.file", env="LIVE_DB_FILE", default="users.db"))
-STREAM_USER = str(get("stream.publish_user", env="STREAM_PUBLISH_USER", default="xiaopang"))
+STREAM_USER = str(get("stream.publish_user", env="STREAM_PUBLISH_USER", default="publisher"))
 STREAM_PASS = str(get("stream.publish_password", env="STREAM_PUBLISH_PASSWORD", default=""))
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")

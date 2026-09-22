@@ -34,14 +34,14 @@ class SkinPurchaseTests(unittest.TestCase):
             for key in FISHING_TREASURES if keys is None else keys:
                 change_inventory(self.c, 'alice', collectible_item(key), 1)
     def test_default_prices_and_zero_balance_rejection(self):
-        self.assertEqual(set(SKINS), {'berry', 'steve', 'dva', 'little_gwen', 'jamie', 'xiaofei', 'weichong', 'ryu', 'malphite', 'nailong', 'xiaoxiaopang'})
+        self.assertEqual(set(SKINS), {'berry', 'steve', 'dva', 'little_gwen', 'jamie', 'xiaofei', 'weichong', 'ryu', 'malphite', 'nailong', 'collection_reward'})
         self.assertEqual(self.state()['skins']['owned'], ['berry'])
         self.assertEqual(self.state()['profile']['skin_id'], 'berry')
         for skin in NORMAL:
             self.assertEqual(SKINS[skin]['price'], 5000)
             with self.assertRaises(EstateError): self.buy(skin, user='bob')
             with self.assertRaises(EstateError): self.switch(skin, user='bob')
-        with self.assertRaises(EstateError): self.switch('xiaoxiaopang', user='bob')
+        with self.assertRaises(EstateError): self.switch('collection_reward', user='bob')
         self.assertEqual(self.state('bob')['coins'], 0)
     def test_exact_balance_and_just_short(self):
         for skin in NORMAL:
@@ -72,7 +72,7 @@ class SkinPurchaseTests(unittest.TestCase):
             with self.c:
                 self.c.execute('DELETE FROM estate_owned_skins')
                 self.c.executemany('INSERT INTO estate_owned_skins VALUES (?,?)', [('alice', k) for k in NORMAL if k != missing])
-            with self.assertRaises(EstateError): self.switch('xiaoxiaopang')
+            with self.assertRaises(EstateError): self.switch('collection_reward')
     def test_every_missing_collectible_blocks_special(self):
         for skin in NORMAL: self.buy(skin)
         for missing in FISHING_TREASURES:
@@ -80,32 +80,32 @@ class SkinPurchaseTests(unittest.TestCase):
                 self.c.execute('DELETE FROM estate_inventory')
                 self.c.execute('DELETE FROM estate_collections')
             self.collect([k for k in FISHING_TREASURES if k != missing])
-            with self.assertRaises(EstateError): self.switch('xiaoxiaopang')
+            with self.assertRaises(EstateError): self.switch('collection_reward')
     def test_unlock_after_last_collection_is_permanent_and_free(self):
         for skin in NORMAL: self.buy(skin)
         self.collect()
-        self.assertIn('xiaoxiaopang', self.state()['skins']['owned'])
+        self.assertIn('collection_reward', self.state()['skins']['owned'])
         before = self.state()['coins']
-        self.switch('xiaoxiaopang')
+        self.switch('collection_reward')
         with self.c:
             for key in FISHING_TREASURES: change_inventory(self.c, 'alice', collectible_item(key), -1)
         self.assertEqual(self.state()['coins'], before)
-        self.assertEqual(self.state()['profile']['skin_id'], 'xiaoxiaopang')
+        self.assertEqual(self.state()['profile']['skin_id'], 'collection_reward')
     def test_unlock_after_last_purchase_and_old_inventory_backfill(self):
         with self.c:
             self.c.executemany('INSERT INTO estate_inventory VALUES (?,?,1)', [('alice', collectible_item(k)) for k in FISHING_TREASURES])
         for skin in NORMAL: self.buy(skin)
-        self.assertIn('xiaoxiaopang', self.state()['skins']['owned'])
+        self.assertIn('collection_reward', self.state()['skins']['owned'])
         self.assertEqual(self.state()['coins'], 200000 - sum(SKINS[skin]['price'] for skin in NORMAL))
     def test_special_not_for_sale_and_request_conflict(self):
-        for skin in ['berry', 'xiaoxiaopang', 'xiaopang', 'rose_mage', None, [], 'missing']:
+        for skin in ['berry', 'collection_reward', 'nature', 'rose_mage', None, [], 'missing']:
             with self.assertRaises(EstateError): self.buy(skin, 'invalid-buy')
         self.buy('steve', 'same-request')
         with self.assertRaises(EstateError): self.buy('dva', 'same-request')
         self.assertEqual(self.state()['coins'], 200000 - SKINS['steve']['price'])
     def test_old_free_skin_resets_without_losing_progress(self):
         self.state()
-        with self.c: self.c.execute("UPDATE estate_profiles SET skin_id='xiaoxiaopang',xp=42 WHERE username='alice'")
+        with self.c: self.c.execute("UPDATE estate_profiles SET skin_id='collection_reward',xp=42 WHERE username='alice'")
         state = self.state()
         self.assertEqual(state['profile']['skin_id'], 'berry')
         self.assertEqual(state['profile']['xp'], 42)

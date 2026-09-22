@@ -1,6 +1,6 @@
 # 休闲庄园钓鱼、矿场与视觉升级实施计划
 
-依据：`docs/superpowers/specs/2026-09-19-xiaopang-estate-fishing-mining-visual-design.md`
+依据：`docs/superpowers/specs/2026-09-19-nature-estate-fishing-mining-visual-design.md`
 
 ## 1. 扩展目录与数据库
 

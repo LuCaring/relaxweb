@@ -1,6 +1,6 @@
 "use strict";
 
-import { CHARACTER_IDS, DEFAULT_SKIN_ID, characterAsset, drawCharacterSkin, loadCharacter, retryCharacter } from "./characters.js";
+import { DEFAULT_SKIN_ID, characterAsset, drawCharacterSkin, loadCharacter, retryCharacter } from "./characters.js";
 import { formatCoinsWhole } from "../format.js";
 import { estateRequest } from "./protocol.js";
 import { estateStore, subscribeEstate } from "./state.js";
@@ -12,7 +12,7 @@ export function createEstateWardrobe(root, { onOpen, onClose, onShop } = {}) {
   layer.className = "estate-sheet estate-wardrobe"; layer.hidden = true;
   layer.innerHTML = `
     <section role="dialog" aria-modal="true" aria-labelledby="estate-wardrobe-title" tabindex="-1">
-      <header><div><small>换个模样，继续热爱田野</small><h2 id="estate-wardrobe-title">小胖衣橱</h2></div>
+      <header><div><small>换个模样，继续热爱田野</small><h2 id="estate-wardrobe-title">角色衣橱</h2></div>
         <button class="estate-sheet-close" type="button" aria-label="关闭衣橱">×</button></header>
       <div class="estate-wardrobe-body">
         <div class="estate-fitting">
@@ -50,7 +50,7 @@ export function createEstateWardrobe(root, { onOpen, onClose, onShop } = {}) {
     if (catalog[id]?.unlock === "collection") {
       const progress = estateStore.snapshot?.skins;
       const names = (progress?.missing_collectibles || []).map(key => estateStore.snapshot.catalog.fishing_treasures?.[key]?.name || key);
-      return `解锁条件：其他皮肤全部解锁（还差 ${progress?.missing_skins?.length || 0} 套），收集品全部集齐${names.length ? `（还差：${names.join("、")}）` : "（已集齐）"}`;
+      return `解锁条件：指定皮肤（还差 ${progress?.missing_skins?.length || 0} 套），指定收集品${names.length ? `（还差：${names.join("、")}）` : "（已集齐）"}`;
     }
     return `前往商店花费 ${formatCoinsWhole(catalog[id]?.price || 0)} 金币永久解锁，再来衣橱换装`;
   }
@@ -59,7 +59,10 @@ export function createEstateWardrobe(root, { onOpen, onClose, onShop } = {}) {
     const snapshot = estateStore.snapshot;
     trigger.disabled = !snapshot || Boolean(estateStore.visit);
     catalog = snapshot?.catalog.skins || {};
-    for (const id of CHARACTER_IDS) {
+    for (const id of cards.keys()) {
+      if (!Object.hasOwn(catalog, id)) { cards.get(id).remove(); cards.delete(id); }
+    }
+    for (const id of Object.keys(catalog)) {
       const skin = Object.hasOwn(catalog, id) ? catalog[id] : null;
       if (!skin) { cards.get(id)?.remove(); cards.delete(id); continue; }
       if (!cards.has(id)) {

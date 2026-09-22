@@ -37,19 +37,19 @@ async def main():
                     charged.append(sa['result']['charged'])
                     assert sa['coins'] == total_price - steve_price
                 assert sorted(charged) == [0,steve_price]
-                await send(a, type='estate_buy_skin', request_id='special-buy-test', skin_id='xiaoxiaopang')
+                await send(a, type='estate_buy_skin', request_id='special-buy-test', skin_id='collection_reward')
                 assert (await receive(a,'estate_error'))['code'] == 'skin_not_for_sale'
                 for skin, metadata in SKINS.items():
                     if metadata['unlock'] != 'purchase' or skin == 'steve': continue
                     await send(a,type='estate_buy_skin',request_id='purchase-'+skin,skin_id=skin)
                     await asyncio.gather(receive(a,'estate_state'),receive(b,'estate_state'))
-                await send(a,type='estate_set_skin',request_id='still-locked-test',skin_id='xiaoxiaopang')
+                await send(a,type='estate_set_skin',request_id='still-locked-test',skin_id='collection_reward')
                 assert (await receive(a,'estate_error'))['code'] == 'skin_locked'
                 with server.database() as conn, conn:
                     conn.executemany('INSERT INTO estate_inventory VALUES (?,?,1)', [('alice',collectible_item(k)) for k in FISHING_TREASURES])
-                await send(a,type='estate_set_skin',request_id='special-equip-test',skin_id='xiaoxiaopang')
+                await send(a,type='estate_set_skin',request_id='special-equip-test',skin_id='collection_reward')
                 sa,sb = await asyncio.gather(receive(a,'estate_state'),receive(b,'estate_state'))
-                assert sa == sb and sa['coins'] == 0 and sa['profile']['skin_id'] == 'xiaoxiaopang'
+                assert sa == sb and sa['coins'] == 0 and sa['profile']['skin_id'] == 'collection_reward'
                 with server.database() as conn:
                     assert conn.execute("SELECT COUNT(*), SUM(amount) FROM coin_transactions WHERE kind='estate_purchase'").fetchone() == (len(normal),-total_price)
             init_db(server.database)
@@ -58,10 +58,10 @@ async def main():
                 await receive(c,'resume_success')
                 await send(c,type='get_estate')
                 saved = await receive(c,'estate_state')
-                assert saved['profile']['skin_id'] == 'xiaoxiaopang' and set(saved['skins']['owned']) == set(SKINS)
+                assert saved['profile']['skin_id'] == 'collection_reward' and set(saved['skins']['owned']) == set(SKINS)
                 await send(c,type='estate_buy_skin',request_id='purchase-steve-0',skin_id='steve')
                 replay = await receive(c,'estate_state')
-                assert replay['result']['replayed'] and replay['coins'] == 0 and replay['profile']['skin_id'] == 'xiaoxiaopang'
+                assert replay['result']['replayed'] and replay['coins'] == 0 and replay['profile']['skin_id'] == 'collection_reward'
     print('PASS skin purchase WebSocket: auth, concurrent duplicate purchase, authoritative price, ledger, collection gates, persistence and replay')
 
 if __name__ == '__main__': asyncio.run(main())

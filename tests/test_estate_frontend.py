@@ -39,7 +39,7 @@ class EstateFrontendTests(unittest.TestCase):
     def test_user_pixel_assets_are_complete_and_game_ready(self):
         from estate.catalog import CROPS, FISH, FISHING_TREASURES, MINERALS
 
-        root = ROOT / "assets/estate/xiaopang"
+        root = ROOT / "assets/estate/nature"
         mapping = json.loads((root / "mapping.json").read_text(encoding="utf-8"))
         self.assertEqual({entry["id"] for entry in mapping["crops"]}, set(CROPS))
         self.assertEqual({entry["id"] for entry in mapping["fish"]}, set(FISH))
@@ -78,7 +78,7 @@ class EstateFrontendTests(unittest.TestCase):
         attribution = self.read("assets/estate/ATTRIBUTION.md")
         self.assertIn("休闲庄园原创像素素材", attribution)
         assets = self.read("assets/js/estate/assets.js")
-        self.assertIn('const ROOT = "assets/estate/xiaopang"', assets)
+        self.assertIn('const ROOT = "assets/estate/nature"', assets)
         for function in ("cropAsset", "catchAsset", "mineralAsset", "toolAsset", "inventoryAsset", "drawPlayerAsset"):
             self.assertIn(f"function {function}", assets)
         for direction in ('down:', 'up:', 'right:'):

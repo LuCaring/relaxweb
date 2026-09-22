@@ -13,8 +13,8 @@
   },
   "stream": {
     "whep_port": 8889,
-    "path": "xiaopang",
-    "publish_user": "xiaopang",
+    "path": "live",
+    "publish_user": "publisher",
     "publish_password": "改成你自己的推流密码"
   },
   "database": {
@@ -22,5 +22,15 @@
   },
   "economy": {
     "new_user_coins": 1000
+  },
+  "estate": {
+    "collection_reward": {
+      "enabled": true,
+      "name": "珍藏旅人",
+      "description": "献给热爱探索与收集的庄园主人。",
+      "asset_id": "collection_reward",
+      "required_skins": "all",
+      "required_collectibles": "all"
+    }
   }
 }

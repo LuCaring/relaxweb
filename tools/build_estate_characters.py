@@ -50,7 +50,7 @@ def portrait_sheet():
 CHARACTERS = {
     "berry": {
         "name": "小女孩",
-        "source": ROOT / "assets/estate/xiaopang/player/character-sheet.png",
+        "source": ROOT / "assets/estate/nature/player/character-sheet.png",
         "boxes": [
             cells(111, [0, 133], 0, [0, 1]),
             cells(111, [0, 133], 0, [2, 3]),
@@ -90,9 +90,9 @@ CHARACTERS = {
         "source": OUTPUT / "sources/weichong.png",
         "boxes": directional_grid(1312, 1199, columns=4),
     },
-    "xiaoxiaopang": {
-        "name": "小小胖",
-        "source": OUTPUT / "sources/xiaoxiaopang.png",
+    "collection_reward": {
+        "name": "珍藏旅人",
+        "source": OUTPUT / "sources/collection_reward.png",
         "boxes": portrait_sheet(),
     },
 }

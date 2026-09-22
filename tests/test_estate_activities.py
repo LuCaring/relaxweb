@@ -161,15 +161,15 @@ class ActivityTests(unittest.TestCase):
         catch_id, catch = pick_fishing_catch(
             TreasureRng(), {"rarity_bonus": 1}, {"level": 3},
         )
-        self.assertEqual(catch_id, "treasure:xiaopang_underwear")
+        self.assertEqual(catch_id, "treasure:lost_underwear")
         self.assertEqual(catch["name"], "一条不知道是谁的内裤")
 
     def test_caught_collectible_is_kept_and_not_sellable(self):
         self.call(buy_tool, "alice", "buy-rod-rare", "rod", NOW, adjust_coins)
         self.call(buy, "alice", "buy-bait-rare", "bait", "worm", 1, NOW, adjust_coins)
-        rare = FISHING_TREASURES["xiaopang_underwear"]
+        rare = FISHING_TREASURES["lost_underwear"]
         with patch("estate.activities.pick_fishing_catch",
-                   return_value=("treasure:xiaopang_underwear", rare)):
+                   return_value=("treasure:lost_underwear", rare)):
             started = self.call(start_fishing, "alice", "fish-start-rare", "worm", NOW)
         result = self.call(
             finish_fishing, "alice", "fish-done-rare", started["session_id"],
@@ -178,7 +178,7 @@ class ActivityTests(unittest.TestCase):
         self.assertEqual(result["catch_kind"], "collectible")
         self.assertEqual(result["catch_name"], "一条不知道是谁的内裤")
         item = next(i for i in self.call(estate_state, "alice", NOW + 25)["inventory"]
-                    if i["id"] == "collectible:xiaopang_underwear")
+                    if i["id"] == "collectible:lost_underwear")
         self.assertFalse(item["sellable"])
 
     def test_mining_is_hidden_idempotent_and_settles(self):

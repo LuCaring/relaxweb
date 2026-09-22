@@ -464,11 +464,16 @@ def skin_state(conn, username):
         "SELECT skin_id FROM estate_owned_skins WHERE username=?", (username,)) if row[0] in SKINS}
     collected = {row[0] for row in conn.execute(
         "SELECT item_id FROM estate_collections WHERE username=?", (username,))}
-    missing_skins = [key for key in SKINS if key != "xiaoxiaopang" and key not in owned]
-    missing_collectibles = [key for key in FISHING_TREASURES if collectible_item(key) not in collected]
-    if not missing_skins and not missing_collectibles:
-        conn.execute("INSERT OR IGNORE INTO estate_owned_skins VALUES (?,?)", (username, "xiaoxiaopang"))
-        owned.add("xiaoxiaopang")
+    reward = next(((key, rule) for key, rule in SKINS.items() if rule["unlock"] == "collection"), None)
+    missing_skins, missing_collectibles = [], []
+    if reward is not None:
+        reward_id, rule = reward
+        missing_skins = [key for key in rule["required_skins"] if key not in owned]
+        missing_collectibles = [key for key in rule["required_collectibles"]
+                                if collectible_item(key) not in collected]
+        if not missing_skins and not missing_collectibles:
+            conn.execute("INSERT OR IGNORE INTO estate_owned_skins VALUES (?,?)", (username, reward_id))
+            owned.add(reward_id)
     return {"owned": sorted(owned), "missing_skins": missing_skins,
             "missing_collectibles": missing_collectibles}
 

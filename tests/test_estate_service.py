@@ -149,8 +149,8 @@ class EstateServiceTests(unittest.TestCase):
 
     def test_repeated_collectibles_only_take_one_slot_each(self):
         """同一种收藏品无论获得多少份都只占一格。"""
-        rewards = ("xiaopang_bottle", "xiaopang_button",
-                   "xiaopang_watch", "xiaopang_underwear")
+        rewards = ("message_bottle", "gold_button",
+                   "antique_watch", "lost_underwear")
         self.conn.executemany(
             "INSERT INTO estate_inventory(username,item_id,quantity) VALUES ('alice',?,?)",
             [(collectible_item(key), 40 + index * 7) for index, key in enumerate(rewards)],
@@ -178,7 +178,7 @@ class EstateServiceTests(unittest.TestCase):
         planted = self.call(plant, "alice", "plant-cap-0001", 0, "wheat", NOW)
         self.conn.execute(
             "INSERT INTO estate_inventory(username,item_id,quantity) VALUES ('alice',?,100)",
-            (collectible_item("xiaopang_bottle"),),
+            (collectible_item("message_bottle"),),
         )
         self.conn.commit()
         harvested = self.call(harvest, "alice", "harvest-cap-01", 0, planted["ready_at"])

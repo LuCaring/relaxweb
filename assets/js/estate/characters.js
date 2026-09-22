@@ -1,21 +1,35 @@
 "use strict";
 
-// Only registered, local assets can become a skin; never turn a server ID into an arbitrary URL.
-export const CHARACTER_IDS = Object.freeze([
-  "berry", "steve", "dva", "little_gwen",
-  "jamie", "xiaofei", "weichong", "ryu", "malphite", "nailong", "xiaoxiaopang",
-]);
+// The authoritative catalog selects local assets; URLs never come from user input.
 export const DEFAULT_SKIN_ID = "berry";
 export const CHARACTER_SCALE = 1.5;
 const cache = new Map();
+let characterAssets = new Map([[DEFAULT_SKIN_ID, DEFAULT_SKIN_ID]]);
+
+export function configureCharacters(catalog = {}) {
+  const next = new Map([[DEFAULT_SKIN_ID, DEFAULT_SKIN_ID]]);
+  for (const [id, skin] of Object.entries(catalog)) {
+    const asset = skin.asset_id ?? id;
+    if (/^[a-z0-9][a-z0-9_-]{0,63}$/.test(id) && typeof asset === "string"
+        && /^[a-z0-9][a-z0-9_-]{0,63}$/.test(asset)) next.set(id, asset);
+  }
+  for (const [id, asset] of characterAssets) {
+    if (next.get(id) !== asset) cache.delete(id);
+  }
+  characterAssets = next;
+}
+
+function safeCharacter(id) {
+  return characterAssets.has(id) ? id : DEFAULT_SKIN_ID;
+}
 
 export function characterAsset(id, file = "character.png") {
-  const safeId = CHARACTER_IDS.includes(id) ? id : DEFAULT_SKIN_ID;
-  return `assets/estate/characters/${safeId}/${file}`;
+  const asset = characterAssets.get(safeCharacter(id));
+  return `assets/estate/characters/${asset}/${file}`;
 }
 
 export function loadCharacter(id) {
-  const safeId = CHARACTER_IDS.includes(id) ? id : DEFAULT_SKIN_ID;
+  const safeId = safeCharacter(id);
   if (!cache.has(safeId)) {
     const record = { value: null, error: null, promise: null };
     record.promise = (async () => {
@@ -23,7 +37,7 @@ export function loadCharacter(id) {
       if (!response.ok) throw new Error("角色配置加载失败");
       const manifest = await response.json();
       const assetScale = Number(manifest.assetScale || 1);
-      if (manifest.id !== safeId || manifest.frameWidth / assetScale !== 36
+      if (manifest.id !== characterAssets.get(safeId) || manifest.frameWidth / assetScale !== 36
           || manifest.frameHeight / assetScale !== 48
           || manifest.anchorX / assetScale !== 18 || manifest.anchorY / assetScale !== 46
           || !manifest.animations?.idle_down) {
@@ -74,7 +88,7 @@ export function characterFrame(manifest, player, tick, animation) {
 }
 
 export function drawCharacterSkin(ctx, id, player, tick, options = {}) {
-  const safeId = CHARACTER_IDS.includes(id) ? id : DEFAULT_SKIN_ID;
+  const safeId = safeCharacter(id);
   if (!cache.has(safeId)) void loadCharacter(safeId).catch(() => {});
   const value = cache.get(safeId)?.value;
   if (!value) return false;

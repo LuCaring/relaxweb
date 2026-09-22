@@ -53,7 +53,7 @@ const SITE = LIVE_CONFIG.site || {};
 const CHAT_PORT = LIVE_CONFIG.chat_port || 8765;
 const STREAM = {
   whepPort: (LIVE_CONFIG.stream && LIVE_CONFIG.stream.whep_port) || 8889,
-  path: (LIVE_CONFIG.stream && LIVE_CONFIG.stream.path) || "xiaopang",
+  path: (LIVE_CONFIG.stream && LIVE_CONFIG.stream.path) || "live",
 };
 
 function applySiteConfig() {

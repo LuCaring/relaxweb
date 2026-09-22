@@ -2,7 +2,7 @@
 
 日期：2026-09-20
 依据：`docs/superpowers/specs/2026-09-20-estate-backend-refactor-design.md`
-分支：`feat/xiaopang-estate-phase2`
+分支：`feat/nature-estate-phase2`
 范围：`estate/` 包后端代码与必要的测试 import 调整
 不含：前端、`chat_server.py` 协议层、任何数值与玩法改动
 

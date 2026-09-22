@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""小胖庄园已解锁皮肤：目录、旧库迁移、持久化、幂等与经济隔离。"""
+"""休闲庄园已解锁皮肤：目录、旧库迁移、持久化、幂等与经济隔离。"""
 from contextlib import closing
 from pathlib import Path
 import sqlite3
@@ -26,7 +26,7 @@ EXPECTED_SKINS = {
     "ryu": {"name": "隆", "description": "红色头带与白色道服，带着格斗家的坚定来到庄园。"},
     "malphite": {"name": "墨菲特", "description": "岩石铠甲坚不可摧，稳稳守护庄园的每一份收获。"},
     "nailong": {"name": "奶龙", "description": "圆滚滚的金黄色小恐龙，开心地陪你打理庄园。"},
-    "xiaoxiaopang": {"name": "小小胖", "description": "黑色棉服与圆框眼镜，悠闲漫步在庄园。"},
+    "collection_reward": {"name": "珍藏旅人", "description": "献给热爱探索与收集的庄园主人。"},
 }
 
 
@@ -64,8 +64,9 @@ class EstateSkinTests(unittest.TestCase):
         self.assertEqual(initial["version"], 1)
         self.assertEqual(self.state(), initial)
         self.assertEqual(initial["catalog"]["skins"], public_catalog()["skins"])
-        self.assertEqual(initial["catalog"]["skins"], {
-            skin_id: {"id": skin_id, **metadata, "price": 0 if skin_id in ("berry", "xiaoxiaopang") else 5000, "unlock": "default" if skin_id == "berry" else "collection" if skin_id == "xiaoxiaopang" else "purchase"} for skin_id, metadata in EXPECTED_SKINS.items()
+        self.assertEqual({key: {field: value[field] for field in ("id", "name", "description", "price", "unlock")}
+                          for key, value in initial["catalog"]["skins"].items()}, {
+            skin_id: {"id": skin_id, **metadata, "price": 0 if skin_id in ("berry", "collection_reward") else 5000, "unlock": "default" if skin_id == "berry" else "collection" if skin_id == "collection_reward" else "purchase"} for skin_id, metadata in EXPECTED_SKINS.items()
         })
         initial["catalog"]["skins"]["steve"]["name"] = "客户端修改"
         self.assertEqual(public_catalog()["skins"]["steve"]["name"], "史蒂夫")
@@ -137,7 +138,7 @@ class EstateSkinTests(unittest.TestCase):
         before = self.state()
         invalid = (None, True, False, 0, 1, 1.5, float("nan"), float("inf"),
                    [], ["steve"], {}, {"skin_id": "steve"}, ("steve",), {"steve"}, b"steve", object(),
-                   "", "unknown", "Xiaopang", " steve", "steve ", "steve\x00", "__proto__",
+                   "", "unknown", "UnknownLegacySkin", " steve", "steve ", "steve\x00", "__proto__",
                    "mint", "sky", "wisteria", "farmer",
                    "'; DROP TABLE estate_profiles; --", "x" * 10000)
         for index, skin_id in enumerate(invalid):

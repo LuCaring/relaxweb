@@ -20,12 +20,12 @@ class EstateCatalogContentTests(unittest.TestCase):
         self.assertEqual(len(FISHING_TREASURES), 4)
 
     def test_rare_content_is_present_and_endgame_rare(self):
-        self.assertEqual(CROPS["xiaopang_grass"]["name"], "神奇草")
-        self.assertEqual(CROPS["xiaopang_flower"]["name"], "奇迹花")
-        self.assertGreaterEqual(CROPS["xiaopang_grass"]["unlock_level"], 6)
-        self.assertEqual(FISH["xiaopang_fish"]["name"], "神秘鱼")
-        self.assertGreaterEqual(FISH["xiaopang_fish"]["rarity"], 6)
-        underwear = FISHING_TREASURES["xiaopang_underwear"]
+        self.assertEqual(CROPS["magic_grass"]["name"], "神奇草")
+        self.assertEqual(CROPS["miracle_flower"]["name"], "奇迹花")
+        self.assertGreaterEqual(CROPS["magic_grass"]["unlock_level"], 6)
+        self.assertEqual(FISH["mystery_fish"]["name"], "神秘鱼")
+        self.assertGreaterEqual(FISH["mystery_fish"]["rarity"], 6)
+        underwear = FISHING_TREASURES["lost_underwear"]
         self.assertEqual(underwear["name"], "一条不知道是谁的内裤")
         self.assertEqual(underwear["rarity"], max(v["rarity"] for v in FISHING_TREASURES.values()))
         self.assertGreaterEqual(underwear["required_rod_level"], 3)
@@ -33,7 +33,7 @@ class EstateCatalogContentTests(unittest.TestCase):
     def test_collectibles_are_public_inventory_items(self):
         catalog = public_catalog()
         self.assertIn("fishing_treasures", catalog)
-        info = item_info("collectible:xiaopang_underwear")
+        info = item_info("collectible:lost_underwear")
         self.assertEqual(info["kind"], "collectible")
         self.assertFalse(info["sellable"])
         self.assertEqual(info["name"], "一条不知道是谁的内裤")

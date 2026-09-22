@@ -76,10 +76,10 @@ print(json.dumps(estate_state(conn, 'alice', int(time.time()))))
     }
     // Fresh-account store purchase and wardrobe navigation.
     const shop = await makePage();
-    const locked = { ...fixture, coins: stevePrice - 1, skins: { owned: ['berry'], missing_skins: ['steve'], missing_collectibles: ['xiaopang_watch', 'xiaopang_underwear'] } };
+    const locked = { ...fixture, coins: stevePrice - 1, skins: { owned: ['berry'], missing_skins: ['steve'], missing_collectibles: ['antique_watch', 'lost_underwear'] } };
     await enter(shop, locked);
     await shop.getByRole('button', { name: '打开角色衣橱' }).click();
-    await shop.locator('[data-skin-id="xiaoxiaopang"]').click();
+    await shop.locator('[data-skin-id="collection_reward"]').click();
     assert.equal(await shop.locator('.estate-equip').isDisabled(), true);
     assert.match(await shop.locator('.estate-wardrobe-status').innerText(), /旧怀表/);
     await shop.locator('[data-skin-id="steve"]').click();
@@ -100,7 +100,7 @@ print(json.dumps(estate_state(conn, 'alice', int(time.time()))))
       request_id: purchase.request_id, result: { action: 'buy_skin', skin_id: 'steve', charged: snapshot.catalog.skins.steve.price } }), { snapshot: locked, purchase });
     assert.equal(await shop.locator('[data-shop-skin="steve"] button').innerText(), '已解锁');
     assert.match(await shop.evaluate(() => spriteDraws.at(-1).src), /\/berry\//);
-    assert.equal(await shop.locator('[data-shop-skin="xiaoxiaopang"] button').isDisabled(), true);
+    assert.equal(await shop.locator('[data-shop-skin="collection_reward"] button').isDisabled(), true);
     await shop.close();
     const page = await makePage();
     await enter(page, fixture);
@@ -174,6 +174,35 @@ print(json.dumps(estate_state(conn, 'alice', int(time.time()))))
       }
       await page.keyboard.press('Escape');
     }
+    // Deployment-defined reward metadata and assets reach the shop, wardrobe and map.
+    const custom = await makePage();
+    const customSnapshot = structuredClone(fixture);
+    Object.assign(customSnapshot.catalog.skins.collection_reward, {
+      name: '星空守望者', description: '本站独有的珍藏奖励', asset_id: 'dva',
+      required_skins: ['steve'], required_collectibles: ['antique_watch'],
+    });
+    customSnapshot.profile.skin_id = 'collection_reward';
+    await enter(custom, customSnapshot);
+    await custom.waitForFunction(() => spriteDraws.at(-1).src.includes('/dva/'));
+    await custom.getByRole('button', { name: '打开角色衣橱' }).click();
+    assert.equal(await custom.locator('#estate-wardrobe-title').innerText(), '角色衣橱');
+    assert.equal(await custom.locator('[data-skin-id="collection_reward"] b').innerText(), '星空守望者');
+    assert.equal(await custom.locator('[data-skin-id="collection_reward"] small').innerText(), '本站独有的珍藏奖励');
+    assert.match(await custom.locator('[data-skin-id="collection_reward"] img').getAttribute('src'), /\/dva\/portrait.png$/);
+    assert.equal(await custom.locator('.estate-selected-name').innerText(), '星空守望者');
+    await custom.keyboard.press('Escape');
+    delete customSnapshot.catalog.skins.collection_reward;
+    customSnapshot.profile.skin_id = 'berry';
+    await enter(custom, customSnapshot);
+    await custom.getByRole('button', { name: '打开角色衣橱' }).click();
+    assert.equal(await custom.locator('[data-skin-id="collection_reward"]').count(), 0);
+    const safePath = await custom.evaluate(async () => {
+      const characters = await import('/assets/js/estate/characters.js');
+      characters.configureCharacters({invalid: {asset_id: '../outside'}});
+      return characters.characterAsset('invalid');
+    });
+    assert.equal(safePath, 'assets/estate/characters/berry/character.png');
+    await custom.close();
     // A missing image can be retried without changing the account or allowing a broken equip.
     const failure = await makePage();
     await failure.route('**/characters/xiaofei/character.png', route => route.fulfill({ status: 503 }));
@@ -221,6 +250,6 @@ print(json.dumps(estate_state(conn, 'alice', int(time.time()))))
     assert.equal(await failure.locator('.estate-wardrobe').count(), 0);
     assert.equal(await failure.evaluate(async () => (await import('/assets/js/estate/state.js')).estateStore.snapshot), null);
     assert.deepEqual(errors, []);
-    console.log('PASS: animation grid, mirror/fallback, preview/equip, server-authoritative replay, focus/input, reload, 5 layouts, asset retry, reduced motion, error/timeout, logout and teardown');
+    console.log('PASS: configurable reward metadata/assets/visibility, animation grid, mirror/fallback, preview/equip, server-authoritative replay, focus/input, reload, 5 layouts, asset retry, reduced motion, error/timeout, logout and teardown');
   } finally { await browser.close(); }
 })().catch(error => { console.error(error); process.exitCode = 1; });

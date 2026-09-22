@@ -122,7 +122,7 @@ export function createEstateUI(root, activities = {}) {
       const special = skin.unlock === "collection";
       const insufficient = snapshot.coins < skin.price;
       const missing = snapshot.skins.missing_collectibles.map(id => snapshot.catalog.fishing_treasures[id]?.name || id);
-      const meta = special ? `其他皮肤全部解锁（还差 ${snapshot.skins.missing_skins.length} 套）且集齐全部收集品${missing.length ? `：还差${missing.join("、")}` : "（收集品已集齐）"}`
+      const meta = special ? `指定皮肤（还差 ${snapshot.skins.missing_skins.length} 套）与指定收集品${missing.length ? `：还差${missing.join("、")}` : "（收集品已集齐）"}`
         : skin.unlock === "default" ? "默认皮肤 · 免费" : `${formatCoinsWhole(skin.price)} 金币 · 永久解锁`;
       const card = itemCard({ iconUrl: characterAsset(skin.id, "portrait.png"), title: skin.name, meta,
         controls: [button(owned ? "已解锁" : special ? "收集解锁" : insufficient ? `金币不足 · ${formatCoinsWhole(skin.price)}` : `${formatCoinsWhole(skin.price)} 金币 · 购买`,

@@ -1,4 +1,4 @@
-"""小胖庄园角色皮肤：购买解锁与免费切换，使用统一的账号存档与幂等动作。"""
+"""休闲庄园角色皮肤：购买解锁与免费切换，使用统一的账号存档与幂等动作。"""
 from estate.catalog import SKINS
 from estate.store import debit, estate_error, run_action, skin_state
 

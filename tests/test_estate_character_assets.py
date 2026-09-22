@@ -9,7 +9,7 @@ from estate.catalog import SKINS
 
 ROOT = Path(__file__).resolve().parent.parent
 CHARACTERS = ROOT / 'assets/estate/characters'
-IDS = tuple(SKINS)
+IDS = tuple(dict.fromkeys(skin.get("asset_id", key) for key, skin in SKINS.items()))
 
 
 def png(path):
@@ -57,12 +57,11 @@ def png(path):
 
 class CharacterAssetTests(unittest.TestCase):
     def test_all_registered_characters_have_standard_manifests(self):
-        self.assertEqual(set(SKINS), {path.parent.name for path in CHARACTERS.glob('*/character.json')})
+        self.assertTrue(set(IDS) <= {path.parent.name for path in CHARACTERS.glob('*/character.json')})
         for key in IDS:
             with self.subTest(character=key):
                 manifest = json.loads((CHARACTERS / key / 'character.json').read_text(encoding='utf-8'))
                 self.assertEqual(manifest['id'], key)
-                self.assertEqual(manifest['name'], SKINS[key]['name'])
                 self.assertEqual(manifest['assetScale'], 4)
                 self.assertEqual([manifest[k] for k in ('frameWidth', 'frameHeight', 'anchorX', 'anchorY', 'columns', 'spacing')], [144, 192, 72, 184, 8, 4])
                 self.assertEqual(manifest['collision'], {'width': 14, 'height': 10})

@@ -3,7 +3,7 @@
 日期：2026-09-20
 状态：设计已确认，等待实施计划
 适用仓库：`LuCaring/relaxweb`
-分支：`feat/xiaopang-estate-phase2`
+分支：`feat/nature-estate-phase2`
 
 ## 1. 背景与目标
 

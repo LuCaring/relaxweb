@@ -2,7 +2,7 @@
 
 ## 休闲庄园人物原画
 
-- `xiaopang/player/character-sheet.png`：用户提供的人物透明图集。
+- `nature/player/character-sheet.png`：用户提供的人物透明图集。
 - 游戏按原稿中的正面、背面与侧面行走帧实时裁切；向左行走由侧面帧镜像生成。
 - 原稿的红色像素描边属于角色设计的一部分，未作二次涂改。
 
@@ -27,8 +27,8 @@
 ## 休闲庄园原创像素素材
 
 - 作者：休闲庄园项目所有者（用户提供）
-- 来源：`xiaopang-estate-pixel-assets.zip` 与 `xiaopang-priority-assets-reviewed.zip`
-- 使用文件：`xiaopang/` 下的作物、鱼类、收藏品、矿物和鱼竿透明 PNG。
+- 来源：`nature-estate-pixel-assets.zip` 与 `nature-priority-assets-reviewed.zip`
+- 使用文件：`nature/` 下的作物、鱼类、收藏品、矿物和鱼竿透明 PNG。
 - 修改情况：游戏直接使用压缩包内的 `game-ready` 规范图；运行时仅进行最近邻缩放，没有重新生成或平滑处理。
 - `signs/estate-sign.png`：用户提供的庄园木牌透明 PNG，运行时动态绘制当前用户名。
 - `buildings/seed-shop.png`、`warehouse.png`、`mine.png`、`store.png`：用户提供的种子铺、仓库、矿洞与商店透明 PNG；运行时在空白招牌上绘制固定场所名称。

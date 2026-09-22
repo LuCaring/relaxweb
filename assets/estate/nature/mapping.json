@@ -211,7 +211,7 @@
       ]
     },
     {
-      "id": "xiaopang_grass",
+      "id": "magic_grass",
       "name": "神奇草",
       "atlas_indexes": [
         84,
@@ -221,7 +221,7 @@
       ]
     },
     {
-      "id": "xiaopang_flower",
+      "id": "miracle_flower",
       "name": "奇迹花",
       "atlas_indexes": [
         88,
@@ -358,31 +358,31 @@
       "file": "fish/cloudfin.png"
     },
     {
-      "id": "xiaopang_fish",
+      "id": "mystery_fish",
       "name": "神秘鱼",
-      "file": "fish/xiaopang_fish.png"
+      "file": "fish/mystery_fish.png"
     }
   ],
   "collectibles": [
     {
-      "id": "xiaopang_bottle",
+      "id": "message_bottle",
       "name": "神秘漂流瓶",
-      "file": "collectibles/xiaopang_bottle.png"
+      "file": "collectibles/message_bottle.png"
     },
     {
-      "id": "xiaopang_button",
+      "id": "gold_button",
       "name": "遗失的金纽扣",
-      "file": "collectibles/xiaopang_button.png"
+      "file": "collectibles/gold_button.png"
     },
     {
-      "id": "xiaopang_watch",
+      "id": "antique_watch",
       "name": "古旧怀表",
-      "file": "collectibles/xiaopang_watch.png"
+      "file": "collectibles/antique_watch.png"
     },
     {
-      "id": "xiaopang_underwear",
+      "id": "lost_underwear",
       "name": "一条不知道是谁的内裤",
-      "file": "collectibles/xiaopang_underwear.png"
+      "file": "collectibles/lost_underwear.png"
     }
   ],
   "minerals": [

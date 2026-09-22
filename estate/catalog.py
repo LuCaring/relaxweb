@@ -4,6 +4,10 @@
 成熟时间、产量或经验。首版经济基线与复核方式见 docs/estate-economy.md。
 """
 import math
+from copy import deepcopy
+
+from config import get
+from estate.customization import COLLECTION_REWARD_ID, collection_reward
 
 
 INITIAL_PLOTS = 4
@@ -23,12 +27,11 @@ SKINS = {
     "ryu": {"name": "隆", "description": "红色头带与白色道服，带着格斗家的坚定来到庄园。"},
     "malphite": {"name": "墨菲特", "description": "岩石铠甲坚不可摧，稳稳守护庄园的每一份收获。"},
     "nailong": {"name": "奶龙", "description": "圆滚滚的金黄色小恐龙，开心地陪你打理庄园。"},
-    "xiaoxiaopang": {"name": "小小胖", "description": "黑色棉服与圆框眼镜，悠闲漫步在庄园。"},
 }
 
 for _skin_id, _skin in SKINS.items():
-    _skin["price"] = 5000 if _skin_id not in ("berry", "xiaoxiaopang") else 0
-    _skin["unlock"] = "collection" if _skin_id == "xiaoxiaopang" else "default" if _skin_id == "berry" else "purchase"
+    _skin["price"] = 0 if _skin_id == "berry" else 5000
+    _skin["unlock"] = "default" if _skin_id == "berry" else "purchase"
 
 
 # --------------------------------------------------------------------------
@@ -110,8 +113,8 @@ CROPS = {
     "onion": _crop("洋葱", 530, 2593, 750, 400, 5, "🧅", "#d3a5bb"),
     "garlic": _crop("大蒜", 620, 3095, 900, 480, 5, "🧄", "#e7d9b1"),
     "sunflower": _crop("向日葵", 760, 4000, 1080, 540, 6, "🌻", "#f3c84d"),
-    "xiaopang_grass": _crop("神奇草", 1100, 5420, 1440, 720, 6, "🌿", "#64c987"),
-    "xiaopang_flower": _crop("奇迹花", 1800, 8820, 2160, 1080, 7, "🌸", "#f28fc2"),
+    "magic_grass": _crop("神奇草", 1100, 5420, 1440, 720, 6, "🌿", "#64c987"),
+    "miracle_flower": _crop("奇迹花", 1800, 8820, 2160, 1080, 7, "🌸", "#f28fc2"),
     "starlight_berry": _crop("星露果", 3200, 13280, 2880, 1440, 8, "✨", "#8dd9df"),
 }
 
@@ -199,28 +202,33 @@ FISH = {
     "tuna": _fish("蓝鳍金枪鱼", 760, 5, 76, .78, "远海"),
     "crystal_fish": _fish("玻璃鱼", 680, 5, 70, .74, "清澈湖泊"),
     "cloudfin": _fish("云鳍鱼", 1200, 6, 105, .84, "雨后云影"),
-    "xiaopang_fish": _fish("神秘鱼", 1680, 6, 135, .9, "静谧湖深处"),
+    "mystery_fish": _fish("神秘鱼", 1680, 6, 135, .9, "静谧湖深处"),
 }
 
 
 FISHING_TREASURES = {
-    "xiaopang_bottle": {
+    "message_bottle": {
         "name": "神秘漂流瓶", "rarity": 5, "xp": 45, "difficulty": .68,
         "required_rod_level": 2, "weight": 5.0, "balance_status": BALANCE_VERSION,
     },
-    "xiaopang_button": {
+    "gold_button": {
         "name": "遗失的金纽扣", "rarity": 6, "xp": 70, "difficulty": .76,
         "required_rod_level": 2, "weight": 2.4, "balance_status": BALANCE_VERSION,
     },
-    "xiaopang_watch": {
+    "antique_watch": {
         "name": "古旧怀表", "rarity": 7, "xp": 110, "difficulty": .84,
         "required_rod_level": 3, "weight": .8, "balance_status": BALANCE_VERSION,
     },
-    "xiaopang_underwear": {
+    "lost_underwear": {
         "name": "一条不知道是谁的内裤", "rarity": 8, "xp": 180, "difficulty": .92,
         "required_rod_level": 3, "weight": .18, "balance_status": BALANCE_VERSION,
     },
 }
+
+_reward = collection_reward(get("estate.collection_reward"), SKINS, FISHING_TREASURES)
+if _reward is not None:
+    SKINS[COLLECTION_REWARD_ID] = _reward
+
 
 MINERALS = {
     "stone": {"name": "石料", "sell_price": 5.0, "rarity": 1, "xp": 2},
@@ -313,7 +321,7 @@ def item_info(item_id):
 def public_catalog():
     return {
         "balance_version": BALANCE_VERSION,
-        "skins": {key: {"id": key, **value} for key, value in SKINS.items()},
+        "skins": {key: {"id": key, **deepcopy(value)} for key, value in SKINS.items()},
         "crops": {
             crop_id: {
                 "id": crop_id,

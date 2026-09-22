@@ -26,8 +26,8 @@ DEFAULTS = {
     },
     "stream": {
         "whep_port": 8889,
-        "path": "xiaopang",
-        "publish_user": "xiaopang",
+        "path": "live",
+        "publish_user": "publisher",
         "publish_password": "",
     },
     "database": {
@@ -35,6 +35,16 @@ DEFAULTS = {
     },
     "economy": {
         "new_user_coins": 1000,
+    },
+    "estate": {
+        "collection_reward": {
+            "enabled": True,
+            "name": "珍藏旅人",
+            "description": "献给热爱探索与收集的庄园主人。",
+            "asset_id": "collection_reward",
+            "required_skins": "all",
+            "required_collectibles": "all",
+        },
     },
 }
 
@@ -93,7 +103,7 @@ def client_config():
         "site": CONFIG.get("site", {}),
         "stream": {
             "whep_port": get_int("stream.whep_port", default=8889),
-            "path": get("stream.path", env="STREAM_PATH", default="xiaopang"),
+            "path": get("stream.path", env="STREAM_PATH", default="live"),
         },
         "chat_port": get_int("servers.chat_port", env="LIVE_CHAT_PORT", default=8765),
     }

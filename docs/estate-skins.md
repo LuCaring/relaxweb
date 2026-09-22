@@ -1,10 +1,10 @@
-# 小胖庄园 · 角色皮肤与素材规范
+# 休闲庄园 · 角色皮肤与素材规范
 
 ## 玩家使用
 
-进入小胖庄园，点击顶部「衣橱」（手机在顶栏右下方），选择角色；可以看正面、背面、左右方向，以及「站一会儿 / 走两步」。试穿不改变地图角色，点击「穿上这套」并收到服务端确认后才正式换装。
+进入休闲庄园，点击顶部「衣橱」（手机在顶栏右下方），选择角色；可以看正面、背面、左右方向，以及「站一会儿 / 走两步」。试穿不改变地图角色，点击「穿上这套」并收到服务端确认后才正式换装。
 
-小女孩默认免费；其余 9 套普通皮肤每套 5000 金币，购买后永久解锁。小小胖不可购买，解锁其他全部皮肤并集齐漂流瓶、金纽扣、旧怀表、内裤后自动永久解锁。旧版免费穿戴不视为购买，未解锁的装扮恢复为小女孩。
+小女孩默认免费；其余 9 套普通皮肤每套 5000 金币，购买后永久解锁。珍藏奖励不可购买，默认名称为「珍藏旅人」，默认解锁条件是解锁其他全部皮肤并集齐全部收藏品；部署者可以调整这些设置。旧版免费穿戴不视为购买，未解锁的装扮恢复为小女孩。
 
 当前角色：
 
@@ -20,7 +20,7 @@
 | `ryu` | 隆 | [图集](../assets/estate/characters/ryu/character.png) · [配置](../assets/estate/characters/ryu/character.json) |
 | `malphite` | 墨菲特 | [图集](../assets/estate/characters/malphite/character.png) · [配置](../assets/estate/characters/malphite/character.json) |
 | `nailong` | 奶龙 | [图集](../assets/estate/characters/nailong/character.png) · [配置](../assets/estate/characters/nailong/character.json) |
-| `xiaoxiaopang` | 小小胖 | [图集](../assets/estate/characters/xiaoxiaopang/character.png) · [配置](../assets/estate/characters/xiaoxiaopang/character.json) |
+| `collection_reward` | 珍藏旅人 | [图集](../assets/estate/characters/collection_reward/character.png) · [配置](../assets/estate/characters/collection_reward/character.json) |
 
 - 穿戴状态保存到当前账号的 SQLite 存档，刷新、重连、重新登录会恢复；同账号多个连接收到一致快照。
 - 已解锁皮肤切换不扣金币，不改变经验、仓库、农作物、工具、钓鱼/挖矿进度，也不因皮肤改变速度或碰撞体积。
@@ -28,9 +28,36 @@
 - 请求期间禁止重复换装；素材失败可重试；保存失败显示错误，15 秒超时释放请求状态。超时后服务端可能仍已完成换装，应重试或重新进入庄园确认，不能以本地预览作为已保存的证据。
 - 「减少动态效果」系统设置会冻结衣橱预览帧；仍可切换方向和动作。
 
-## 本次交付的素材范围
+## 自定义珍藏奖励
 
-八个角色各提供 18 帧最小可用集，共 144 帧；每个角色目录包含 4 倍高清 RGBA 图集、JSON、64×64 透明头像和 128×192 透明正面预览。地图按高质量缩小显示，衣橱直接使用高清帧，避免低分辨率图集放大后模糊。
+在本地 `config.json` 中设置下列配置，重启聊天服务并刷新页面生效。
+缺省字段使用 `config.py` 的默认值，完整示例见 `config.example.json`。
+
+```json
+{
+  "estate": {
+    "collection_reward": {
+      "enabled": true,
+      "name": "星空守望者",
+      "description": "属于这个站点的珍藏奖励。",
+      "asset_id": "steve",
+      "required_skins": ["steve", "dva"],
+      "required_collectibles": ["antique_watch", "message_bottle"]
+    }
+  }
+}
+```
+
+- `name`、`description` 是界面文案；衣橱和商店只读取服务端目录，不需修改前端代码。
+- `asset_id` 是 `assets/estate/characters/` 下的素材目录名，可以使用已有角色，也可以新增符合下述格式的四文件目录。`character.json` 的 `id` 必须等于素材目录名。界面名称以站点配置为准，不依赖素材中的 `name`。目录名仅接受小写字母、数字、下划线和连字符，不能填外部 URL 或父目录路径。
+- `required_skins`、`required_collectibles` 分别接受 `"all"` 或 ID 列表。`"all"` 表示所有普通皮肤（含默认皮肤）或所有收藏品；空列表表示没有该类要求。两类条件均满足才会永久解锁，奖励不能要求自身作为前置条件。无效 ID 和重复项会在启动时报告配置错误。
+- `enabled: false` 从目录中隐藏奖励并禁止购买或换装；原有所有权记录保留，已穿戴者恢复默认皮肤。重新启用后仍可穿戴已获得的奖励。
+- 奖励的存档 ID 固定为 `collection_reward`。改名、换素材或提高解锁条件不会撤销已获得的奖励，也不会改变金币、背包和角色属性。
+- 默认素材目录为 `collection_reward`。部署私有素材可放在被 Git 忽略的 `assets/estate/characters/local_*/` 目录，配置相应 `asset_id`；发布自己的主题包时也可使用其他目录并跟踪这些文件。
+
+## 素材范围
+
+内置十套普通/默认角色和一套珍藏奖励素材，每套提供 18 帧最小可用集；每个角色目录包含 4 倍高清 RGBA 图集、JSON、64×64 透明头像和 128×192 透明正面预览。地图按高质量缩小显示，衣橱直接使用高清帧。
 
 ```text
 assets/estate/characters/<character_id>/
@@ -40,9 +67,9 @@ assets/estate/characters/<character_id>/
   preview.png
 ```
 
-- PNG：8-bit RGBA、sRGB；Alpha 仅 0 / 255；每角色最多 24 个不透明颜色；无纯黑描边或半透明边缘。
-- 帧：36×48；脚底锚点 (18,46)；透明侧边至少 2px，顶部和底部至少 1px；内容高度 43–44px，宽度不超过 32px。
-- 图集：8 列，1px 全透明间隔；列步长 37，行步长 49；无外边距。本次六行的图集为 295×293，未使用格子全透明。
+- PNG：8-bit RGBA、sRGB，保留原图颜色和半透明抗锯齿边缘。
+- 逻辑帧为 36×48，脚底锚点 (18,46)；`assetScale: 4` 的实际帧为 144×192、锚点 (72,184)。
+- 图集为 8 列，实际透明间隔为 4px，列步长 148、行步长 196；六行图集为 1180×1172，未使用格子全透明。
 - 行序：`idle_down, idle_up, idle_right, walk_down, walk_up, walk_right`。
 - Idle：每方向 2 帧、2.5 FPS；第二帧的高度校准为 43px，保持脚底位置，产生约 1px 呼吸起伏。
 - Walk：每方向 4 帧、8 FPS；向左镜像右向。疾跑目前复用 walk 并加快播放，**没有独立 run 图帧**。
@@ -60,7 +87,7 @@ python -m pip install 'Pillow>=9'
 python tools/build_estate_characters.py
 ```
 
-输入为未修改的[小女孩原图](../assets/estate/xiaopang/player/character-sheet.png)，以及 `assets/estate/characters/sources/` 中史蒂夫、DVA、小小格温、杰米、小菲、威虫和小小胖的用户原稿。脚本按已核对的区域取帧；只有三方向连续帧的原稿会复用前两帧作为待机动作，左向统一镜像右向。转换只移除明确的鲜红裁切标记，保留原稿完整色彩和半透明抗锯齿边缘，并用 Lanczos 生成 4 倍高清固定网格。后续更精细的手工绘图可以直接替换同规格输出，无需改地图代码。
+输入为未修改的[小女孩原图](../assets/estate/nature/player/character-sheet.png)，以及 `assets/estate/characters/sources/` 中史蒂夫、DVA、小小格温、杰米、小菲、威虫和珍藏旅人的用户原稿。脚本按已核对的区域取帧；只有三方向连续帧的原稿会复用前两帧作为待机动作，左向统一镜像右向。转换只移除明确的鲜红裁切标记，保留原稿完整色彩和半透明抗锯齿边缘，并用 Lanczos 生成 4 倍高清固定网格。后续更精细的手工绘图可以直接替换同规格输出，无需改地图代码。
 
 ## 服务端协议
 
@@ -84,7 +111,7 @@ python tools/build_estate_characters.py
 
 按用户约定继续追加三方向的 run4、interact4、harvest4、mine4、fish_cast4、fish_wait2、fish_reel4，各动画独占一行、仍保持 8 列和透明空格。完整集合共 27 行、295×1322。更新 JSON 的 `animations`，从 `fallbacks` 移除已有真实动画的回退即可；非对称装备需显式绘制 left 并声明相应动画。
 
-新角色须同时注册服务端目录和客户端 `CHARACTER_IDS`，并提供完整四文件目录；不要让任意服务端字符串拼出外部素材 URL。
+新增普通角色须注册服务端目录并提供完整四文件目录；客户端从服务端目录注册本地素材，无需维护第二份角色名单。自定义珍藏奖励只需提供素材并修改站点配置。
 
 ## 验证
 

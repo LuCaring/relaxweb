@@ -1,7 +1,7 @@
 "use strict";
 import { drawCharacterSkin, DEFAULT_SKIN_ID } from "./characters.js";
 
-const ROOT = "assets/estate/xiaopang";
+const ROOT = "assets/estate/nature";
 export const ESTATE_SIGN = "assets/estate/signs/estate-sign.png";
 export const PET_SPRITE = "assets/estate/pets/doudou-sheet.png";
 export const PET_SLEEP_SPRITE = "assets/estate/pets/doudou-sleep-sheet.png";

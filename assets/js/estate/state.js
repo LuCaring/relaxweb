@@ -1,5 +1,7 @@
 "use strict";
 
+import { configureCharacters } from "./characters.js";
+
 export const estateStore = {
   snapshot: null,
   selectedPlot: null,
@@ -14,6 +16,7 @@ export const estateStore = {
 };
 
 export function setEstateSnapshot(data) {
+  configureCharacters(data.catalog?.skins);
   estateStore.snapshot = data;
   estateStore.homeSnapshot = data;
   estateStore.visit = null;
@@ -22,6 +25,7 @@ export function setEstateSnapshot(data) {
 }
 
 export function setVisitSnapshot(data) {
+  configureCharacters(data.catalog?.skins);
   estateStore.visit = data;
   estateStore.snapshot = data;
   estateStore.players = new Map((data.players || []).map((player) => [player.username, player]));
@@ -30,6 +34,7 @@ export function setVisitSnapshot(data) {
 }
 
 export function clearEstate() {
+  configureCharacters();
   estateStore.snapshot = null;
   estateStore.selectedPlot = null;
   estateStore.pending.clear();

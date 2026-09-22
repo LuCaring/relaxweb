@@ -310,6 +310,11 @@ python3 manage_invite.py list                   # 查看邀请码及使用状态
 
 ## 本地运行与开发
 
+站点标题与品牌通过 `site` 配置，直播默认路径为 `live`、推流用户名为 `publisher`。
+庄园珍藏奖励的名称、说明、素材和解锁条件通过 `estate.collection_reward` 配置，
+详见[自定义珍藏奖励](docs/estate-skins.md#自定义珍藏奖励)。
+从旧版本升级已有存档时，先按[目录标识迁移](docs/estate-id-migration.md)生成迁移副本。
+
 不配置 MediaMTX 也可以开发聊天和游戏功能：
 
 ```bash

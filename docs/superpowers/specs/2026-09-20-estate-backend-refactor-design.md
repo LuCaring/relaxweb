@@ -3,7 +3,7 @@
 日期：2026-09-20
 状态：设计已确认，等待实施计划
 适用仓库：`LuCaring/relaxweb`
-分支：`feat/xiaopang-estate-phase2`
+分支：`feat/nature-estate-phase2`
 
 ## 1. 背景与目标
 
@@ -234,5 +234,5 @@ python tests/test_admin.py
 | 常量提取改变了模拟参数 | 经济模拟测试逐位比对；不动数值，只改名 |
 | 重命名被 patch 的私有函数 | 同步更新测试 patch 路径，保持断言不变 |
 
-每一步都在 `feat/xiaopang-estate-phase2` 上单独提交；出现无法解释的
+每一步都在 `feat/nature-estate-phase2` 上单独提交；出现无法解释的
 测试失败时，回退到上一个提交再定位。

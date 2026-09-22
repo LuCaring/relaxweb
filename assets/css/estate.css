@@ -290,7 +290,6 @@ body.estate-active .game-container { width: 100%; max-width: none; height: 100dv
 .estate-skin-card[aria-pressed="true"] { background: #eef0cf; border-color: #78965d; box-shadow: inset 0 0 0 1px #78965d; }
 .estate-skin-card:disabled { cursor: wait; }
 .estate-skin-portrait { display: grid; place-items: center; flex: 0 0 56px; height: 60px; background: #f0deb9; border: 1px solid #dec89e; border-radius: 7px; overflow: hidden; }
-.estate-skin-card[data-skin-id="xiaopang"] .estate-skin-portrait { background: #d3ddd0; }
 .estate-skin-card[data-skin-id="rose_mage"] .estate-skin-portrait { background: #edcfd1; }
 .estate-skin-portrait img { width: 64px; height: 64px; image-rendering: crisp-edges; image-rendering: pixelated; }
 .estate-skin-info { display: grid; gap: 6px; min-width: 0; padding-bottom: 8px; }
