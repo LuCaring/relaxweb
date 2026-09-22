@@ -7,11 +7,11 @@ import unittest
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from estate.catalog import CROPS, crop_item, grow_seconds, seed_item
+from estate.catalog import CROPS, collectible_item, crop_item, grow_seconds, seed_item
 from estate.farming import buy, harvest, plant, sell, sell_all
 from estate.pets import buy_or_upgrade_pet
 from estate.schema import init_estate
-from estate.store import EstateError, ensure_estate, estate_state
+from estate.store import EstateError, ensure_estate, estate_state, inventory_used
 
 
 NOW = 2_000_000_000
@@ -93,7 +93,7 @@ class EstateServiceTests(unittest.TestCase):
         result = self.call(buy_or_upgrade_pet, "alice", "pet-buy-0001", NOW, adjust_coins)
         self.assertEqual((result["pet_level"], result["cost"]), (1, 10000.0))
         self.conn.execute("UPDATE users SET coins=200000 WHERE username='alice'")
-        expected = ((2, 20000.0), (3, 40000.0), (4, 100000.0))
+        expected = ((2, 10000.0), (3, 20000.0), (4, 50000.0))
         for index, pair in enumerate(expected, 2):
             result = self.call(buy_or_upgrade_pet, "alice", f"pet-upgrade-000{index}", NOW, adjust_coins)
             self.assertEqual((result["pet_level"], result["cost"]), pair)
@@ -146,6 +146,43 @@ class EstateServiceTests(unittest.TestCase):
         plot = self.call(estate_state, "alice", planted["ready_at"])["plots"][0]
         self.assertEqual(plot["crop_id"], "wheat")
         self.assertTrue(plot["mature"])
+
+    def test_repeated_collectibles_only_take_one_slot_each(self):
+        """同一种收藏品无论获得多少份都只占一格。"""
+        rewards = ("xiaopang_bottle", "xiaopang_button",
+                   "xiaopang_watch", "xiaopang_underwear")
+        self.conn.executemany(
+            "INSERT INTO estate_inventory(username,item_id,quantity) VALUES ('alice',?,?)",
+            [(collectible_item(key), 40 + index * 7) for index, key in enumerate(rewards)],
+        )
+        self.conn.commit()
+        self.assertEqual(inventory_used(self.conn, "alice"), len(rewards))
+        snapshot = self.call(estate_state, "alice", NOW)
+        self.assertEqual(snapshot["profile"]["warehouse_used"], len(rewards))
+
+    def test_ordinary_items_still_count_by_quantity(self):
+        self.conn.executemany(
+            "INSERT INTO estate_inventory(username,item_id,quantity) VALUES ('alice',?,?)",
+            (("fish:koi", 12), ("mineral:iron", 30), ("bait:worm", 5)),
+        )
+        self.conn.commit()
+        self.assertEqual(inventory_used(self.conn, "alice"), 47)
+
+    def test_collectible_stack_does_not_block_harvest(self):
+        """收藏品堆到容量上限也不该让成熟作物收不了。
+
+        收藏品不可出售，若按数量占格，重复钓到的同一种收藏品会永久占满
+        仓库，收获、挖矿和钓鱼都会因为空间不足而失败。
+        """
+        self.buy_seed()
+        planted = self.call(plant, "alice", "plant-cap-0001", 0, "wheat", NOW)
+        self.conn.execute(
+            "INSERT INTO estate_inventory(username,item_id,quantity) VALUES ('alice',?,100)",
+            (collectible_item("xiaopang_bottle"),),
+        )
+        self.conn.commit()
+        harvested = self.call(harvest, "alice", "harvest-cap-01", 0, planted["ready_at"])
+        self.assertEqual(harvested["quantity"], 1)
 
     def test_leveling_plot_and_warehouse_upgrades(self):
         self.call(ensure_estate, "alice", NOW)
