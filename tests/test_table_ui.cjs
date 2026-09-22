@@ -391,6 +391,10 @@ console.log(`PASS Python/JavaScript parity for ${fixtures.cases.length} hands an
       const rackRects = [...document.querySelectorAll('.mj-player-rack')].map(e=>e.getBoundingClientRect());
       const heads = [...document.querySelectorAll('.mj-player-head')].map(e=>e.getBoundingClientRect());
       const rivers = [...document.querySelectorAll('.mj-river')].map(e=>e.getBoundingClientRect());
+      const labelled = [...document.querySelectorAll('.mj-player-rack,.mj-player-head,.mj-river,.mj-center')]
+       .map(e=>({name: `${e.parentElement.className} > ${e.className}`, rect: e.getBoundingClientRect().toJSON()}));
+      const collisions = labelled.flatMap((a,i)=>labelled.slice(i+1)
+       .filter(b=>overlap(a.rect,b.rect)).map(b=>({a,b})));
       const chat = document.querySelector('#desktopRoomChat')?.getBoundingClientRect();
       const size = [...document.querySelectorAll('.mj-player-rack .mj-tile,.mj-river .mj-tile,.mj-corner .mj-tile')].map(e=>{
        const r=e.getBoundingClientRect(); return [Math.min(r.width,r.height),Math.max(r.width,r.height)];
@@ -403,6 +407,7 @@ console.log(`PASS Python/JavaScript parity for ${fixtures.cases.length} hands an
         ||rackRects.some((r,i)=>rackRects.slice(i+1).some(b=>overlap(r,b)))
         ||heads.some((r,i)=>heads.slice(i+1).some(b=>overlap(r,b))),
        chatOverlap: chat&&rackRects.some(r=>overlap(r,chat)),
+       collisions,
        orientations: ['top','left','right'].map(pos=>{
         const m=new DOMMatrix(getComputedStyle(document.querySelector(`.rack-${pos}`)).transform);
         return [Math.round(m.a),Math.round(m.b),Math.round(m.c),Math.round(m.d)].map(n=>n||0);
@@ -411,7 +416,7 @@ console.log(`PASS Python/JavaScript parity for ${fixtures.cases.length} hands an
      });
      assert.ok(racks.centered, `${width}px all four racks align with the centre`);
      assert.ok(racks.uniform, `${width}px concealed, exposed, river and own tiles share one size`);
-     assert.equal(racks.overlap,false,`${width}px racks, rivers and player labels do not overlap`);
+     assert.equal(racks.overlap,false,`${width}px racks, rivers and player labels do not overlap: ${JSON.stringify(racks.collisions)}`);
      assert.ok(!racks.chatOverlap, `${width}px chat stays outside all racks`);
      assert.deepEqual(racks.orientations,[[-1,0,0,-1],[0,1,-1,0],[0,-1,1,0]]);
      const workspace = await page.evaluate(() => {

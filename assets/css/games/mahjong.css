@@ -180,7 +180,8 @@
     .mj-opp-left .mj-player-flowers, .mj-opp-right .mj-player-flowers { grid-column: 2; }
 }
 @media (max-width: 650px) {
-    .mj-page { --table-tile-w: clamp(12px, 3.75vw, 23px); --river-gap: 2px; --river-offset: 6px; --rack-gap: 10px; --head-space: 52px; --hub-size: max(82px, calc(4 * var(--table-tile-w))); padding: 8px 8px 12px; }
+    /* Side player cards can occupy three rows (58px); leave room before the top rack. */
+    .mj-page { --table-tile-w: clamp(12px, 3.75vw, 23px); --river-gap: 2px; --river-offset: 6px; --rack-gap: 10px; --head-space: 64px; --hub-size: max(82px, calc(4 * var(--table-tile-w))); padding: 8px 8px 12px; }
     .mj-player-head, .mj-opp-left .mj-player-head, .mj-opp-right .mj-player-head { width: 88px; grid-template-columns: 26px 14px minmax(0, 1fr); gap: 2px; padding: 4px; }
     .mj-player-head .casual-avatar { width: 25px; height: 30px; font-size: 14px; border-radius: 5px; }
     .mj-player-name { font-size: 10px; }
