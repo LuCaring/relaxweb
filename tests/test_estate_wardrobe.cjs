@@ -7,7 +7,7 @@ const path = require('node:path');
 const { execFileSync } = require('node:child_process');
 const { pathToFileURL } = require('node:url');
 const ROOT = path.resolve(__dirname, '..');
-const fixture = JSON.parse(execFileSync(process.env.PYTHON || path.join(ROOT, '.venv/bin/python'), ['-B', '-c', `
+const fixture = JSON.parse(execFileSync(process.env.PYTHON || 'python3', ['-B', '-c', `
 import json, sqlite3, time
 from estate import init_estate, estate_state
 conn = sqlite3.connect(':memory:')
@@ -18,7 +18,9 @@ print(json.dumps(estate_state(conn, 'alice', int(time.time()))))
 `], { cwd: ROOT, encoding: 'utf8' }));
 
 (async () => {
-  fixture.skins.owned = Object.keys(fixture.catalog.skins);
+  const skinIds = Object.keys(fixture.catalog.skins);
+  const stevePrice = fixture.catalog.skins.steve.price;
+  fixture.skins.owned = skinIds;
   const { characterFrame } = await import(pathToFileURL(path.join(ROOT, 'assets/js/estate/characters.js')));
   const manifest = JSON.parse(await fs.readFile(path.join(ROOT, 'assets/estate/characters/berry/character.json')));
   assert.equal(characterFrame(manifest, { direction: 'down' }, 0).sx, 0);
@@ -74,7 +76,7 @@ print(json.dumps(estate_state(conn, 'alice', int(time.time()))))
     }
     // Fresh-account store purchase and wardrobe navigation.
     const shop = await makePage();
-    const locked = { ...fixture, coins: 19999, skins: { owned: ['berry'], missing_skins: ['steve'], missing_collectibles: ['xiaopang_watch', 'xiaopang_underwear'] } };
+    const locked = { ...fixture, coins: stevePrice - 1, skins: { owned: ['berry'], missing_skins: ['steve'], missing_collectibles: ['xiaopang_watch', 'xiaopang_underwear'] } };
     await enter(shop, locked);
     await shop.getByRole('button', { name: '打开角色衣橱' }).click();
     await shop.locator('[data-skin-id="xiaoxiaopang"]').click();
@@ -85,16 +87,17 @@ print(json.dumps(estate_state(conn, 'alice', int(time.time()))))
     assert.equal(await shop.locator('.estate-equip').innerText(), '前往商店');
     await shop.locator('.estate-equip').click();
     assert.equal(await shop.locator('.estate-sheet-title').innerText(), '商店');
-    assert.equal(await shop.locator('[data-shop-skin]').count(), 8);
+    assert.equal(await shop.locator('[data-shop-skin]').count(), skinIds.length);
     assert.equal(await shop.locator('[data-shop-skin="steve"] button').isDisabled(), true);
     assert.equal(await shop.evaluate(() => sent.filter(x => x.type === 'estate_buy_skin').length), 0);
-    await shop.evaluate(snapshot => core.handleServerMessage({ type: 'estate_state', ...snapshot, coins: 20000 }), locked);
+    await shop.evaluate(snapshot => core.handleServerMessage({ type: 'estate_state', ...snapshot,
+      coins: snapshot.catalog.skins.steve.price }), locked);
     await shop.locator('[data-shop-skin="steve"] button').click();
     const purchase = await shop.evaluate(() => sent.filter(x => x.type === 'estate_buy_skin').at(-1));
     assert.equal(purchase.skin_id, 'steve');
     await shop.evaluate(({ snapshot, purchase }) => core.handleServerMessage({ type: 'estate_state', ...snapshot,
       coins: 0, skins: { ...snapshot.skins, owned: ['berry', 'steve'] },
-      request_id: purchase.request_id, result: { action: 'buy_skin', skin_id: 'steve', charged: 20000 } }), { snapshot: locked, purchase });
+      request_id: purchase.request_id, result: { action: 'buy_skin', skin_id: 'steve', charged: snapshot.catalog.skins.steve.price } }), { snapshot: locked, purchase });
     assert.equal(await shop.locator('[data-shop-skin="steve"] button').innerText(), '已解锁');
     assert.match(await shop.evaluate(() => spriteDraws.at(-1).src), /\/berry\//);
     assert.equal(await shop.locator('[data-shop-skin="xiaoxiaopang"] button').isDisabled(), true);
@@ -103,9 +106,9 @@ print(json.dumps(estate_state(conn, 'alice', int(time.time()))))
     await enter(page, fixture);
     await page.getByRole('button', { name: '打开角色衣橱' }).click();
     await page.waitForFunction(() => document.querySelector('.estate-fitting-load').textContent === '');
-    assert.equal(await page.locator('.estate-skin-card').count(), 8);
+    assert.equal(await page.locator('.estate-skin-card').count(), skinIds.length);
     assert.equal(await page.locator('.estate-equip').isDisabled(), true);
-    for (const id of ['steve', 'dva', 'little_gwen', 'jamie', 'xiaofei', 'weichong', 'xiaoxiaopang']) {
+    for (const id of skinIds.filter(id => id !== 'berry')) {
       await page.locator(`[data-skin-id="${id}"]`).click();
       await page.waitForFunction(() => !document.querySelector('.estate-equip').disabled);
       assert.match(await page.locator('.estate-fitting-stage canvas').evaluate(c => c.toDataURL()), /^data:image\/png/);

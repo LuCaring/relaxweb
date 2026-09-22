@@ -4,7 +4,7 @@
 
 进入小胖庄园，点击顶部「衣橱」（手机在顶栏右下方），选择角色；可以看正面、背面、左右方向，以及「站一会儿 / 走两步」。试穿不改变地图角色，点击「穿上这套」并收到服务端确认后才正式换装。
 
-小女孩默认免费；其余 6 套普通皮肤每套 20000 金币，购买后永久解锁。小小胖不可购买，解锁其他全部皮肤并集齐漂流瓶、金纽扣、旧怀表、内裤后自动永久解锁。旧版免费穿戴不视为购买，未解锁的装扮恢复为小女孩。
+小女孩默认免费；其余 9 套普通皮肤每套 5000 金币，购买后永久解锁。小小胖不可购买，解锁其他全部皮肤并集齐漂流瓶、金纽扣、旧怀表、内裤后自动永久解锁。旧版免费穿戴不视为购买，未解锁的装扮恢复为小女孩。
 
 当前角色：
 
@@ -17,6 +17,9 @@
 | `jamie` | 杰米 | [图集](../assets/estate/characters/jamie/character.png) · [配置](../assets/estate/characters/jamie/character.json) |
 | `xiaofei` | 小菲 | [图集](../assets/estate/characters/xiaofei/character.png) · [配置](../assets/estate/characters/xiaofei/character.json) |
 | `weichong` | 威虫 | [图集](../assets/estate/characters/weichong/character.png) · [配置](../assets/estate/characters/weichong/character.json) |
+| `ryu` | 隆 | [图集](../assets/estate/characters/ryu/character.png) · [配置](../assets/estate/characters/ryu/character.json) |
+| `malphite` | 墨菲特 | [图集](../assets/estate/characters/malphite/character.png) · [配置](../assets/estate/characters/malphite/character.json) |
+| `nailong` | 奶龙 | [图集](../assets/estate/characters/nailong/character.png) · [配置](../assets/estate/characters/nailong/character.json) |
 | `xiaoxiaopang` | 小小胖 | [图集](../assets/estate/characters/xiaoxiaopang/character.png) · [配置](../assets/estate/characters/xiaoxiaopang/character.json) |
 
 - 穿戴状态保存到当前账号的 SQLite 存档，刷新、重连、重新登录会恢复；同账号多个连接收到一致快照。

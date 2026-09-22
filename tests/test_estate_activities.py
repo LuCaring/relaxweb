@@ -183,6 +183,7 @@ class ActivityTests(unittest.TestCase):
 
     def test_mining_is_hidden_idempotent_and_settles(self):
         self.call(buy_tool, "alice", "buy-pick-001", "pickaxe", NOW, adjust_coins)
+        initial_durability = self.call(estate_state, "alice", NOW)["tools"]["pickaxe"]["durability"]
         started = self.call(start_mining, "alice", "mine-start-01", 1, NOW)
         self.assertNotIn("board", started)
         first = self.call(mine_cell, "alice", "mine-cell-001", started["run_id"], 0, NOW)
@@ -193,7 +194,7 @@ class ActivityTests(unittest.TestCase):
         self.assertTrue(result["finished"])
         state = self.call(estate_state, "alice", NOW)
         self.assertEqual(state["profile"]["warehouse_reserved"], 0)
-        self.assertEqual(state["tools"]["pickaxe"]["durability"], 19)
+        self.assertEqual(state["tools"]["pickaxe"]["durability"], initial_durability - 1)
         with self.assertRaises(EstateError):
             self.call(mine_cell, "alice", "mine-cell-002", started["run_id"], 1, NOW)
 

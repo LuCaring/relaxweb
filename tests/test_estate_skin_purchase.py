@@ -34,23 +34,26 @@ class SkinPurchaseTests(unittest.TestCase):
             for key in FISHING_TREASURES if keys is None else keys:
                 change_inventory(self.c, 'alice', collectible_item(key), 1)
     def test_default_prices_and_zero_balance_rejection(self):
-        self.assertEqual(set(SKINS), {'berry', 'steve', 'dva', 'little_gwen', 'jamie', 'xiaofei', 'weichong', 'xiaoxiaopang'})
+        self.assertEqual(set(SKINS), {'berry', 'steve', 'dva', 'little_gwen', 'jamie', 'xiaofei', 'weichong', 'ryu', 'malphite', 'nailong', 'xiaoxiaopang'})
         self.assertEqual(self.state()['skins']['owned'], ['berry'])
         self.assertEqual(self.state()['profile']['skin_id'], 'berry')
         for skin in NORMAL:
-            self.assertEqual(SKINS[skin]['price'], 20000)
+            self.assertEqual(SKINS[skin]['price'], 5000)
             with self.assertRaises(EstateError): self.buy(skin, user='bob')
             with self.assertRaises(EstateError): self.switch(skin, user='bob')
         with self.assertRaises(EstateError): self.switch('xiaoxiaopang', user='bob')
         self.assertEqual(self.state('bob')['coins'], 0)
     def test_exact_balance_and_just_short(self):
-        with self.c: self.c.execute("UPDATE users SET coins=19999 WHERE username='alice'")
-        with self.assertRaises(EstateError): self.buy('steve')
-        self.assertNotIn('steve', self.state()['skins']['owned'])
-        with self.c: self.c.execute("UPDATE users SET coins=20000 WHERE username='alice'")
-        self.buy('steve')
-        self.assertEqual(self.state()['coins'], 0)
-        self.assertEqual(self.state()['profile']['skin_id'], 'berry')
+        for skin in NORMAL:
+            with self.subTest(skin=skin):
+                price = SKINS[skin]['price']
+                with self.c: self.c.execute("UPDATE users SET coins=? WHERE username='alice'", (price - 1,))
+                with self.assertRaises(EstateError): self.buy(skin)
+                self.assertNotIn(skin, self.state()['skins']['owned'])
+                with self.c: self.c.execute("UPDATE users SET coins=? WHERE username='alice'", (price,))
+                self.buy(skin)
+                self.assertEqual(self.state()['coins'], 0)
+                self.assertEqual(self.state()['profile']['skin_id'], 'berry')
     def test_replay_repurchase_and_switch_do_not_double_charge(self):
         self.buy('steve')
         self.switch('berry')
@@ -58,7 +61,7 @@ class SkinPurchaseTests(unittest.TestCase):
         self.assertEqual(self.state()['profile']['skin_id'], 'berry')
         self.assertEqual(self.buy('steve', 'buy-again')['charged'], 0)
         self.switch('steve', 'switch-again')
-        self.assertEqual(self.state()['coins'], 180000)
+        self.assertEqual(self.state()['coins'], 200000 - SKINS['steve']['price'])
         self.assertEqual(self.c.execute('SELECT COUNT(*) FROM ledger').fetchone()[0], 1)
         self.assertNotIn('steve', self.state('bob')['skins']['owned'])
         init_estate(self.c)
@@ -93,13 +96,13 @@ class SkinPurchaseTests(unittest.TestCase):
             self.c.executemany('INSERT INTO estate_inventory VALUES (?,?,1)', [('alice', collectible_item(k)) for k in FISHING_TREASURES])
         for skin in NORMAL: self.buy(skin)
         self.assertIn('xiaoxiaopang', self.state()['skins']['owned'])
-        self.assertEqual(self.state()['coins'], 200000 - 20000 * len(NORMAL))
+        self.assertEqual(self.state()['coins'], 200000 - sum(SKINS[skin]['price'] for skin in NORMAL))
     def test_special_not_for_sale_and_request_conflict(self):
         for skin in ['berry', 'xiaoxiaopang', 'xiaopang', 'rose_mage', None, [], 'missing']:
             with self.assertRaises(EstateError): self.buy(skin, 'invalid-buy')
         self.buy('steve', 'same-request')
         with self.assertRaises(EstateError): self.buy('dva', 'same-request')
-        self.assertEqual(self.state()['coins'], 180000)
+        self.assertEqual(self.state()['coins'], 200000 - SKINS['steve']['price'])
     def test_old_free_skin_resets_without_losing_progress(self):
         self.state()
         with self.c: self.c.execute("UPDATE estate_profiles SET skin_id='xiaoxiaopang',xp=42 WHERE username='alice'")

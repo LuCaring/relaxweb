@@ -74,6 +74,7 @@ async def main():
                                           session_id=session["session_id"], trace=winning_trace(session["pattern"]))
                     assert caught["result"]["outcome"] == "caught"
                     mining = await action(ws, "mine-start-01", "estate_start_mining", mine_level=1)
+                    initial_durability = caught["tools"]["pickaxe"]["durability"]
                     run = mining["result"]
                     cell = await action(ws, "mine-cell-001", "estate_mine_cell", run_id=run["run_id"], cell=0)
                     assert "outcome" in cell["result"]
@@ -81,7 +82,7 @@ async def main():
                     assert ended["result"]["finished"]
                     assert ended["profile"]["warehouse_reserved"] == 0
                     assert ended["tools"]["rod"]["durability"] == 19
-                    assert ended["tools"]["pickaxe"]["durability"] == 19
+                    assert ended["tools"]["pickaxe"]["durability"] == initial_durability - 1
     print("PASS fishing/mining WebSocket: tools, bait, verified catch, hidden cell and settlement")
 
 

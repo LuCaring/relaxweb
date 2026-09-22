@@ -5,12 +5,11 @@ import struct
 import unittest
 import zlib
 
+from estate.catalog import SKINS
+
 ROOT = Path(__file__).resolve().parent.parent
 CHARACTERS = ROOT / 'assets/estate/characters'
-IDS = (
-    'berry', 'steve', 'dva', 'little_gwen',
-    'jamie', 'xiaofei', 'weichong', 'xiaoxiaopang',
-)
+IDS = tuple(SKINS)
 
 
 def png(path):
@@ -58,8 +57,7 @@ def png(path):
 
 class CharacterAssetTests(unittest.TestCase):
     def test_all_registered_characters_have_standard_manifests(self):
-        from estate.catalog import SKINS
-        self.assertEqual(set(SKINS), set(IDS))
+        self.assertEqual(set(SKINS), {path.parent.name for path in CHARACTERS.glob('*/character.json')})
         for key in IDS:
             with self.subTest(character=key):
                 manifest = json.loads((CHARACTERS / key / 'character.json').read_text(encoding='utf-8'))

@@ -10,10 +10,13 @@ from estate.catalog import SKINS, FISHING_TREASURES, collectible_item
 import websockets
 
 async def main():
+    normal = {key: skin for key, skin in SKINS.items() if skin['unlock'] == 'purchase'}
+    total_price = sum(skin['price'] for skin in normal.values())
+    steve_price = normal['steve']['price']
     with tempfile.TemporaryDirectory() as tmp, patch.object(storage, 'DB_FILE', str(Path(tmp)/'skins.db')):
         init_db(server.database)
         with server.database() as conn, conn:
-            conn.execute("INSERT INTO users(username,password_hash,salt,created_at,coins) VALUES ('alice','','',0,120000)")
+            conn.execute("INSERT INTO users(username,password_hash,salt,created_at,coins) VALUES ('alice','','',0,?)", (total_price,))
         token = server.accounts.create_session('alice')
         async with websockets.serve(server.handler, '127.0.0.1', 0) as host:
             uri = f'ws://127.0.0.1:{host.sockets[0].getsockname()[1]}'
@@ -32,8 +35,8 @@ async def main():
                     sa,sb = await asyncio.gather(receive(a,'estate_state'), receive(b,'estate_state'))
                     assert sa == sb
                     charged.append(sa['result']['charged'])
-                    assert sa['coins'] == 100000
-                assert sorted(charged) == [0,20000]
+                    assert sa['coins'] == total_price - steve_price
+                assert sorted(charged) == [0,steve_price]
                 await send(a, type='estate_buy_skin', request_id='special-buy-test', skin_id='xiaoxiaopang')
                 assert (await receive(a,'estate_error'))['code'] == 'skin_not_for_sale'
                 for skin, metadata in SKINS.items():
@@ -48,14 +51,14 @@ async def main():
                 sa,sb = await asyncio.gather(receive(a,'estate_state'),receive(b,'estate_state'))
                 assert sa == sb and sa['coins'] == 0 and sa['profile']['skin_id'] == 'xiaoxiaopang'
                 with server.database() as conn:
-                    assert conn.execute("SELECT COUNT(*), SUM(amount) FROM coin_transactions WHERE kind='estate_purchase'").fetchone() == (6,-120000)
+                    assert conn.execute("SELECT COUNT(*), SUM(amount) FROM coin_transactions WHERE kind='estate_purchase'").fetchone() == (len(normal),-total_price)
             init_db(server.database)
             async with websockets.connect(uri) as c:
                 await send(c,type='resume',token=token)
                 await receive(c,'resume_success')
                 await send(c,type='get_estate')
                 saved = await receive(c,'estate_state')
-                assert saved['profile']['skin_id'] == 'xiaoxiaopang' and len(saved['skins']['owned']) == 8
+                assert saved['profile']['skin_id'] == 'xiaoxiaopang' and set(saved['skins']['owned']) == set(SKINS)
                 await send(c,type='estate_buy_skin',request_id='purchase-steve-0',skin_id='steve')
                 replay = await receive(c,'estate_state')
                 assert replay['result']['replayed'] and replay['coins'] == 0 and replay['profile']['skin_id'] == 'xiaoxiaopang'

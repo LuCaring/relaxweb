@@ -23,6 +23,9 @@ EXPECTED_SKINS = {
     "jamie": {"name": "杰米", "description": "亮黄色运动装，活力满满地照料庄园。"},
     "xiaofei": {"name": "小菲", "description": "粉发小礼帽装束，把田园生活变得甜美。"},
     "weichong": {"name": "威虫", "description": "战术装甲造型，沉稳守护庄园的收获。"},
+    "ryu": {"name": "隆", "description": "红色头带与白色道服，带着格斗家的坚定来到庄园。"},
+    "malphite": {"name": "墨菲特", "description": "岩石铠甲坚不可摧，稳稳守护庄园的每一份收获。"},
+    "nailong": {"name": "奶龙", "description": "圆滚滚的金黄色小恐龙，开心地陪你打理庄园。"},
     "xiaoxiaopang": {"name": "小小胖", "description": "黑色棉服与圆框眼镜，悠闲漫步在庄园。"},
 }
 
@@ -62,7 +65,7 @@ class EstateSkinTests(unittest.TestCase):
         self.assertEqual(self.state(), initial)
         self.assertEqual(initial["catalog"]["skins"], public_catalog()["skins"])
         self.assertEqual(initial["catalog"]["skins"], {
-            skin_id: {"id": skin_id, **metadata, "price": 0 if skin_id in ("berry", "xiaoxiaopang") else 20000, "unlock": "default" if skin_id == "berry" else "collection" if skin_id == "xiaoxiaopang" else "purchase"} for skin_id, metadata in EXPECTED_SKINS.items()
+            skin_id: {"id": skin_id, **metadata, "price": 0 if skin_id in ("berry", "xiaoxiaopang") else 5000, "unlock": "default" if skin_id == "berry" else "collection" if skin_id == "xiaoxiaopang" else "purchase"} for skin_id, metadata in EXPECTED_SKINS.items()
         })
         initial["catalog"]["skins"]["steve"]["name"] = "客户端修改"
         self.assertEqual(public_catalog()["skins"]["steve"]["name"], "史蒂夫")
