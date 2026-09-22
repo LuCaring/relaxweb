@@ -92,6 +92,9 @@ const coinKinds = {
   game_result: "游戏结算",
   lottery_win: "签到抽奖",
   holdem_daily_reward: "每日德扑流水奖励",
+  estate_purchase: "庄园支出",
+  estate_sale: "庄园出售收入",
+  estate_pet_defense: "宠物防守结算",
 };
 const profiles = new Map();
 const pendingProfiles = new Set();
