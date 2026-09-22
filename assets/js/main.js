@@ -20,6 +20,7 @@ import "./games/uno.js";
 import "./games/guandan.js";
 import "./games/mahjong.js";
 import "./games/ludo.js";
+import "./games/liarsbar.js";
 import "./estate/view.js";
 
 initializeGameAudio();

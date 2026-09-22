@@ -49,6 +49,14 @@ export const GAME_TYPES = [
     minStartPlayers: 2,
     desc: "掷点起飞、同色跳格、飞行捷径、撞机回机场。先送 4 架飞机到家者获胜，可冠军通吃或按名次结算底注。",
   },
+  {
+    id: "liarsbar",
+    name: "骗子酒馆 · 轮盘对峙",
+    icon: "🔫",
+    seats: 6,
+    minStartPlayers: 2,
+    desc: "暗打出牌声称是桌面牌，质疑翻牌定真假：说谎者或误质疑者对自己开枪，最后独存者收走赔付。弹巢、手牌与小丑规则可在开房时自定义。",
+  },
 ];
 
 export const ROOM_GAME_TYPES = GAME_TYPES.filter((game) => game.mode !== "solo");

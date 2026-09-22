@@ -323,6 +323,12 @@ function actionCue(room, previous) {
     if (/吃|碰/.test(text)) return "meld";
     if (/打出/.test(text)) return "play";
   }
+  if (room.game_type === "liarsbar") {
+    if (/砰|阵亡/.test(text)) return "bomb";
+    if (/质疑/.test(text)) return "bet";
+    if (/打出/.test(text)) return "play";
+    return "play";
+  }
   return "play";
 }
 

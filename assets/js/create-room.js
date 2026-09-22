@@ -17,6 +17,7 @@ function draftFor(gameId) {
       rules: {
         wild: 1, bomb: 8, ace: 1, min_fan: 8, flowers: 1, chow: 1, dianpao: 1,
         launch: 6, extra_roll: 1, jump4: 1, fly12: 1, payout: "champion",
+        chambers: 6, cards: 5, max_play: 3, jokers: "wild", respin: 0,
       },
     });
   }
@@ -92,6 +93,15 @@ function createRules(game, draft, details) {
       labeledSelect("飞行捷径", "飞行捷径", [[1, "开启（飞行格直飞 12 格）"], [0, "关闭"]], draft.rules.fly12, save("fly12")),
       labeledSelect("金币结算", "金币结算", [["champion", "冠军通吃（每家付一份底注）"], ["rank", "按名次递增（第 2/3/4 名付 1/2/3 份）"]], draft.rules.payout, save("payout", false)),
     );
+  } else if (game.id === "liarsbar") {
+    rules.append(
+      labeledSelect("弹巢容量", "弹巢容量", [[4, "4 弹巢（更快见血）"], [6, "6 弹巢（经典）"], [8, "8 弹巢（更长对局）"]], draft.rules.chambers, save("chambers")),
+      labeledSelect("开枪概率", "开枪概率", [[0, "递增（1/6 → 1/5 → …，空仓不重转）"], [1, "每次重转（始终 1/弹巢）"]], draft.rules.respin, save("respin")),
+      labeledSelect("每人手牌", "每人手牌", [[4, "4 张"], [5, "5 张（经典）"], [6, "6 张"]], draft.rules.cards, save("cards")),
+      labeledSelect("单次出牌上限", "单次出牌上限", [[2, "最多 2 张"], [3, "最多 3 张（经典）"]], draft.rules.max_play, save("max_play")),
+      labeledSelect("小丑牌", "小丑牌", [["wild", "加入 2 张小丑（百搭，翻牌永远算真话）"], ["none", "不加小丑（纯 K/Q/A）"]], draft.rules.jokers, save("jokers", false)),
+      labeledSelect("金币结算", "金币结算", [["champion", "冠军通吃（每家付一份底注）"], ["rank", "按出局顺序递增（越早出局付越多）"]], draft.rules.payout, save("payout", false)),
+    );
   } else {
     const text = document.createElement("p");
     text.className = "create-rules-note";
@@ -108,6 +118,7 @@ function createDescription(game) {
   if (game.id === "guandan") return "掼蛋需 4 人开局，隔位玩家自动组队。各自从 2 打到 A，头游方获胜升级；线上暂不支持进贡还贡。";
   if (game.id === "uno") return "UNO 至少 2 人开局。一手结束后，赢家按各家剩余牌数乘以底注收注，离桌时按筹码自动结算。";
   if (game.id === "ludo") return "飞行棋 2–4 人开局，按加入顺序执红黄蓝绿。先送 4 架飞机到家者夺冠，其余按到达进度排名；超终点的点数从终点反弹，落点敌机全部撞回机场。";
+  if (game.id === "liarsbar") return "骗子酒馆 2–6 人开局。每轮随机桌面牌（K/Q/A），轮流暗打 1 至上限张声称是桌面牌，或质疑上家；翻牌定真假，说谎者或误质疑者对自己开枪，阵亡淘汰，最后独存者按所选方式收走赔付。";
   return "德州扑克至少 2 名有筹码的玩家开局。开局后房主可结束牌局，所有人按当前筹码结算。";
 }
 
@@ -125,9 +136,11 @@ function updateCreateSummary() {
     ? `逢人配${draft.rules.wild ? "开" : "关"} · 炸弹${draft.rules.bomb ? `×${draft.rules.bomb === 999 ? "∞" : draft.rules.bomb}` : "不翻倍"} · ${draft.rules.ace ? "严格过 A" : "宽松过 A"}`
     : game.id === "mahjong"
       ? `${draft.rules.min_fan || 0} 番起和 · 花牌${draft.rules.flowers ? "开" : "关"} · 吃牌${draft.rules.chow ? "开" : "关"} · 点炮${draft.rules.dianpao ? "包三家" : "付一份"}`
-    : game.id === "ludo"
-      ? `掷${draft.rules.launch === 5 ? "5或6" : "6"}起飞 · ${draft.rules.extra_roll ? "掷6连投" : "不连投"} · 跳格${draft.rules.jump4 ? "开" : "关"} · 飞行${draft.rules.fly12 ? "开" : "关"} · ${draft.rules.payout === "rank" ? "按名次结算" : "冠军通吃"}`
-      : game.id === "holdem" ? "无限注德州扑克" : "UNO 经典规则";
+      : game.id === "ludo"
+        ? `掷${draft.rules.launch === 5 ? "5或6" : "6"}起飞 · ${draft.rules.extra_roll ? "掷6连投" : "不连投"} · 跳格${draft.rules.jump4 ? "开" : "关"} · 飞行${draft.rules.fly12 ? "开" : "关"} · ${draft.rules.payout === "rank" ? "按名次结算" : "冠军通吃"}`
+        : game.id === "liarsbar"
+          ? `${draft.rules.chambers} 弹巢${draft.rules.respin ? "重转" : "递增"} · ${draft.rules.cards} 张手牌 · 至多出 ${draft.rules.max_play} 张 · ${draft.rules.jokers === "wild" ? "小丑百搭" : "无小丑"} · ${draft.rules.payout === "rank" ? "按出局结算" : "冠军通吃"}`
+          : game.id === "holdem" ? "无限注德州扑克" : "UNO 经典规则";
   summary.querySelector(".create-summary-rules").textContent = ruleSummary;
   buyin.min = String(min);
   const amount = Number(buyin.value);
@@ -275,6 +288,14 @@ function renderCreate() {
       extra_roll: Boolean(Number(draft.rules.extra_roll)),
       jump4: Boolean(Number(draft.rules.jump4)),
       fly12: Boolean(Number(draft.rules.fly12)),
+      payout: draft.rules.payout === "rank" ? "rank" : "champion",
+    };
+    if (game.id === "liarsbar") payload.rules = {
+      chambers: Number(draft.rules.chambers),
+      cards: Number(draft.rules.cards),
+      max_play: Number(draft.rules.max_play),
+      jokers: draft.rules.jokers === "none" ? "none" : "wild",
+      respin: Boolean(Number(draft.rules.respin)),
       payout: draft.rules.payout === "rank" ? "rank" : "champion",
     };
     createError = "";
