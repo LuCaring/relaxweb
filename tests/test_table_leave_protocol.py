@@ -8,7 +8,12 @@ from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 import websockets
-import chat_server as server
+from server.app import create_app
+from server.schema import init_db
+
+import server.database as storage
+
+server = create_app()
 
 
 async def receive(ws, kind, predicate=lambda msg: True):
@@ -28,12 +33,12 @@ async def send(ws, **payload):
 
 async def main():
     names = ['player' + str(i) for i in range(4)]
-    with tempfile.TemporaryDirectory() as tmp, patch.object(server, 'DB_FILE', str(Path(tmp) / 'leave.db')):
-        server.init_db()
+    with tempfile.TemporaryDirectory() as tmp, patch.object(storage, 'DB_FILE', str(Path(tmp) / 'leave.db')):
+        init_db(server.database)
         with server.database() as conn, conn:
             for name in names:
                 conn.execute("INSERT INTO users(username,password_hash,salt,created_at,coins) VALUES (?, '', '', 0, 1000)", (name,))
-        tokens = {name: server.create_session(name) for name in names}
+        tokens = {name: server.accounts.create_session(name) for name in names}
         async with websockets.serve(server.handler, '127.0.0.1', 0) as host:
             uri = 'ws://127.0.0.1:' + str(host.sockets[0].getsockname()[1])
             sockets = []
@@ -53,7 +58,7 @@ async def main():
                         await receive(ws, 'game_joined')
                     await send(sockets[0], type='start_game')
                     await receive(sockets[0], 'game_update', lambda m: m.get('to_act'))
-                    room = server.game_rooms[room_id]
+                    room = server.rooms.game_rooms[room_id]
                     if scenario == 'paused':
                         room.pause()
                     elif scenario == 'claim':
@@ -79,19 +84,19 @@ async def main():
                     await send(sockets[0], type='settle_vote', choice='dissolve')
                     await send(sockets[2], type='settle_vote', choice='dissolve')
                     await asyncio.gather(*(receive(sockets[i], 'room_closed') for i in (0, 2, 3)))
-                    assert room_id not in server.game_rooms
+                    assert room_id not in server.rooms.game_rooms
                     with server.database() as conn:
                         assert dict(conn.execute('SELECT username,coins FROM users')) == {name:1000 for name in names}
                         assert conn.execute('SELECT count(*) FROM game_escrows').fetchone()[0] == 0
                     print('PASS', game, scenario, 'non-owner leave, remaining players settle and dissolve, coins refunded exactly once')
                     await asyncio.sleep(.55)
             finally:
-                for room in list(server.game_rooms.values()):
+                for room in list(server.rooms.game_rooms.values()):
                     room.close()
                 await asyncio.gather(*(ws.close() for ws in sockets))
-                for timer in server.room_leave_timers.values():
+                for timer in server.rooms.leave_timers.values():
                     timer.cancel()
-                server.room_leave_timers.clear()
+                server.rooms.leave_timers.clear()
 
 
 if __name__ == '__main__':

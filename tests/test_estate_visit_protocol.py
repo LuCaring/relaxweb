@@ -9,8 +9,14 @@ from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 import websockets
-import chat_server as server
+from server.app import create_app
+from server.schema import init_db
+import time
+
+import server.database as storage
 from estate import ensure_estate
+
+server = create_app()
 
 
 async def send(ws, **data):
@@ -27,9 +33,9 @@ async def receive(ws, kind):
 async def main():
     clock = 2_000_000_000
     with tempfile.TemporaryDirectory() as tmp, \
-         patch.object(server, "DB_FILE", str(Path(tmp) / "visits.db")), \
-         patch.object(server.time, "time", return_value=clock):
-        server.clients.clear(); server.estate_channels.clear(); server.init_db()
+         patch.object(storage, "DB_FILE", str(Path(tmp) / "visits.db")), \
+         patch.object(time, "time", return_value=clock):
+        server.hub.clients.clear(); server.estate_presence.channels.clear(); init_db(server.database)
         with server.database() as conn, conn:
             for name in ("alice", "bob"):
                 conn.execute("INSERT INTO users(username,password_hash,salt,created_at,coins) "
@@ -39,8 +45,8 @@ async def main():
                 conn.execute("UPDATE estate_profiles SET plot_count=12 WHERE username=?", (name,))
             conn.execute("UPDATE estate_plots SET crop_id='wheat',planted_at=?,ready_at=? "
                          "WHERE username='bob' AND plot_index=9", (clock - 400, clock - 1))
-        alice_token = server.create_session("alice")
-        bob_token = server.create_session("bob")
+        alice_token = server.accounts.create_session("alice")
+        bob_token = server.accounts.create_session("bob")
         async with websockets.serve(server.handler, "127.0.0.1", 0) as host:
             uri = f"ws://127.0.0.1:{host.sockets[0].getsockname()[1]}"
             async with websockets.connect(uri) as alice:

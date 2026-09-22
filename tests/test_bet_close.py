@@ -15,7 +15,13 @@ from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 import websockets
-import chat_server as server
+from server.app import create_app
+from server.schema import init_db
+
+from server.betting import bet_public_state
+import server.database as storage
+
+server = create_app()
 
 
 async def send(ws, **data):
@@ -61,7 +67,7 @@ def create_user(name, coins=1000.0):
             "VALUES (?, '', '', 0, ?)",
             (name, coins),
         )
-    return server.create_session(name)
+    return server.accounts.create_session(name)
 
 
 async def connect_and_resume(host, token):
@@ -73,8 +79,8 @@ async def connect_and_resume(host, token):
 
 async def main():
     with tempfile.TemporaryDirectory() as tmp:
-        with patch.object(server, "DB_FILE", str(Path(tmp) / "bet.db")):
-            server.init_db()
+        with patch.object(storage, "DB_FILE", str(Path(tmp) / "bet.db")):
+            init_db(server.database)
             # 旧库迁移：缺列的 bets 表补上 close_delay / closed_at
             old = Path(tmp) / "old.db"
             conn = sqlite3.connect(old)
@@ -85,8 +91,8 @@ async def main():
             )
             conn.commit()
             conn.close()
-            with patch.object(server, "DB_FILE", str(old)):
-                server.init_db()
+            with patch.object(storage, "DB_FILE", str(old)):
+                init_db(server.database)
             cols = {r[1] for r in sqlite3.connect(old).execute("PRAGMA table_info(bets)")}
             assert {"close_delay", "closed_at"} <= cols, cols
 
@@ -115,7 +121,7 @@ async def main():
 
                     # 设置 60 分钟封盘：closes_at = created_at + 3600
                     await asyncio.sleep(2.1)  # create_bet 限频 2s
-                    server.active_bet = None
+                    server.betting.active_bet = None
                     await send(a, type="create_bet", question="今晚下雨吗",
                                options=["下", "不下"], close_minutes=60)
                     await receive(a, "bet_created")
@@ -127,14 +133,14 @@ async def main():
                     await receive(b, "bet_update")  # place_bet 的广播
 
                     # 时间越过封盘点：即使 closed_at 还没落库，投注也被拒
-                    server.active_bet["created_at"] -= 3601
+                    server.betting.active_bet["created_at"] -= 3601
                     await asyncio.sleep(1.1)  # place_bet 限频 1s
                     await send(b, type="place_bet", option_index=0, amount=20)
                     error = await receive_error(b)
                     assert "封盘" in error["message"], error
 
                     # 定时任务到点自动封盘（watcher 每秒巡检）
-                    watcher = asyncio.create_task(server.bet_close_watcher())
+                    watcher = asyncio.create_task(server.betting.bet_close_watcher())
                     try:
                         closed = await wait_closed_update(b)
                         assert closed["closed_at"] and closed["pot"] == 20
@@ -149,7 +155,7 @@ async def main():
 
                     # 发起者手动「立即封盘」；非发起者不行
                     await asyncio.sleep(2.1)  # 上一个 create_bet 的限频冷却已过，此处稳一下
-                    server.active_bet = None
+                    server.betting.active_bet = None
                     await send(a, type="create_bet", question="下一局谁赢",
                                options=["红方", "蓝方"], close_minutes=1)
                     await receive(a, "bet_created")
@@ -165,12 +171,12 @@ async def main():
                     assert "封盘" in error["message"], error
 
                     # 重启恢复：load_open_bet 带回封盘字段
-                    server.active_bet = server.load_open_bet()
-                    assert server.active_bet["closed_at"] == closed["closed_at"]
-                    assert server.active_bet["close_delay"] == 1
-                    public = server.bet_public_state(server.active_bet)
+                    server.betting.active_bet = server.betting.load_open_bet()
+                    assert server.betting.active_bet["closed_at"] == closed["closed_at"]
+                    assert server.betting.active_bet["close_delay"] == 1
+                    public = bet_public_state(server.betting.active_bet)
                     assert public["closed_at"] == closed["closed_at"]
-                    server.active_bet = None
+                    server.betting.active_bet = None
     print("PASS bet close: migration, default open, timed close, manual close, join rejected, resume")
 
 

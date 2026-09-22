@@ -12,9 +12,17 @@ import unittest
 from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-import chat_server as server
+from server.app import create_app
+from server.schema import init_db
+from server.rooms import settlement as settlement_module
+import time
+from server import wallet as wallet_module
+
+import server.database as storage
 from games.base import create_room
 import rewards
+
+server = create_app()
 
 NOW = datetime(2026, 9, 19, 12, tzinfo=timezone.utc).timestamp()
 DAY = rewards.checkin_day(NOW)
@@ -24,11 +32,11 @@ MIDNIGHT = datetime(2026, 9, 19, 16, tzinfo=timezone.utc).timestamp()
 class DatabaseFixture:
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
-        self.db_patch = patch.object(server, "DB_FILE", str(Path(self.tmp.name) / "test.db"))
+        self.db_patch = patch.object(storage, "DB_FILE", str(Path(self.tmp.name) / "test.db"))
         self.db_patch.start()
-        server.init_db()
-        server.clients.clear()
-        server.game_rooms.clear()
+        init_db(server.database)
+        server.hub.clients.clear()
+        server.rooms.game_rooms.clear()
         self.rooms = []
         with server.database() as conn, conn:
             for name in ("alice", "bob", "carol"):
@@ -36,13 +44,13 @@ class DatabaseFixture:
                              "VALUES (?, '', '', 0, 1000)", (name,))
 
     def tearDown(self):
-        for room in [*self.rooms, *server.game_rooms.values()]:
+        for room in [*self.rooms, *server.rooms.game_rooms.values()]:
             room.close()
-        for timer in server.room_leave_timers.values():
+        for timer in server.rooms.leave_timers.values():
             timer.cancel()
-        server.room_leave_timers.clear()
-        server.game_rooms.clear()
-        server.clients.clear()
+        server.rooms.leave_timers.clear()
+        server.rooms.game_rooms.clear()
+        server.hub.clients.clear()
         self.db_patch.stop()
         self.tmp.cleanup()
 
@@ -58,18 +66,18 @@ class DatabaseFixture:
         with server.database() as conn:
             return rewards.rewards_state(conn, name, now)
 
-    def claim(self, threshold, name="alice", now=NOW, day=DAY, credit=server.adjust_coins):
+    def claim(self, threshold, name="alice", now=NOW, day=DAY, credit=wallet_module.adjust_coins):
         return self.transaction(rewards.claim_holdem_reward, name, threshold, day, now, credit)
 
     def room(self, game="holdem", names=("alice", "bob"), buy_in=100):
         room = create_room(game, room_id=len(self.rooms) + 1, name="每日流水测试",
                            owner=names[0], buy_in=buy_in, blind=5)
-        server.attach_host(room)
+        server.rooms.attach_host(room)
         for name in names:
             room.add_member(name, buy_in)
-            server.set_escrow(name, room.id, buy_in)
+            server.settlement.set_escrow(name, room.id, buy_in)
         self.rooms.append(room)
-        server.game_rooms[room.id] = room
+        server.rooms.game_rooms[room.id] = room
         return room
 
 
@@ -90,13 +98,13 @@ class RewardRulesTests(DatabaseFixture, unittest.TestCase):
         self.record(1000)
         for threshold in (1000, 100, 500, 200):
             self.assertEqual(self.claim(threshold), (dict(rewards.HOLDEM_REWARDS)[threshold], False))
-        server.init_db()
+        init_db(server.database)
         for threshold, amount in rewards.HOLDEM_REWARDS:
             self.assertEqual(self.claim(threshold), (amount, True))
         status = self.status()
         self.assertEqual(status["coins"], 1360)
         self.assertEqual(status["tickets"], 0)
-        self.assertEqual(server.get_rating("alice")["score"], 1000)
+        self.assertEqual(server.ranking.get_rating("alice")["score"], 1000)
         self.assertTrue(all(t["claimed"] and not t["claimable"] for t in status["holdem_turnover"]["tiers"]))
         with server.database() as conn:
             self.assertEqual(conn.execute("SELECT COUNT(*), SUM(amount) FROM coin_transactions "
@@ -142,7 +150,7 @@ class RewardRulesTests(DatabaseFixture, unittest.TestCase):
     def test_credit_failure_rolls_back_claim_balance_and_ledger(self):
         self.record(100)
         def fail(*args, **kwargs):
-            server.adjust_coins(*args, **kwargs)
+            wallet_module.adjust_coins(*args, **kwargs)
             raise sqlite3.OperationalError("test failure")
         with self.assertRaises(sqlite3.OperationalError):
             self.claim(100, credit=fail)
@@ -156,7 +164,7 @@ class RewardRulesTests(DatabaseFixture, unittest.TestCase):
 class GameIntegrationTests(DatabaseFixture, unittest.IsolatedAsyncioTestCase):
     async def test_blinds_calls_raises_and_allin_are_actual_incremental_stakes(self):
         room = self.room(buy_in=200)
-        with patch.object(server.time, "time", return_value=NOW):
+        with patch.object(time, "time", return_value=NOW):
             await room.start()
             await room.perform_action("alice", "raise", {"raise_to": 50})
             await room.perform_action("bob", "call")
@@ -171,12 +179,12 @@ class GameIntegrationTests(DatabaseFixture, unittest.IsolatedAsyncioTestCase):
 
     async def test_folded_and_departed_player_only_count_at_final_settlement(self):
         room = self.room(names=("alice", "bob", "carol"))
-        with patch.object(server.time, "time", return_value=NOW):
+        with patch.object(time, "time", return_value=NOW):
             await room.start()
             await room.perform_action("alice", "call")
             await room.perform_action("bob", "call")
             await room.perform_action("carol", "check")
-            await server.leave_room_internal(room, "alice")
+            await server.rooms.leave_room_internal(room, "alice")
             self.assertEqual(self.status()["holdem_turnover"]["amount"], 0)
             await room.perform_action(room.game["to_act"], "fold")
         self.assertEqual(self.status()["holdem_turnover"]["amount"], 10)
@@ -185,14 +193,14 @@ class GameIntegrationTests(DatabaseFixture, unittest.IsolatedAsyncioTestCase):
 
     async def test_buyin_restart_draw_restart_refunds_and_uno_do_not_count(self):
         room = self.room()
-        with patch.object(server.time, "time", return_value=NOW):
+        with patch.object(time, "time", return_value=NOW):
             await room.start()
             await room.perform_action("alice", "raise", {"raise_to": 50})
             await room.restart()
-            await server.dissolve_room(room, "流局")
+            await server.rooms.dissolve_room(room, "流局")
             another = self.room()
             await another.start()
-            server.refund_game_escrows()
+            server.settlement.refund_game_escrows()
             uno = self.room(game="uno")
             await uno.start()
             await uno.end_hand("alice")
@@ -205,39 +213,39 @@ class GameIntegrationTests(DatabaseFixture, unittest.IsolatedAsyncioTestCase):
         def fail(*args):
             rewards.record_holdem_turnover(*args)
             raise sqlite3.OperationalError("test failure")
-        with patch.object(server.time, "time", return_value=NOW):
-            with patch.object(server, "record_holdem_turnover", side_effect=fail):
+        with patch.object(time, "time", return_value=NOW):
+            with patch.object(settlement_module, "record_holdem_turnover", side_effect=fail):
                 with self.assertRaises(sqlite3.OperationalError):
                     await room.perform_action("alice", "fold")
             self.assertEqual(self.status()["holdem_turnover"]["amount"], 0)
-            self.assertEqual(server.get_rating("alice")["games"], 0)
+            self.assertEqual(server.ranking.get_rating("alice")["games"], 0)
             self.assertEqual(stacks, {name: member["stack"] for name, member in room.members.items()})
             await room.end_hand(False)
         self.assertEqual(self.status()["holdem_turnover"]["amount"], 5)
         self.assertEqual(self.status("bob")["holdem_turnover"]["amount"], 10)
         self.assertEqual(sum(m["stack"] for m in room.members.values()), 200)
-        self.assertEqual(server.get_rating("alice")["games"], 1)
+        self.assertEqual(server.ranking.get_rating("alice")["games"], 1)
 
     async def test_hand_crossing_midnight_belongs_to_settlement_day(self):
         room = self.room()
-        with patch.object(server.time, "time", return_value=MIDNIGHT - 1):
+        with patch.object(time, "time", return_value=MIDNIGHT - 1):
             await room.start()
             await room.perform_action("alice", "raise", {"raise_to": 100})
-        with patch.object(server.time, "time", return_value=MIDNIGHT):
+        with patch.object(time, "time", return_value=MIDNIGHT):
             await room.perform_action("bob", "call")
         self.assertEqual(self.status(now=MIDNIGHT - 1)["holdem_turnover"]["amount"], 0)
         self.assertEqual(self.status(now=MIDNIGHT)["holdem_turnover"]["amount"], 100)
 
     async def test_claim_handler_uses_authenticated_account_and_server_amount(self):
         self.record(100)
-        with patch.object(server, "send_json") as send, patch.object(server.time, "time", return_value=NOW):
-            await server.handle_claim_holdem_reward(None, {}, {"threshold": 100, "day": DAY})
+        with patch.object(server.hub, "send_json") as send, patch.object(time, "time", return_value=NOW):
+            await server.rewards.handle_claim_holdem_reward(None, {}, {"threshold": 100, "day": DAY})
             self.assertEqual(send.call_args.args[1]["type"], "rewards_error")
-            await server.handle_claim_holdem_reward(None, {"user": {"username": "alice"}},
+            await server.rewards.handle_claim_holdem_reward(None, {"user": {"username": "alice"}},
                 {"threshold": 100, "day": DAY, "amount": 999999, "username": "bob", "turnover": 999999})
             self.assertEqual(send.call_args.args[1]["type"], "holdem_reward_result")
             self.assertEqual(send.call_args.args[1]["amount"], 20)
-            await server.handle_claim_holdem_reward(None, {"user": {"username": "alice"}},
+            await server.rewards.handle_claim_holdem_reward(None, {"user": {"username": "alice"}},
                 {"threshold": 1000, "day": DAY, "turnover": 999999})
             self.assertEqual(send.call_args.args[1]["type"], "rewards_error")
         self.assertEqual(self.status()["coins"], 1020)
@@ -246,14 +254,14 @@ class GameIntegrationTests(DatabaseFixture, unittest.IsolatedAsyncioTestCase):
     async def test_deleted_account_rewards_are_removed(self):
         self.record(100)
         self.claim(100)
-        with patch.object(server, "authenticate_user", return_value={"username": "alice"}), patch.object(server, "send_json"):
-            await server.handle_delete_account(None, {"user": {"username": "alice"}, "last_auth_attempt": -1000}, {"password": "test"})
+        with patch.object(server.accounts, "authenticate_user", return_value={"username": "alice"}), patch.object(server.hub, "send_json"):
+            await server.auth.handle_delete_account(None, {"user": {"username": "alice"}, "last_auth_attempt": -1000}, {"password": "test"})
         with server.database() as conn:
             self.assertEqual(conn.execute("SELECT COUNT(*) FROM holdem_turnover").fetchone()[0], 0)
             self.assertEqual(conn.execute("SELECT COUNT(*) FROM holdem_reward_claims").fetchone()[0], 0)
-        server.clients["old-tab"] = {"user": {"username": "alice"}}
-        with patch.object(server, "send_json") as send:
-            await server.publish_daily_rewards("alice")
+        server.hub.clients["old-tab"] = {"user": {"username": "alice"}}
+        with patch.object(server.hub, "send_json") as send:
+            await server.rewards.publish_daily_rewards("alice")
             send.assert_not_called()
 
     async def test_real_protocol_create_play_claim_multitab_and_reconnect(self):
@@ -272,7 +280,7 @@ class GameIntegrationTests(DatabaseFixture, unittest.IsolatedAsyncioTestCase):
                         raise AssertionError(data)
             return await asyncio.wait_for(read(), 5)
 
-        tokens = {name: server.create_session(name) for name in ("alice", "bob")}
+        tokens = {name: server.accounts.create_session(name) for name in ("alice", "bob")}
         async with websockets.serve(server.handler, "127.0.0.1", 0) as host:
             uri = f"ws://127.0.0.1:{host.sockets[0].getsockname()[1]}/?client=game"
             async with websockets.connect(uri) as alice, websockets.connect(uri) as bob, websockets.connect(uri) as tab:
@@ -280,7 +288,7 @@ class GameIntegrationTests(DatabaseFixture, unittest.IsolatedAsyncioTestCase):
                     await send(ws, type="resume", token=tokens[name])
                     await receive(ws, "resume_success")
                 # 测试环境的单调时钟可能从 0 起步，明确没有近期房间操作。
-                for state in server.clients.values():
+                for state in server.hub.clients.values():
                     state["last_room_op"] = -1000
                 await send(alice, type="create_room", game="holdem", buy_in=100, blind=5)
                 room_id = (await receive(alice, "game_joined"))["room"]["room_id"]
@@ -305,7 +313,7 @@ class GameIntegrationTests(DatabaseFixture, unittest.IsolatedAsyncioTestCase):
                 await send(alice, type="get_finance")
                 ledger = (await receive(alice, "finance"))["transactions"]
                 self.assertEqual(sum(t["amount"] for t in ledger if t["kind"] == "holdem_daily_reward"), 20)
-                await server.dissolve_room(server.game_rooms[room_id], "测试结束")
+                await server.rooms.dissolve_room(server.rooms.game_rooms[room_id], "测试结束")
             async with websockets.connect(uri) as again:
                 await send(again, type="resume", token=tokens["alice"])
                 await receive(again, "resume_success")

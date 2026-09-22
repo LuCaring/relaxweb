@@ -14,15 +14,23 @@ from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 import admin
-import chat_server as server
+from server.app import create_app
+from server.schema import init_db
+import rewards as domain_rewards
+from server.rooms import settlement as settlement_module
+from server import wallet as wallet_module
+
+import server.database as storage
+
+server = create_app()
 
 
 class AdminTests(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
-        self.db_patch = patch.object(server, "DB_FILE", str(Path(self.tmp.name) / "test.db"))
+        self.db_patch = patch.object(storage, "DB_FILE", str(Path(self.tmp.name) / "test.db"))
         self.db_patch.start()
-        server.init_db()
+        init_db(server.database)
         self.seed_base_data()
 
     def tearDown(self):
@@ -123,13 +131,13 @@ class AdminTests(unittest.TestCase):
         with server.database() as conn, conn:
             ids = dict(conn.execute("SELECT username,id FROM users"))
             for user_id in ids.values():
-                server.record_holdem_hand(conn, "test-hand", user_id, 100, 110, 4,
+                settlement_module.record_holdem_hand(conn, "test-hand", user_id, 100, 110, 4,
                     {"big_blind": 10, "folded": False, "fold_reason": None,
                      "saw_flop": False, "showdown": False, "vpip": False, "pfr": False,
                      "aggressive_actions": 0, "call_actions": 0, "settlement_reason": "completed"})
-            server.record_holdem_turnover(conn, "test-hand", {name: 100 for name in ids}, 0)
+            settlement_module.record_holdem_turnover(conn, "test-hand", {name: 100 for name in ids}, 0)
             for name in ids:
-                server.claim_holdem_reward(conn, name, 100, "1970-01-01", 0, server.adjust_coins)
+                domain_rewards.claim_holdem_reward(conn, name, 100, "1970-01-01", 0, wallet_module.adjust_coins)
             metadata = conn.execute("SELECT * FROM holdem_stats_metadata").fetchall()
         self.run_admin("delete", "alice", "-y")
         with server.database() as conn:
@@ -171,7 +179,7 @@ class AdminTests(unittest.TestCase):
             hash_, salt = conn.execute(
                 "SELECT password_hash, salt FROM users WHERE username = 'alice'"
             ).fetchone()
-        self.assertTrue(server.authenticate_user("alice", "newpass123"))
+        self.assertTrue(server.accounts.authenticate_user("alice", "newpass123"))
         self.assertNotEqual(hash_, "h")
         self.assertNotEqual(salt, "s")
         with self.assertRaises(SystemExit):

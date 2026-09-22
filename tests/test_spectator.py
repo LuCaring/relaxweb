@@ -12,7 +12,12 @@ from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 import websockets
-import chat_server as server
+from server.app import create_app
+from server.schema import init_db
+
+import server.database as storage
+
+server = create_app()
 
 
 async def receive(ws, kind, predicate=lambda msg: True):
@@ -39,12 +44,12 @@ async def main():
     names = ['player' + str(i) for i in range(4)]
     spec = 'watcher'
     joiner = 'latecomer'
-    with tempfile.TemporaryDirectory() as tmp, patch.object(server, 'DB_FILE', str(Path(tmp) / 'spectator.db')):
-        server.init_db()
+    with tempfile.TemporaryDirectory() as tmp, patch.object(storage, 'DB_FILE', str(Path(tmp) / 'spectator.db')):
+        init_db(server.database)
         with server.database() as conn, conn:
             for name in names + [spec, joiner]:
                 conn.execute("INSERT INTO users(username,password_hash,salt,created_at,coins) VALUES (?, '', '', 0, 1000)", (name,))
-        tokens = {name: server.create_session(name) for name in names + [spec, joiner]}
+        tokens = {name: server.accounts.create_session(name) for name in names + [spec, joiner]}
         async with websockets.serve(server.handler, '127.0.0.1', 0) as host:
             uri = 'ws://127.0.0.1:' + str(host.sockets[0].getsockname()[1])
             sockets = []
@@ -92,15 +97,15 @@ async def main():
                 assert coins()[joiner] == 1000, 'spectator must not pay a buy-in'
 
                 # 观战者的对局动作与续手确认一律无效
-                snapshot = json.dumps(server.game_rooms[room_id].game, default=list, sort_keys=True)
+                snapshot = json.dumps(server.rooms.game_rooms[room_id].game, default=list, sort_keys=True)
                 await send(spect, type='poker_action', action='discard', index=0)
                 await send(spect, type='hand_continue')
                 await send(spect, type='settle_vote', choice='dissolve')
                 # Same-socket get_room is a processing barrier for the prior actions.
                 await send(spect, type='get_room')
                 await receive(spect, 'game_update', lambda m: m.get('spectator'))
-                assert json.dumps(server.game_rooms[room_id].game, default=list, sort_keys=True) == snapshot
-                assert not server.game_rooms[room_id].votes
+                assert json.dumps(server.rooms.game_rooms[room_id].game, default=list, sort_keys=True) == snapshot
+                assert not server.rooms.game_rooms[room_id].votes
 
                 # 切换观看目标
                 await asyncio.sleep(.3)
@@ -128,7 +133,7 @@ async def main():
                 await send(spect, type='leave_room')
                 closed = await receive(spect, 'room_closed')
                 assert closed['reason'] == '已退出观战', closed
-                assert room_id in server.game_rooms
+                assert room_id in server.rooms.game_rooms
                 await asyncio.sleep(1.1)
                 await send(spect, type='join_room', room_id=room_id, spectate=True)
                 await receive(spect, 'game_joined')
@@ -148,18 +153,18 @@ async def main():
                 # 房主离场解散：房内成员与观战者都收到关闭通知，且全程未扣一分钱
                 await send(player[0], type='leave_room')
                 await asyncio.gather(*(receive(ws, 'room_closed') for ws in [spect, late, player[1], player[3]]))
-                assert room_id not in server.game_rooms
+                assert room_id not in server.rooms.game_rooms
                 assert coins() == {name: 1000 for name in names + [spec, joiner]}
                 with server.database() as conn:
                     assert conn.execute('SELECT count(*) FROM game_escrows').fetchone()[0] == 0
                 print('PASS spectate join/view/switch/chat/leave/fallback/dissolve without paying')
             finally:
-                for room in list(server.game_rooms.values()):
+                for room in list(server.rooms.game_rooms.values()):
                     room.close()
                 await asyncio.gather(*(ws.close() for ws in sockets))
-                for timer in server.room_leave_timers.values():
+                for timer in server.rooms.leave_timers.values():
                     timer.cancel()
-                server.room_leave_timers.clear()
+                server.rooms.leave_timers.clear()
 
 
 if __name__ == '__main__':

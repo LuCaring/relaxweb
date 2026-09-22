@@ -8,19 +8,25 @@ import unittest
 from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-import chat_server as server
+from server.app import create_app
+from server.schema import init_db
+from server import wallet as wallet_module
+
+import server.database as storage
 import websockets
+
+server = create_app()
 
 
 class AssetLeaderboardTests(unittest.IsolatedAsyncioTestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
         self.addCleanup(self.tmp.cleanup)
-        db_patch = patch.object(server, "DB_FILE", str(Path(self.tmp.name) / "users.db"))
+        db_patch = patch.object(storage, "DB_FILE", str(Path(self.tmp.name) / "users.db"))
         db_patch.start()
         self.addCleanup(db_patch.stop)
-        server.init_db()
-        server.clients.clear()
+        init_db(server.database)
+        server.hub.clients.clear()
         with server.database() as conn, conn:
             conn.executemany(
                 "INSERT INTO users(username,password_hash,salt,created_at,coins,nickname) "
@@ -28,12 +34,12 @@ class AssetLeaderboardTests(unittest.IsolatedAsyncioTestCase):
                 [("alice", 12.34, "同名"), ("bob", 12.34, "同名"), ("carol", 0, "")])
 
     async def board(self, viewer="alice", **request):
-        with patch.object(server, "send_json") as send:
-            await server.handle_get_asset_leaderboard(None, {"user": {"username": viewer}}, request)
+        with patch.object(server.hub, "send_json") as send:
+            await server.ranking.handle_get_asset_leaderboard(None, {"user": {"username": viewer}}, request)
             return send.call_args.args[1]
 
     async def test_balances_ties_all_accounts_and_public_fields(self):
-        server.set_escrow("carol", 1, 9999)
+        server.settlement.set_escrow("carol", 1, 9999)
         data = await self.board(viewer="bob", request_id="assets-1")
         self.assertEqual(data["request_id"], "assets-1")
         self.assertEqual([(e["username"], e["coins"], e["rank"]) for e in data["entries"]],
@@ -58,8 +64,8 @@ class AssetLeaderboardTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual((await self.board(offset=199))["offset"], 100)
 
     async def test_authorization_and_untrusted_request(self):
-        with patch.object(server, "send_json") as send:
-            await server.handle_get_asset_leaderboard(None, {}, {})
+        with patch.object(server.hub, "send_json") as send:
+            await server.ranking.handle_get_asset_leaderboard(None, {}, {})
             send.assert_not_called()
         data = await self.board(coins=9999999, limit=1, username="bob")
         self.assertEqual(data["self"]["username"], "alice")
@@ -85,7 +91,7 @@ class AssetLeaderboardTests(unittest.IsolatedAsyncioTestCase):
                         return data
             return await asyncio.wait_for(read(), 5)
 
-        token = server.create_session("alice")
+        token = server.accounts.create_session("alice")
         async with websockets.serve(server.handler, "127.0.0.1", 0) as host:
             async with websockets.connect(f"ws://127.0.0.1:{host.sockets[0].getsockname()[1]}") as ws:
                 await ws.send(json.dumps({"type": "resume", "token": token}))
@@ -93,8 +99,8 @@ class AssetLeaderboardTests(unittest.IsolatedAsyncioTestCase):
                 await ws.send(json.dumps({"type": "get_asset_leaderboard", "request_id": "first"}))
                 self.assertEqual((await receive(ws, "asset_leaderboard"))["self"]["rank"], 1)
                 with server.database() as conn, conn:
-                    server.adjust_coins(conn, "carol", 20, "admin")
-                server.init_db()
+                    wallet_module.adjust_coins(conn, "carol", 20, "admin")
+                init_db(server.database)
                 await ws.send(json.dumps({"type": "get_asset_leaderboard", "request_id": "refresh"}))
                 result = await receive(ws, "asset_leaderboard")
                 self.assertEqual(result["request_id"], "refresh")

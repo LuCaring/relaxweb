@@ -204,7 +204,8 @@ class EstateFrontendTests(unittest.TestCase):
         estate_map = self.read("assets/js/estate/map.js")
         ui = self.read("assets/js/estate/ui.js")
         view = self.read("assets/js/estate/view.js")
-        server = self.read("chat_server.py")
+        server = (self.read("server/estate/protocol.py")
+                  + self.read("server/estate/presence.py"))
         for message in ("estate_list_visits", "estate_enter_visit", "estate_visit_move",
                         "estate_steal_crop", "estate_notifications"):
             self.assertIn(message, protocol + server)

@@ -4,15 +4,17 @@ import tempfile
 from pathlib import Path
 from unittest.mock import patch
 from test_estate_protocol import server, send, receive
+import server.database as storage
+from server.schema import init_db
 from estate.catalog import SKINS, FISHING_TREASURES, collectible_item
 import websockets
 
 async def main():
-    with tempfile.TemporaryDirectory() as tmp, patch.object(server, 'DB_FILE', str(Path(tmp)/'skins.db')):
-        server.init_db()
+    with tempfile.TemporaryDirectory() as tmp, patch.object(storage, 'DB_FILE', str(Path(tmp)/'skins.db')):
+        init_db(server.database)
         with server.database() as conn, conn:
             conn.execute("INSERT INTO users(username,password_hash,salt,created_at,coins) VALUES ('alice','','',0,120000)")
-        token = server.create_session('alice')
+        token = server.accounts.create_session('alice')
         async with websockets.serve(server.handler, '127.0.0.1', 0) as host:
             uri = f'ws://127.0.0.1:{host.sockets[0].getsockname()[1]}'
             async with websockets.connect(uri) as a, websockets.connect(uri) as b:
@@ -47,7 +49,7 @@ async def main():
                 assert sa == sb and sa['coins'] == 0 and sa['profile']['skin_id'] == 'xiaoxiaopang'
                 with server.database() as conn:
                     assert conn.execute("SELECT COUNT(*), SUM(amount) FROM coin_transactions WHERE kind='estate_purchase'").fetchone() == (6,-120000)
-            server.init_db()
+            init_db(server.database)
             async with websockets.connect(uri) as c:
                 await send(c,type='resume',token=token)
                 await receive(c,'resume_success')

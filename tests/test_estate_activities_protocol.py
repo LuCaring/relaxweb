@@ -9,7 +9,12 @@ from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 import websockets
-import chat_server as server
+from server.app import create_app
+from server.schema import init_db
+
+import server.database as storage
+
+server = create_app()
 
 
 async def send(ws, **data):
@@ -50,12 +55,12 @@ async def action(ws, request_id, message_type, **payload):
 
 async def main():
     with tempfile.TemporaryDirectory() as tmp:
-        with patch.object(server, "DB_FILE", str(Path(tmp) / "activities.db")):
-            server.init_db()
+        with patch.object(storage, "DB_FILE", str(Path(tmp) / "activities.db")):
+            init_db(server.database)
             with server.database() as conn, conn:
                 conn.execute("INSERT INTO users(username,password_hash,salt,created_at,coins) "
                              "VALUES ('alice','','',0,10000)")
-            token = server.create_session("alice")
+            token = server.accounts.create_session("alice")
             async with websockets.serve(server.handler, "127.0.0.1", 0) as host:
                 uri = f"ws://127.0.0.1:{host.sockets[0].getsockname()[1]}"
                 async with websockets.connect(uri) as ws:

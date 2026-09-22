@@ -15,7 +15,7 @@ from estate.visits import (
     day_key, list_estates, mark_notifications_read, notifications,
     public_estate_state, steal_crop,
 )
-from chat_server import valid_estate_position
+from server.estate.presence import valid_estate_position
 
 
 class EstateVisitTests(unittest.TestCase):

@@ -16,11 +16,18 @@ from pathlib import Path
 from unittest.mock import AsyncMock, patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-import chat_server as server
+from server.app import create_app
+from server.schema import init_db
+from server import accounts as account_helpers
+from server.rooms import settlement as settlement_module
+
+import server.database as storage
 import games.holdem as holdem
 import holdem_stats as stats_module
 from games.base import BaseRoom, create_room
 from games.rating import rating_info
+
+server = create_app()
 
 
 NAMES = ("alice", "bob", "carol", "dave")
@@ -197,14 +204,14 @@ class DatabaseFixture(unittest.IsolatedAsyncioTestCase):
         self.addCleanup(self.resources.close)
         tmp = self.resources.enter_context(tempfile.TemporaryDirectory(prefix="holdem-stats-test-"))
         self.db_path = str(Path(tmp) / "isolated.sqlite3")
-        self.resources.enter_context(patch.object(server, "DB_FILE", self.db_path))
-        for name, value in (("clients", {}), ("game_rooms", {}), ("room_leave_timers", {}),
-                            ("active_bet", None)):
-            self.resources.enter_context(patch.object(server, name, value))
+        self.resources.enter_context(patch.object(storage, "DB_FILE", self.db_path))
+        for state in (server.hub.clients, server.rooms.game_rooms, server.rooms.leave_timers):
+            self.resources.enter_context(patch.dict(state, {}, clear=True))
+        self.resources.enter_context(patch.object(server.betting, "active_bet", None))
         self.resources.enter_context(patch.object(holdem, "new_deck", side_effect=fixed_deck))
         self.rooms = []
         self.resources.callback(self.close_rooms)
-        server.init_db()
+        init_db(server.database)
         with server.database() as conn, conn:
             conn.executemany("INSERT INTO users(username,password_hash,salt,created_at,coins) "
                              "VALUES (?, '', '', 0, 900)", [(name,) for name in NAMES])
@@ -212,22 +219,22 @@ class DatabaseFixture(unittest.IsolatedAsyncioTestCase):
     def close_rooms(self):
         for room in self.rooms:
             room.close()
-        for timer in server.room_leave_timers.values():
+        for timer in server.rooms.leave_timers.values():
             timer.cancel()
-        server.room_leave_timers.clear()
-        server.game_rooms.clear()
-        server.clients.clear()
+        server.rooms.leave_timers.clear()
+        server.rooms.game_rooms.clear()
+        server.hub.clients.clear()
 
     def room(self, names=("alice", "bob"), stacks=None, blind=5, game="holdem"):
         room = create_room(game, room_id=len(self.rooms) + 1, name="统计专项", owner=names[0],
                            buy_in=100, blind=blind)
-        server.attach_host(room)
+        server.rooms.attach_host(room)
         for name in names:
             amount = (stacks or {}).get(name, 100)
             room.add_member(name, amount)
-            server.set_escrow(name, room.id, amount)
+            server.settlement.set_escrow(name, room.id, amount)
         self.rooms.append(room)
-        server.game_rooms[room.id] = room
+        server.rooms.game_rooms[room.id] = room
         return room
 
     async def start_rigged(self, room, holes, board):
@@ -259,8 +266,8 @@ class DatabaseFixture(unittest.IsolatedAsyncioTestCase):
             return stats_module.load_holdem_stats(conn, [user_id]).get(user_id, stats_module.public_holdem_stats())
 
     async def leaderboard(self, username="alice", **request):
-        with patch.object(server, "send_json", new_callable=AsyncMock) as send:
-            await server.handle_get_rating_leaderboard(None, {"user": {"username": username}}, request)
+        with patch.object(server.hub, "send_json", new_callable=AsyncMock) as send:
+            await server.ranking.handle_get_rating_leaderboard(None, {"user": {"username": username}}, request)
             send.assert_awaited_once()
             return send.call_args.args[1]
 
@@ -488,14 +495,14 @@ class EngineStatisticsTests(DatabaseFixture):
                 room = self.room(names=NAMES[:3])
                 await room.start()
                 await self.passive_until(room, stage)
-                await server.leave_room_internal(room, "bob")
+                await server.rooms.leave_room_internal(room, "bob")
                 value = self.detail(room, "bob")
                 self.assertEqual((value["hands"], value["folds"], value["leave_folds"]), (1, 1, 1))
                 self.assertEqual(value["settlement_reason"], "leave")
                 self.assertEqual(value["flop_hands"], int(stage != "preflop"))
                 self.assertEqual(value["showdown_hands"], 0)
                 before = self.rows("SELECT coins FROM users WHERE username='bob'")
-                await server.leave_room_internal(room, "bob")
+                await server.rooms.leave_room_internal(room, "bob")
                 self.assertEqual(self.rows("SELECT coins FROM users WHERE username='bob'"), before)
                 await room.perform_action(room.game["to_act"], "fold")
                 self.assertEqual(self.detail(room, "bob"), value)
@@ -512,7 +519,7 @@ class EngineStatisticsTests(DatabaseFixture):
                 room = self.room(names=NAMES[:3])
                 await room.start()
                 await room.perform_action("alice", "fold", auto=auto)
-                await server.leave_room_internal(room, "alice")
+                await server.rooms.leave_room_internal(room, "alice")
                 value = self.detail(room, "alice")
                 self.assertEqual(value[f"{reason}_folds"], 1)
                 self.assertEqual(value["folds"], 1)
@@ -527,7 +534,7 @@ class EngineStatisticsTests(DatabaseFixture):
         await room.start()
         await room.perform_action("alice", "fold")
         before = self.stats("bob")
-        await server.leave_room_internal(room, "bob")
+        await server.rooms.leave_room_internal(room, "bob")
         self.assertEqual(self.stats("bob"), before)
         self.assertEqual(self.count(), 2)
 
@@ -653,7 +660,7 @@ class EngineStatisticsTests(DatabaseFixture):
             [(2, 0), (3, 1), (7, 2), (8, 3), (11, 0)])
         await room.perform_action("alice", "raise", {"raise_to": 100})
         await room.perform_action("bob", "call")
-        self.assertEqual(server.get_rating("bob")["score"], 0)
+        self.assertEqual(server.ranking.get_rating("bob")["score"], 0)
         self.assertEqual(room.game["result"]["ratings"]["bob"]["delta"], -7)
         self.assertEqual(self.stats("bob")["score_delta"], -7)
         self.assertEqual(self.stats("bob")["score_per_hand"], -7)
@@ -672,7 +679,7 @@ class PersistenceTests(DatabaseFixture):
         for _ in range(3):
             await room.end_hand(False)
             self.assertEqual(room.settle_ratings(), expected)
-            replay = server.record_hand_ratings(room, room.rating_hand_id,
+            replay = server.settlement.record_hand_ratings(room, room.rating_hand_id,
                 {"alice": 1, "bob": 1}, {"alice": 999, "bob": 999}, statistics=snapshots)
             self.assertEqual(replay, expected)
         self.assertEqual(self.rows("SELECT * FROM holdem_player_stats ORDER BY user_id"), before)
@@ -687,7 +694,7 @@ class PersistenceTests(DatabaseFixture):
         stacks = copy.deepcopy(room.members)
         escrow = self.rows("SELECT * FROM game_escrows ORDER BY username")
         calls = []
-        original = server.record_holdem_hand
+        original = settlement_module.record_holdem_hand
 
         def fail_after_second_insert(conn, *args, **kwargs):
             self.assertTrue(conn.in_transaction)
@@ -697,7 +704,7 @@ class PersistenceTests(DatabaseFixture):
                 raise sqlite3.OperationalError("injected statistics failure after insert")
             return inserted
 
-        with patch.object(server, "record_holdem_hand", side_effect=fail_after_second_insert):
+        with patch.object(settlement_module, "record_holdem_hand", side_effect=fail_after_second_insert):
             with self.assertRaisesRegex(sqlite3.OperationalError, "injected statistics"):
                 await room.perform_action("alice", "fold")
         self.assertEqual(len(calls), 2)
@@ -707,8 +714,8 @@ class PersistenceTests(DatabaseFixture):
         self.assertEqual(room.match_rating_delta, {})
         self.assertEqual(room.pending_rating_updates, set())
         self.assertEqual(self.rows("SELECT * FROM game_escrows ORDER BY username"), escrow)
-        self.assertEqual(server.get_rating("alice"), rating_info())
-        self.assertEqual(server.get_rating("bob"), rating_info())
+        self.assertEqual(server.ranking.get_rating("alice"), rating_info())
+        self.assertEqual(server.ranking.get_rating("bob"), rating_info())
         self.assertTrue(room.in_hand())
         await room.end_hand(False)
         self.assertEqual(self.count(), 2)
@@ -722,7 +729,7 @@ class PersistenceTests(DatabaseFixture):
     async def test_turnover_failure_rolls_back_statistics_and_retry_records_each_once(self):
         room = self.room()
         await room.start()
-        original = server.record_holdem_turnover
+        original = settlement_module.record_holdem_turnover
 
         def fail_after_turnover_write(conn, *args, **kwargs):
             original(conn, *args, **kwargs)
@@ -730,7 +737,7 @@ class PersistenceTests(DatabaseFixture):
             self.assertEqual(conn.execute("SELECT COUNT(*) FROM holdem_turnover").fetchone()[0], 2)
             raise sqlite3.OperationalError("turnover rollback")
 
-        with patch.object(server, "record_holdem_turnover", side_effect=fail_after_turnover_write):
+        with patch.object(settlement_module, "record_holdem_turnover", side_effect=fail_after_turnover_write):
             with self.assertRaisesRegex(sqlite3.OperationalError, "turnover rollback"):
                 await room.perform_action("alice", "fold")
         self.assert_no_settlement()
@@ -748,7 +755,7 @@ class PersistenceTests(DatabaseFixture):
         room = self.room()
         await room.start()
         await room.perform_action("alice", "raise", {"raise_to": 100})
-        with patch.object(server, "record_holdem_hand", side_effect=sqlite3.OperationalError("retry me")):
+        with patch.object(settlement_module, "record_holdem_hand", side_effect=sqlite3.OperationalError("retry me")):
             with self.assertRaisesRegex(sqlite3.OperationalError, "retry me"):
                 await room.perform_action("bob", "call")
         self.assertTrue(room.game["pending_settlement"])
@@ -788,28 +795,28 @@ class PersistenceTests(DatabaseFixture):
     async def test_pending_settlement_blocks_leave_restart_and_dissolve_until_retry_succeeds(self):
         room = self.room()
         await room.start()
-        with patch.object(server, "record_holdem_hand", side_effect=sqlite3.OperationalError("retry me")):
+        with patch.object(settlement_module, "record_holdem_hand", side_effect=sqlite3.OperationalError("retry me")):
             with self.assertRaises(sqlite3.OperationalError):
                 await room.perform_action("alice", "fold")
             state = copy.deepcopy(room.game)
             stacks = copy.deepcopy(room.members)
             escrows = self.rows("SELECT * FROM game_escrows")
             for action in (lambda: room.restart(),
-                           lambda: server.leave_room_internal(room, "alice"),
-                           lambda: server.dissolve_room(room, "test")):
+                           lambda: server.rooms.leave_room_internal(room, "alice"),
+                           lambda: server.rooms.dissolve_room(room, "test")):
                 with self.assertRaises(sqlite3.OperationalError):
                     await action()
                 self.assertEqual(room.game, state)
                 self.assertEqual(room.members, stacks)
                 self.assertEqual(self.rows("SELECT * FROM game_escrows"), escrows)
-                self.assertIn(room.id, server.game_rooms)
+                self.assertIn(room.id, server.rooms.game_rooms)
                 self.assertIn("settlement", room.timers)
                 self.assert_no_settlement()
-        await server.leave_room_internal(room, "alice")
+        await server.rooms.leave_room_internal(room, "alice")
         self.assertEqual(self.detail(room, "alice")["settlement_reason"], "completed")
         self.assertEqual(self.stats()["manual_folds"], 1)
         self.assertEqual(self.stats()["leave_folds"], 0)
-        await server.dissolve_room(room, "test")
+        await server.rooms.dissolve_room(room, "test")
         self.assertEqual(self.count(), 2)
         self.assertEqual(self.rows("SELECT username,coins FROM users WHERE username IN ('alice','bob') ORDER BY username"),
                          [("alice", 995), ("bob", 1005)])
@@ -817,7 +824,7 @@ class PersistenceTests(DatabaseFixture):
     async def test_restart_retries_finished_hand_instead_of_refunding_it(self):
         room = self.room()
         await room.start()
-        with patch.object(server, "record_holdem_hand", side_effect=sqlite3.OperationalError("retry me")):
+        with patch.object(settlement_module, "record_holdem_hand", side_effect=sqlite3.OperationalError("retry me")):
             with self.assertRaises(sqlite3.OperationalError):
                 await room.perform_action("alice", "fold")
         await room.restart()
@@ -831,27 +838,27 @@ class PersistenceTests(DatabaseFixture):
         await room.start()
         state = copy.deepcopy(room.game)
         money = self.rows("SELECT username,coins FROM users ORDER BY username")
-        with patch.object(server, "record_holdem_hand", side_effect=sqlite3.OperationalError("leave failure")):
+        with patch.object(settlement_module, "record_holdem_hand", side_effect=sqlite3.OperationalError("leave failure")):
             with self.assertRaisesRegex(sqlite3.OperationalError, "leave failure"):
-                await server.leave_room_internal(room, "bob")
+                await server.rooms.leave_room_internal(room, "bob")
         self.assertTrue(room.has_member("bob"))
         self.assertEqual(room.game, state)
         self.assertEqual(self.rows("SELECT username,coins FROM users ORDER BY username"), money)
         self.assert_no_settlement()
-        await server.leave_room_internal(room, "bob")
+        await server.rooms.leave_room_internal(room, "bob")
         self.assertFalse(room.has_member("bob"))
         self.assertEqual(self.stats("bob")["leave_folds"], 1)
         self.assertEqual(self.count(), 1)
 
     async def test_old_rating_history_and_omitted_statistics_are_never_backfilled(self):
         room = self.room()
-        old = server.record_hand_ratings(room, "legacy-hand", {"alice": 100}, {"alice": 120})
+        old = server.settlement.record_hand_ratings(room, "legacy-hand", {"alice": 100}, {"alice": 120})
         self.assertEqual(old["alice"]["delta"], 8)
         self.assertEqual(self.count(), 0)
-        server.init_db()
-        server.init_db()
+        init_db(server.database)
+        init_db(server.database)
         await room.start()
-        server.record_hand_ratings(room, "legacy-hand", {"alice": 100}, {"alice": 120},
+        server.settlement.record_hand_ratings(room, "legacy-hand", {"alice": 100}, {"alice": 120},
                                    statistics=room.hand_statistics(["alice"]))
         self.assertEqual(self.count(), 0)
         value = (await self.leaderboard())["self"]
@@ -861,23 +868,23 @@ class PersistenceTests(DatabaseFixture):
             self.assertIsNone(value["holdem_stats"][key])
         await room.perform_action("alice", "fold")
         self.assertEqual(self.stats()["hands"], 1)
-        self.assertEqual(server.get_rating("alice")["games"], 2)
+        self.assertEqual(server.ranking.get_rating("alice")["games"], 2)
 
     async def test_upgrade_from_database_without_stats_tables_keeps_old_history_unfilled(self):
         room = self.room()
-        server.record_hand_ratings(room, "before-feature", {"alice": 100}, {"alice": 130})
+        server.settlement.record_hand_ratings(room, "before-feature", {"alice": 100}, {"alice": 130})
         old_history = self.rows("SELECT * FROM rating_history")
-        old_rating = server.get_rating("alice")
+        old_rating = server.ranking.get_rating("alice")
         with server.database() as conn, conn:
             for table in ("holdem_hand_stats", "holdem_player_stats", "holdem_stats_metadata"):
                 conn.execute(f"DROP TABLE {table}")
         with patch.object(stats_module.time, "time", return_value=1700000000):
-            server.init_db()
+            init_db(server.database)
         with patch.object(stats_module.time, "time", return_value=1800000000):
-            server.init_db()
+            init_db(server.database)
         self.assertEqual(self.rows("SELECT * FROM holdem_stats_metadata"), [(1, 1700000000)])
         self.assertEqual(self.rows("SELECT * FROM rating_history"), old_history)
-        self.assertEqual(server.get_rating("alice"), old_rating)
+        self.assertEqual(server.ranking.get_rating("alice"), old_rating)
         self.assertEqual(self.stats()["hands"], 0)
         self.assertEqual(self.count(), 0)
         self.assertEqual(self.count("holdem_player_stats"), 0)
@@ -918,7 +925,7 @@ class PersistenceTests(DatabaseFixture):
         with server.database() as conn, conn:
             conn.execute("UPDATE holdem_stats_metadata SET started_at=123456789 WHERE id=1")
         for _ in range(3):
-            server.init_db()
+            init_db(server.database)
         with closing(sqlite3.connect(self.db_path)) as reopened:
             self.assertEqual(reopened.execute("SELECT * FROM holdem_player_stats ORDER BY user_id").fetchall(), before)
             self.assertEqual(reopened.execute("SELECT * FROM holdem_hand_stats ORDER BY user_id").fetchall(), detail)
@@ -928,7 +935,7 @@ class PersistenceTests(DatabaseFixture):
     async def test_rebuild_from_details_matches_incremental_totals_and_is_idempotent(self):
         room = self.room(names=NAMES[:3])
         await room.start()
-        await server.leave_room_internal(room, "bob")
+        await server.rooms.leave_room_internal(room, "bob")
         await room.perform_action(room.game["to_act"], "fold")
         room.blind = 2
         await room.start_next_hand()
@@ -946,7 +953,7 @@ class PersistenceTests(DatabaseFixture):
 
     async def test_waiting_dissolution_restart_and_void_refunds_do_not_count(self):
         waiting = self.room()
-        await server.dissolve_room(waiting, "waiting cancellation")
+        await server.rooms.dissolve_room(waiting, "waiting cancellation")
         room = self.room()
         await room.start()
         old_id = room.rating_hand_id
@@ -955,7 +962,7 @@ class PersistenceTests(DatabaseFixture):
         self.assertNotEqual(room.rating_hand_id, old_id)
         self.assertEqual(room.rating_starts, {"alice": 100, "bob": 100})
         self.assertTrue(all(not value["vpip"] for value in room.game["stats"].values()))
-        await server.dissolve_room(room, "void hand")
+        await server.rooms.dissolve_room(room, "void hand")
         self.assert_no_settlement()
         self.assertEqual(self.count("game_escrows"), 0)
 
@@ -963,10 +970,10 @@ class PersistenceTests(DatabaseFixture):
         unfinished = self.room()
         await unfinished.start()
         unfinished.close()
-        server.game_rooms.pop(unfinished.id)  # 模拟重启：未完成房间内存态消失。
-        server.refund_game_escrows()
+        server.rooms.game_rooms.pop(unfinished.id)  # 模拟重启：未完成房间内存态消失。
+        server.settlement.refund_game_escrows()
         money = self.rows("SELECT username,coins FROM users ORDER BY username")
-        server.refund_game_escrows()
+        server.settlement.refund_game_escrows()
         self.assertEqual(self.rows("SELECT username,coins FROM users ORDER BY username"), money)
         self.assert_no_settlement()
         completed = self.room()
@@ -974,9 +981,9 @@ class PersistenceTests(DatabaseFixture):
         await completed.perform_action("alice", "fold")
         before = self.stats()
         completed.close()
-        server.game_rooms.pop(completed.id)
-        server.refund_game_escrows()
-        server.refund_game_escrows()
+        server.rooms.game_rooms.pop(completed.id)
+        server.settlement.refund_game_escrows()
+        server.settlement.refund_game_escrows()
         self.assertEqual(self.stats(), before)
         self.assertEqual(self.count(), 2)
 
@@ -992,7 +999,7 @@ class PersistenceTests(DatabaseFixture):
                 self.assertEqual(self.count(), 0)
                 self.assertEqual(self.stats()["hands"], 0)
         self.assertEqual(self.count("rating_history"), 12)
-        self.assertEqual(server.get_rating("alice")["games"], 3)
+        self.assertEqual(server.ranking.get_rating("alice")["games"], 3)
 
 
 class LeaderboardTests(DatabaseFixture):
@@ -1005,7 +1012,7 @@ class LeaderboardTests(DatabaseFixture):
     async def test_registered_new_account_has_no_statistics_denominators(self):
         with server.database() as conn, conn:
             conn.execute("INSERT INTO invite_codes(code,created_at) VALUES ('stats-new-user',0)")
-        ok, _ = server.register_user("newplayer", "new-password", "stats-new-user")
+        ok, _ = server.accounts.register_user("newplayer", "new-password", "stats-new-user")
         self.assertTrue(ok)
         data = await self.leaderboard(username="newplayer")
         self.assertEqual(data["self"]["rating"], rating_info())
@@ -1079,8 +1086,8 @@ class LeaderboardTests(DatabaseFixture):
                 self.assertEqual((await self.leaderboard(request_id=value))["request_id"], expected)
 
     async def test_unauthenticated_request_is_ignored_and_empty_database_is_safe(self):
-        with patch.object(server, "send_json", new_callable=AsyncMock) as send:
-            await server.handle_get_rating_leaderboard(None, {}, {"request_id": "private"})
+        with patch.object(server.hub, "send_json", new_callable=AsyncMock) as send:
+            await server.ranking.handle_get_rating_leaderboard(None, {}, {"request_id": "private"})
             send.assert_not_awaited()
         with server.database() as conn, conn:
             conn.execute("DELETE FROM users")
@@ -1101,7 +1108,7 @@ class LeaderboardTests(DatabaseFixture):
                     conn.set_trace_callback(lambda sql: statements.append((sql, conn.in_transaction)))
                     yield conn
 
-            with patch.object(server, "database", traced_database):
+            with patch.object(server.ranking, "database", traced_database):
                 result = await self.leaderboard(offset=offset)
             self.assertEqual(len(connections), 1)
             reads = [(sql, active) for sql, active in statements
@@ -1143,7 +1150,7 @@ class LeaderboardTests(DatabaseFixture):
                 conn.set_trace_callback(trace)
                 yield conn
 
-        with patch.object(server, "database", racing_database):
+        with patch.object(server.ranking, "database", racing_database):
             during = await self.leaderboard()
         self.assertEqual(wrote, [True])
         self.assertEqual(during, before)
@@ -1155,32 +1162,32 @@ class LeaderboardTests(DatabaseFixture):
         room = self.room(names=NAMES[:3])
         await room.start()
         old_id = self.rows("SELECT id FROM users WHERE username='bob'")[0][0]
-        password_hash, salt = server.hash_password("test-password")
+        password_hash, salt = account_helpers.hash_password("test-password")
         with server.database() as conn, conn:
             conn.execute("UPDATE users SET password_hash=?,salt=? WHERE username='bob'", (password_hash, salt))
             conn.execute("INSERT INTO invite_codes(code,created_at) VALUES ('stats-reuse-name',0)")
         state = {"user": {"username": "bob"}, "last_auth_attempt": -1000}
         other_socket = AsyncMock()
         other_state = {"user": {"username": "bob"}, "send_lock": asyncio.Lock()}
-        server.clients[other_socket] = other_state
-        with patch.object(server, "send_json", new_callable=AsyncMock) as send:
-            await server.handle_delete_account(None, state, {"password": "test-password"})
+        server.hub.clients[other_socket] = other_state
+        with patch.object(server.hub, "send_json", new_callable=AsyncMock) as send:
+            await server.auth.handle_delete_account(None, state, {"password": "test-password"})
             self.assertEqual(send.call_args.args[1]["type"], "account_error")
             self.assertIsNotNone(state["user"])
             self.assertTrue(room.has_member("bob"))
             self.assertEqual(self.rows("SELECT id FROM users WHERE username='bob'"), [(old_id,)])
-            await server.leave_room_internal(room, "bob")
+            await server.rooms.leave_room_internal(room, "bob")
             state["last_auth_attempt"] = -1000
-            await server.handle_delete_account(None, state, {"password": "test-password"})
+            await server.auth.handle_delete_account(None, state, {"password": "test-password"})
             send.assert_any_await(other_socket, {"type": "account_deleted"})
         self.assertIsNone(state["user"])
         self.assertIsNone(other_state["user"])
-        ok, _ = server.register_user("bob", "new-password", "stats-reuse-name")
+        ok, _ = server.accounts.register_user("bob", "new-password", "stats-reuse-name")
         self.assertTrue(ok)
         self.assertNotEqual(self.rows("SELECT id FROM users WHERE username='bob'")[0][0], old_id)
         await room.perform_action("alice", "fold")
         self.assertEqual(self.stats("bob")["hands"], 0)
-        self.assertEqual(server.get_rating("bob"), rating_info())
+        self.assertEqual(server.ranking.get_rating("bob"), rating_info())
         self.assertEqual(self.rows("SELECT amount_cents FROM holdem_turnover WHERE user_id="
                                    "(SELECT id FROM users WHERE username='bob')"), [])
         for table in ("rating_history", "holdem_hand_stats", "holdem_player_stats", "holdem_turnover"):
@@ -1190,16 +1197,16 @@ class LeaderboardTests(DatabaseFixture):
         room = self.room()
         await room.start()
         await room.perform_action("alice", "fold")
-        await server.dissolve_room(room, "test account deletion")
+        await server.rooms.dissolve_room(room, "test account deletion")
         old_id = self.rows("SELECT id FROM users WHERE username='alice'")[0][0]
         metadata = self.rows("SELECT * FROM holdem_stats_metadata")
         bob = self.stats("bob")
-        password_hash, salt = server.hash_password("test-password")
+        password_hash, salt = account_helpers.hash_password("test-password")
         with server.database() as conn, conn:
             conn.execute("UPDATE users SET password_hash=?,salt=? WHERE username='alice'", (password_hash, salt))
         state = {"user": {"username": "alice"}, "last_auth_attempt": -1000}
-        with patch.object(server, "send_json", new_callable=AsyncMock) as send:
-            await server.handle_delete_account(None, state, {"password": "test-password"})
+        with patch.object(server.hub, "send_json", new_callable=AsyncMock) as send:
+            await server.auth.handle_delete_account(None, state, {"password": "test-password"})
             self.assertEqual(send.call_args.args[1]["type"], "account_deleted")
         self.assertIsNone(state["user"])
         for table in ("rating_history", "holdem_hand_stats", "holdem_player_stats"):
@@ -1223,7 +1230,7 @@ class WebSocketTests(DatabaseFixture):
         return await asyncio.wait_for(read_until(), timeout=5)
 
     async def login(self, socket, name):
-        await socket.send(json.dumps({"type": "resume", "token": server.create_session(name)}))
+        await socket.send(json.dumps({"type": "resume", "token": server.accounts.create_session(name)}))
         value = await self.receive(socket, "resume_success")
         self.assertEqual(value["username"], name)
 
@@ -1258,14 +1265,14 @@ class WebSocketTests(DatabaseFixture):
                 self.assertEqual(set(entries["alice"]["holdem_stats"]), PUBLIC_FIELDS)
                 # hand_result 在动作处理函数返回前广播；用同一连接请求作完成屏障。
                 await self.request_board(alice, request_id="action-completed")
-                await server.dissolve_room(room, "protocol cleanup")
-            server.init_db()
+                await server.rooms.dissolve_room(room, "protocol cleanup")
+            init_db(server.database)
             async with websockets.connect(uri) as reconnected:
                 await self.login(reconnected, "alice")
                 persisted = await self.request_board(reconnected, request_id="persisted")
                 self.assertEqual(persisted["self"], entries["alice"])
                 self.assertEqual(persisted["stats_since"], before["stats_since"])
-        self.assertEqual(server.clients, {})
+        self.assertEqual(server.hub.clients, {})
         self.assertTrue(all(not room.timers for room in self.rooms))
 
     async def test_real_protocol_pagination_invalid_parameters_and_login_gate(self):
@@ -1317,7 +1324,7 @@ class WebSocketTests(DatabaseFixture):
                 self.assertEqual(done["self"]["rating"], left["self"]["rating"])
                 # 其他玩家结算后全局名次可变，但退出者自己的分数和统计不能再累加。
                 self.assertEqual(self.count(), 3)
-                await server.dissolve_room(room, "protocol cleanup")
+                await server.rooms.dissolve_room(room, "protocol cleanup")
 
 
 if __name__ == "__main__":

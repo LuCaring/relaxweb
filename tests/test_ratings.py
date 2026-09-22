@@ -11,9 +11,16 @@ from pathlib import Path
 from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-import chat_server as server
+from server.app import create_app
+from server.schema import init_db
+from server import accounts as account_helpers
+from server import wallet as wallet_module
+
+import server.database as storage
 from games.base import create_room
 from games.rating import rating_change, rating_info
+
+server = create_app()
 
 
 class FormulaTests(unittest.TestCase):
@@ -50,12 +57,12 @@ class FormulaTests(unittest.TestCase):
 class RatingTests(unittest.IsolatedAsyncioTestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
-        self.db_patch = patch.object(server, "DB_FILE", str(Path(self.tmp.name) / "test.db"))
+        self.db_patch = patch.object(storage, "DB_FILE", str(Path(self.tmp.name) / "test.db"))
         self.db_patch.start()
-        server.init_db()
+        init_db(server.database)
         self.rooms = []
-        server.clients.clear()
-        server.game_rooms.clear()
+        server.hub.clients.clear()
+        server.rooms.game_rooms.clear()
         with server.database() as conn, conn:
             for name in ("alice", "bob", "carol"):
                 conn.execute("INSERT INTO users (username, password_hash, salt, created_at, coins) "
@@ -64,20 +71,20 @@ class RatingTests(unittest.IsolatedAsyncioTestCase):
     def tearDown(self):
         for room in self.rooms:
             room.close()
-        server.clients.clear()
-        server.game_rooms.clear()
+        server.hub.clients.clear()
+        server.rooms.game_rooms.clear()
         self.db_patch.stop()
         self.tmp.cleanup()
 
     def room(self, game="holdem", names=("alice", "bob")):
         room = create_room(game, room_id=len(self.rooms) + 1, name="段位测试",
                            owner=names[0], buy_in=100, blind=5)
-        server.attach_host(room)
+        server.rooms.attach_host(room)
         for name in names:
             room.add_member(name, 100)
-            server.set_escrow(name, room.id, 100)
+            server.settlement.set_escrow(name, room.id, 100)
         self.rooms.append(room)
-        server.game_rooms[room.id] = room
+        server.rooms.game_rooms[room.id] = room
         return room
 
     def count(self):
@@ -85,27 +92,27 @@ class RatingTests(unittest.IsolatedAsyncioTestCase):
             return conn.execute("SELECT count(*) FROM rating_history").fetchone()[0]
 
     async def test_defaults_auth_profile_and_no_coin_effect(self):
-        password_hash, salt = server.hash_password("secret123")
+        password_hash, salt = account_helpers.hash_password("secret123")
         with server.database() as conn, conn:
             conn.execute("UPDATE users SET password_hash = ?, salt = ?", (password_hash, salt))
-            server.adjust_coins(conn, "alice", 500, "admin")
-        user = server.authenticate_user("alice", "secret123")
+            wallet_module.adjust_coins(conn, "alice", 500, "admin")
+        user = server.accounts.authenticate_user("alice", "secret123")
         self.assertEqual(user["rating"], rating_info())
-        self.assertEqual(server.resume_user(server.create_session("alice"))["rating"], rating_info())
-        self.assertEqual(server.get_profile("alice")["rating"], rating_info())
+        self.assertEqual(server.accounts.resume_user(server.accounts.create_session("alice"))["rating"], rating_info())
+        self.assertEqual(server.accounts.get_profile("alice")["rating"], rating_info())
         self.assertEqual(self.count(), 0)
-        with patch.object(server, "send_json") as send:
-            await server.handle_login(None, {"last_auth_attempt": -1000},
+        with patch.object(server.hub, "send_json") as send:
+            await server.auth.handle_login(None, {"last_auth_attempt": -1000},
                                       {"username": "alice", "password": "secret123"})
             self.assertEqual(send.call_args.args[1]["rating"], rating_info())
-            await server.handle_resume(None, {}, {"token": server.create_session("alice")})
+            await server.auth.handle_resume(None, {}, {"token": server.accounts.create_session("alice")})
             self.assertEqual(send.call_args.args[1]["rating"], rating_info())
 
     async def test_new_account_also_starts_at_1000(self):
         with server.database() as conn, conn:
             conn.execute("INSERT INTO invite_codes(code, created_at) VALUES ('new-user', 0)")
-        self.assertTrue(server.register_user("newplayer", "secret123", "new-user")[0])
-        self.assertEqual(server.get_rating("newplayer"), rating_info())
+        self.assertTrue(server.accounts.register_user("newplayer", "secret123", "new-user")[0])
+        self.assertEqual(server.ranking.get_rating("newplayer"), rating_info())
         self.assertEqual(self.count(), 0)
 
     async def test_failed_rating_write_can_retry_without_double_payout(self):
@@ -183,11 +190,11 @@ class RatingTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(room.view_for("alice")["players"][0]["rating"]["score"], 999)
         before = {name: m["stack"] for name, m in room.members.items()}
         await room.end_hand(False)
-        replay = server.record_hand_ratings(room, room.rating_hand_id, room.rating_starts, before)
+        replay = server.settlement.record_hand_ratings(room, room.rating_hand_id, room.rating_starts, before)
         self.assertEqual(replay, entries)
         self.assertEqual(before, {name: m["stack"] for name, m in room.members.items()})
         self.assertEqual(self.count(), 2)
-        await server.dissolve_room(room, "结算解散")
+        await server.rooms.dissolve_room(room, "结算解散")
         self.assertEqual(self.count(), 2)
 
     async def test_next_hand_uses_new_stacks(self):
@@ -200,7 +207,7 @@ class RatingTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(room.rating_starts, {"alice": 95, "bob": 105})
         await room.perform_action(room.game["to_act"], "fold")
         self.assertEqual(self.count(), 4)
-        self.assertEqual(server.get_rating("alice")["games"], 2)
+        self.assertEqual(server.ranking.get_rating("alice")["games"], 2)
 
     async def test_uno_result_and_replay(self):
         room = self.room("uno")
@@ -210,7 +217,7 @@ class RatingTests(unittest.IsolatedAsyncioTestCase):
         entries = room.game["result"]["ratings"]
         self.assertEqual(entries["alice"]["delta"], 8)
         self.assertEqual(entries["bob"]["delta"], -4)
-        self.assertEqual(server.get_rating("alice")["score"], 1008)
+        self.assertEqual(server.ranking.get_rating("alice")["score"], 1008)
         await room.end_hand("alice")
         self.assertEqual(room.members["alice"]["stack"], 120)
         self.assertEqual(self.count(), 2)
@@ -218,27 +225,27 @@ class RatingTests(unittest.IsolatedAsyncioTestCase):
     async def test_departure_is_recorded_once_in_final_result(self):
         room = self.room(names=("alice", "bob", "carol"))
         await room.start()
-        await server.leave_room_internal(room, "bob")
-        self.assertEqual(server.get_rating("bob")["score"], 999)
+        await server.rooms.leave_room_internal(room, "bob")
+        self.assertEqual(server.ranking.get_rating("bob")["score"], 999)
         self.assertEqual(self.count(), 1)
         await room.perform_action(room.game["to_act"], "fold")
         self.assertEqual(set(room.game["result"]["ratings"]), {"alice", "bob", "carol"})
         self.assertEqual(self.count(), 3)
-        self.assertEqual(server.get_rating("bob")["games"], 1)
+        self.assertEqual(server.ranking.get_rating("bob")["games"], 1)
         with server.database() as conn:
             self.assertIsNone(conn.execute("SELECT * FROM game_escrows WHERE username='bob'").fetchone())
 
     async def test_holdem_same_hand_rejoin_preserves_new_buyin(self):
         room = self.room(names=("alice", "bob", "carol"))
         await room.start()
-        await server.leave_room_internal(room, "bob")
+        await server.rooms.leave_room_internal(room, "bob")
         self.assertEqual(room.rating_results["bob"]["final"], 95)
-        with patch.object(server, "send_json"):
-            await server.handle_join_room(None, {"user": {"username": "bob"}, "last_room_op": -1000}, {"room_id": room.id})
+        with patch.object(server.hub, "send_json"):
+            await server.room_protocol.handle_join_room(None, {"user": {"username": "bob"}, "last_room_op": -1000}, {"room_id": room.id})
         self.assertEqual(room.members["bob"]["stack"], 100)
         await room.perform_action(room.game["to_act"], "fold")
         self.assertEqual(room.members["bob"]["stack"], 100)
-        self.assertEqual(server.get_rating("bob")["games"], 1)
+        self.assertEqual(server.ranking.get_rating("bob")["games"], 1)
         with server.database() as conn:
             self.assertEqual(conn.execute("SELECT amount FROM game_escrows WHERE username='bob'").fetchone()[0], 100)
             self.assertEqual(conn.execute("SELECT hands FROM holdem_player_stats WHERE user_id = "
@@ -247,69 +254,69 @@ class RatingTests(unittest.IsolatedAsyncioTestCase):
     async def test_uno_departure_keeps_existing_refund_rules(self):
         room = self.room("uno")
         await room.start()
-        await server.leave_room_internal(room, "bob")
+        await server.rooms.leave_room_internal(room, "bob")
         self.assertEqual(room.game["result"]["ratings"]["bob"]["delta"], 0)
-        self.assertEqual(server.get_rating("bob")["score"], 1000)
+        self.assertEqual(server.ranking.get_rating("bob")["score"], 1000)
         self.assertEqual(self.count(), 2)
 
     async def test_waiting_cancel_and_restart_never_score(self):
         waiting = self.room()
-        await server.dissolve_room(waiting, "等待中解散")
+        await server.rooms.dissolve_room(waiting, "等待中解散")
         room = self.room()
         await room.start()
         old_id = room.rating_hand_id
         await room.restart()
         self.assertNotEqual(room.rating_hand_id, old_id)
         self.assertEqual(room.rating_starts, {"alice": 100, "bob": 100})
-        await server.dissolve_room(room, "流局")
+        await server.rooms.dissolve_room(room, "流局")
         self.assertEqual(self.count(), 0)
 
     async def test_restart_refunds_do_not_rate_again(self):
         room = self.room("uno")
         await room.start()
         await room.end_hand("alice")
-        score = server.get_rating("alice")
-        server.refund_game_escrows()
-        server.refund_game_escrows()
-        self.assertEqual(server.get_rating("alice"), score)
+        score = server.ranking.get_rating("alice")
+        server.settlement.refund_game_escrows()
+        server.settlement.refund_game_escrows()
+        self.assertEqual(server.ranking.get_rating("alice"), score)
         self.assertEqual(self.count(), 2)
 
     async def test_zero_floor_reports_actual_delta(self):
         room = self.room()
         with server.database() as conn, conn:
             conn.execute("UPDATE users SET rating_score = 7 WHERE username='bob'")
-        entries = server.record_hand_ratings(room, "floor", {"bob": 100}, {"bob": 0})
+        entries = server.settlement.record_hand_ratings(room, "floor", {"bob": 100}, {"bob": 0})
         self.assertEqual(entries["bob"]["delta"], -7)
-        self.assertEqual(server.get_rating("bob")["score"], 0)
+        self.assertEqual(server.ranking.get_rating("bob")["score"], 0)
 
     async def test_transaction_rolls_back_all_players_and_escrows(self):
         room = self.room()
         with self.assertRaises(ValueError):
-            server.record_hand_ratings(room, "bad", {"alice": 100, "bob": 0},
+            server.settlement.record_hand_ratings(room, "bad", {"alice": 100, "bob": 0},
                                        {"alice": 120, "bob": 80})
         self.assertEqual(self.count(), 0)
-        self.assertEqual(server.get_rating("alice")["score"], 1000)
+        self.assertEqual(server.ranking.get_rating("alice")["score"], 1000)
         with server.database() as conn:
             self.assertEqual(conn.execute("SELECT amount FROM game_escrows WHERE username='alice'").fetchone()[0], 100)
 
     async def test_history_is_private_newest_first_and_capped(self):
         room = self.room()
         for i in range(22):
-            server.record_hand_ratings(room, f"history-{i}", {"alice": 100, "bob": 100},
+            server.settlement.record_hand_ratings(room, f"history-{i}", {"alice": 100, "bob": 100},
                                        {"alice": 120, "bob": 80})
-        with patch.object(server, "send_json") as send:
-            await server.handle_get_rating_history(None, {"user": {"username": "bob"}}, {"username": "alice"})
+        with patch.object(server.hub, "send_json") as send:
+            await server.ranking.handle_get_rating_history(None, {"user": {"username": "bob"}}, {"username": "alice"})
             data = send.call_args.args[1]
             self.assertEqual(len(data["entries"]), 20)
             self.assertEqual(data["entries"][0]["rating"]["games"], 22)
             self.assertTrue(all(e["delta"] == -4 for e in data["entries"]))
             send.reset_mock()
-            await server.handle_get_rating_history(None, {}, {})
+            await server.ranking.handle_get_rating_history(None, {}, {})
             send.assert_not_called()
 
     async def leaderboard(self, username="alice", **request):
-        with patch.object(server, "send_json") as send:
-            await server.handle_get_rating_leaderboard(None, {"user": {"username": username}}, request)
+        with patch.object(server.hub, "send_json") as send:
+            await server.ranking.handle_get_rating_leaderboard(None, {"user": {"username": username}}, request)
             return send.call_args.args[1]
 
     async def test_leaderboard_ties_public_fields_and_tier_ranges(self):
@@ -348,11 +355,11 @@ class RatingTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(data["self"]["rank"], 1)
 
     async def test_leaderboard_requires_login_and_ignores_client_score_or_target(self):
-        with patch.object(server, "send_json") as send:
-            await server.handle_get_rating_leaderboard(None, {}, {})
+        with patch.object(server.hub, "send_json") as send:
+            await server.ranking.handle_get_rating_leaderboard(None, {}, {})
             send.assert_not_called()
-        with patch.object(server, "send_json") as send:
-            await server.handle_get_rating_leaderboard(None, {"user": {"username": "alice"}},
+        with patch.object(server.hub, "send_json") as send:
+            await server.ranking.handle_get_rating_leaderboard(None, {"user": {"username": "alice"}},
                 {"username": "bob", "rating_score": 99999, "limit": 99999})
             data = send.call_args.args[1]
         self.assertEqual(data["self"]["username"], "alice")
@@ -370,7 +377,7 @@ class RatingTests(unittest.IsolatedAsyncioTestCase):
                         return message
             return await asyncio.wait_for(read(), 5)
 
-        token = server.create_session("alice")
+        token = server.accounts.create_session("alice")
         async with websockets.serve(server.handler, "127.0.0.1", 0) as host:
             uri = f"ws://127.0.0.1:{host.sockets[0].getsockname()[1]}"
             async with websockets.connect(uri) as ws:
@@ -383,13 +390,13 @@ class RatingTests(unittest.IsolatedAsyncioTestCase):
                 await room.start()
                 await room.end_hand("bob")
                 await receive(ws, "rating_update")
-                server.init_db()
+                init_db(server.database)
                 await ws.send(json.dumps({"type": "get_rating_leaderboard"}))
                 data = await receive(ws, "rating_leaderboard")
                 self.assertEqual(data["entries"][0]["username"], "bob")
-                self.assertEqual(data["self"]["rating"], server.get_rating("alice"))
+                self.assertEqual(data["self"]["rating"], server.ranking.get_rating("alice"))
                 self.assertEqual(data["self"]["rank"], 3)
-                await server.dissolve_room(room, "测试结束")
+                await server.rooms.dissolve_room(room, "测试结束")
 
     async def test_rating_update_reaches_all_connections(self):
         class Socket:
@@ -400,31 +407,31 @@ class RatingTests(unittest.IsolatedAsyncioTestCase):
         room = self.room("uno")
         sockets = [Socket(), Socket()]
         for socket in sockets:
-            server.clients[socket] = {"user": {"username": "alice"}, "send_lock": asyncio.Lock()}
+            server.hub.clients[socket] = {"user": {"username": "alice"}, "send_lock": asyncio.Lock()}
         await room.start()
         await room.end_hand("alice")
         for socket in sockets:
             updates = [m for m in socket.messages if m["type"] == "rating_update" and m["username"] == "alice"]
             self.assertEqual(len(updates), 1)
-            self.assertEqual(updates[0]["rating"], server.get_rating("alice"))
+            self.assertEqual(updates[0]["rating"], server.ranking.get_rating("alice"))
 
 
 class MigrationTests(unittest.TestCase):
     def test_existing_accounts_receive_default_once(self):
         with tempfile.TemporaryDirectory() as tmp:
-            with patch.object(server, "DB_FILE", str(Path(tmp) / "old.db")):
-                with closing(sqlite3.connect(server.DB_FILE)) as conn, conn:
+            with patch.object(storage, "DB_FILE", str(Path(tmp) / "old.db")):
+                with closing(sqlite3.connect(storage.DB_FILE)) as conn, conn:
                     conn.execute("CREATE TABLE users (id INTEGER PRIMARY KEY, username TEXT UNIQUE, "
                                  "password_hash TEXT, salt TEXT, role TEXT, created_at INTEGER)")
                     conn.execute("INSERT INTO users VALUES (1, 'old', '', '', 'user', 0)")
-                server.init_db()
-                self.assertEqual(server.get_rating("old"), rating_info())
+                init_db(server.database)
+                self.assertEqual(server.ranking.get_rating("old"), rating_info())
                 with server.database() as conn:
                     self.assertEqual(conn.execute("SELECT count(*) FROM rating_history").fetchone()[0], 0)
                 with server.database() as conn, conn:
                     conn.execute("UPDATE users SET rating_score=1234, rating_games=3")
-                server.init_db()
-                self.assertEqual(server.get_rating("old"), rating_info(1234, 3))
+                init_db(server.database)
+                self.assertEqual(server.ranking.get_rating("old"), rating_info(1234, 3))
 
 
 if __name__ == "__main__":
