@@ -6,6 +6,8 @@
 """
 import hashlib
 import json
+from datetime import datetime
+from zoneinfo import ZoneInfo
 
 from estate.catalog import (
     FISHING_STEPS, INITIAL_PLOTS, MAX_PLOTS, MINE_BOARD_SIZE, MINING_LEVELS, TOOLS,
@@ -38,6 +40,40 @@ TOOL_MISSING = ("tool_missing", "请先购买工具")
 PLOT_INDEX_INVALID = ("invalid_plot", "土地编号无效")
 PLOT_NOT_FOUND = ("invalid_plot", "土地不存在")
 CROP_DATA_BROKEN = ("invalid_save", "作物数据异常")
+SHANGHAI = ZoneInfo("Asia/Shanghai")
+
+
+def estate_day_key(now):
+    """庄园每日规则统一按北京时间 0 点换日。"""
+    return datetime.fromtimestamp(int(now), SHANGHAI).date().isoformat()
+
+
+def refresh_daily_pickaxe(conn, username, now):
+    """跨日后将矿镐补满；无矿镐或当天已刷新时保持不变。"""
+    row = conn.execute(
+        "SELECT t.level,COALESCE(d.refill_day,'') FROM estate_tools t "
+        "LEFT JOIN estate_tool_daily d ON d.username=t.username AND d.tool_type=t.tool_type "
+        "WHERE t.username=? AND t.tool_type='pickaxe'", (username,),
+    ).fetchone()
+    if not row:
+        return False
+    today = estate_day_key(now)
+    if row[1] == today:
+        return False
+    maximum = TOOLS["pickaxe"].get(row[0], {}).get("max_durability")
+    if maximum is None:
+        return False
+    conn.execute(
+        "UPDATE estate_tools SET durability=?,updated_at=? "
+        "WHERE username=? AND tool_type='pickaxe'",
+        (maximum, int(now), username),
+    )
+    conn.execute(
+        "INSERT INTO estate_tool_daily(username,tool_type,refill_day) VALUES (?,'pickaxe',?) "
+        "ON CONFLICT(username,tool_type) DO UPDATE SET refill_day=excluded.refill_day",
+        (username, today),
+    )
+    return True
 
 
 def positive_int(value, spec=("invalid_quantity", "数量无效"), maximum=9999):
@@ -308,17 +344,21 @@ def _inventory_views(conn, username):
     return views
 
 
-def _tool_views(conn, username):
+def _tool_views(conn, username, now):
     views = {}
-    for tool_type, level, durability in conn.execute(
-        "SELECT tool_type,level,durability FROM estate_tools WHERE username=?",
+    today = estate_day_key(now)
+    for tool_type, level, durability, repair_day in conn.execute(
+        "SELECT t.tool_type,t.level,t.durability,COALESCE(d.repair_day,'') "
+        "FROM estate_tools t LEFT JOIN estate_tool_daily d "
+        "ON d.username=t.username AND d.tool_type=t.tool_type WHERE t.username=?",
         (username,),
     ):
         rule = TOOLS.get(tool_type, {}).get(level, {})
         views[tool_type] = {"type": tool_type, "level": level,
                             "durability": durability,
                             "max_durability": rule.get("max_durability", durability),
-                            "name": rule.get("name", tool_type)}
+                            "name": rule.get("name", tool_type),
+                            "repair_available": tool_type != "pickaxe" or repair_day != today}
     return views
 
 
@@ -375,6 +415,7 @@ def estate_state(conn, username, now):
     now = int(now)
     ensure_estate(conn, username, now)
     sweep_expired_fishing(conn, username, now)
+    refresh_daily_pickaxe(conn, username, now)
 
     skins = skin_state(conn, username)
     profile = load_profile(conn, username)
@@ -403,7 +444,7 @@ def estate_state(conn, username, now):
         },
         "plots": _plot_views(conn, username, profile["plot_count"], now),
         "inventory": _inventory_views(conn, username),
-        "tools": _tool_views(conn, username),
+        "tools": _tool_views(conn, username, now),
         "fishing_session": _fishing_view(conn, username),
         "mining_run": _mining_view(conn, username),
         "catalog": public_catalog(),

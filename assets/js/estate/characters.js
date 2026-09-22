@@ -3,7 +3,7 @@
 // Only registered, local assets can become a skin; never turn a server ID into an arbitrary URL.
 export const CHARACTER_IDS = Object.freeze([
   "berry", "steve", "dva", "little_gwen",
-  "jamie", "xiaofei", "weichong", "xiaoxiaopang",
+  "jamie", "xiaofei", "weichong", "ryu", "malphite", "nailong", "xiaoxiaopang",
 ]);
 export const DEFAULT_SKIN_ID = "berry";
 export const CHARACTER_SCALE = 1.5;

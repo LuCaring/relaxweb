@@ -5,7 +5,7 @@ import { formatCoins, formatCoinsWhole } from "../format.js";
 import { characterAsset } from "./characters.js";
 import { cropAsset, cropStage, inventoryAsset, toolAsset } from "./assets.js";
 import { catalogEntry, formatDuration, repairCost, reservedSlots } from "./rules.js";
-import { estateCommand, estateRequest, pendingEstateAction } from "./protocol.js";
+import { estateCommand, estateRequest, pendingEstateAction, requestEstateOnlineUsers } from "./protocol.js";
 import { estateNow, estateStore } from "./state.js";
 
 /**
@@ -116,16 +116,16 @@ export function createEstateUI(root, activities = {}) {
   function renderGeneralStore() {
     const snapshot = estateStore.snapshot; if (!snapshot) return;
     show("商店");
-    sheetBody.append(note("角色皮肤 · 普通皮肤每套 20,000 金币，永久解锁后到衣橱换装。"));
+    sheetBody.append(note("角色皮肤 · 普通皮肤每套 5,000 金币，永久解锁后到衣橱换装。"));
     for (const skin of Object.values(snapshot.catalog.skins)) {
       const owned = snapshot.skins.owned.includes(skin.id);
       const special = skin.unlock === "collection";
       const insufficient = snapshot.coins < skin.price;
       const missing = snapshot.skins.missing_collectibles.map(id => snapshot.catalog.fishing_treasures[id]?.name || id);
       const meta = special ? `其他皮肤全部解锁（还差 ${snapshot.skins.missing_skins.length} 套）且集齐全部收集品${missing.length ? `：还差${missing.join("、")}` : "（收集品已集齐）"}`
-        : skin.unlock === "default" ? "默认皮肤 · 免费" : "20,000 金币 · 永久解锁";
+        : skin.unlock === "default" ? "默认皮肤 · 免费" : `${formatCoinsWhole(skin.price)} 金币 · 永久解锁`;
       const card = itemCard({ iconUrl: characterAsset(skin.id, "portrait.png"), title: skin.name, meta,
-        controls: [button(owned ? "已解锁" : special ? "收集解锁" : insufficient ? "金币不足 · 20,000" : "20,000 金币 · 购买",
+        controls: [button(owned ? "已解锁" : special ? "收集解锁" : insufficient ? `金币不足 · ${formatCoinsWhole(skin.price)}` : `${formatCoinsWhole(skin.price)} 金币 · 购买`,
           () => estateCommand("estate_buy_skin", { skin_id: skin.id }),
           { disabled: owned || special || insufficient, className: "estate-button estate-button-gold" })] });
       card.dataset.shopSkin = skin.id;
@@ -208,8 +208,9 @@ export function createEstateUI(root, activities = {}) {
     } else {
       if (owned.durability < owned.max_durability) {
         const cost = repairCost(currentRule, owned.durability);
-        controls.push(button(`修理 · ${formatCoins(cost)}金币`,
-          () => estateCommand("estate_repair_tool", { tool_type: toolType })));
+        controls.push(button(owned.repair_available === false ? "今日已修理" : `修理 · ${formatCoins(cost)}金币`,
+          () => estateCommand("estate_repair_tool", { tool_type: toolType }),
+          { disabled: owned.repair_available === false }));
       }
       if (currentRule.upgrade_price != null) {
         const next = catalogEntry(rules, owned.level + 1);
@@ -279,7 +280,8 @@ export function createEstateUI(root, activities = {}) {
     show("矿洞");
     sheetBody.append(note(
       "每次下矿消耗一点矿镐耐久，空手或触雷也会消耗。越深奖励越好、炸弹越多；"
-      + "触雷立即结束，已获得的矿物可以保留并结算经验。"));
+      + "触雷立即结束，已获得的矿物可以保留并结算经验。矿镐每天北京时间 0 点自动修满，"
+      + "每天还可主动修理一次。"));
     const pickaxe = toolPanel("pickaxe", "⛏️");
     if (snapshot.mining_run) {
       sheetBody.append(button("继续本次采矿", () => {
@@ -295,7 +297,7 @@ export function createEstateUI(root, activities = {}) {
       sheetBody.append(itemCard({
         title: `第${level}层 · ${mine.name}`,
         meta: `${mine.risk} · ${mine.bombs}枚炸弹 · 庄园 ${mine.unlock_level} 级 · 矿镐 Lv.${level}`
-          + (cost ? ` · 每轮维修约${cost}金币 · 预留${reservedSlots(snapshot.catalog, pickaxeRule)}格仓位` : ""),
+          + (cost ? ` · 每点耐久维修约${cost}金币 · 预留${reservedSlots(snapshot.catalog, pickaxeRule)}格仓位` : ""),
         controls: [button(unlocked ? "进入矿层" : "尚未解锁", async () => {
           try {
             const run = await estateRequest("estate_start_mining", { mine_level: Number(level) });
@@ -406,11 +408,18 @@ export function createEstateUI(root, activities = {}) {
     const searchRow = document.createElement("div"); searchRow.className = "estate-sheet-actions";
     searchRow.append(search, searchButton); sheetBody.append(searchRow, note("无论对方是否在线，都可以拜访已经创建的庄园。"));
     try {
-      const entries = await estateRequest("estate_list_visits", { query });
+      const [directory, onlineUsers] = await Promise.all([
+        estateRequest("estate_list_visits", { query }),
+        requestEstateOnlineUsers(),
+      ]);
+      const entries = directory.map((entry) => ({
+        ...entry, online: onlineUsers.has(String(entry.username).toLowerCase()),
+      })).sort((left, right) => Number(right.online) - Number(left.online)
+        || left.username.localeCompare(right.username, "zh-CN"));
       if (!entries.length) sheetBody.append(note("没有找到可拜访的庄园。"));
       for (const entry of entries) {
         sheetBody.append(itemCard({ title: `${entry.username} 的庄园`,
-          meta: entry.mature_plots ? `${entry.mature_plots} 块成熟作物` : "暂无成熟作物",
+          meta: entry.online ? "online" : "offline",
           controls: [button("拜访", async () => {
             try {
               await estateRequest("estate_enter_visit", { owner_username: entry.username });

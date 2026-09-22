@@ -23,7 +23,7 @@ from estate.catalog import (
 )
 from estate.store import (
     LEVEL_LOCKED, TOOL_MISSING, award_xp, change_inventory, debit, estate_error,
-    load_profile, require_capacity, run_action,
+    estate_day_key, load_profile, refresh_daily_pickaxe, require_capacity, run_action,
 )
 
 # 只保留多处复用的规则；单处使用的文案直接内联在抛出处。
@@ -37,10 +37,12 @@ _SEED_CEILING = 2_000_000_000
 
 def _tool(conn, username, tool_type):
     row = conn.execute(
-        "SELECT level,durability FROM estate_tools WHERE username=? AND tool_type=?",
+        "SELECT t.level,t.durability,COALESCE(d.repair_day,'') FROM estate_tools t "
+        "LEFT JOIN estate_tool_daily d ON d.username=t.username AND d.tool_type=t.tool_type "
+        "WHERE t.username=? AND t.tool_type=?",
         (username, tool_type),
     ).fetchone()
-    return {"level": row[0], "durability": row[1]} if row else None
+    return {"level": row[0], "durability": row[1], "repair_day": row[2]} if row else None
 
 
 def _require_tool(conn, username, tool_type, label):
@@ -84,6 +86,11 @@ def buy_tool(conn, username, request_id, tool_type, now, adjust_coins):
             "VALUES (?,?,?,?,?)",
             (username, tool_type, 1, rule["max_durability"], int(now)),
         )
+        conn.execute(
+            "INSERT INTO estate_tool_daily(username,tool_type,refill_day) VALUES (?,?,?) "
+            "ON CONFLICT(username,tool_type) DO UPDATE SET refill_day=excluded.refill_day",
+            (username, tool_type, estate_day_key(now)),
+        )
         return {"action": "buy_tool", "tool_type": tool_type, "level": 1,
                 "durability": rule["max_durability"], "coins": balance}
 
@@ -111,6 +118,11 @@ def upgrade_tool(conn, username, request_id, tool_type, now, adjust_coins):
             "WHERE username=? AND tool_type=?",
             (next_level, target["max_durability"], int(now), username, tool_type),
         )
+        conn.execute(
+            "INSERT INTO estate_tool_daily(username,tool_type,refill_day) VALUES (?,?,?) "
+            "ON CONFLICT(username,tool_type) DO UPDATE SET refill_day=excluded.refill_day",
+            (username, tool_type, estate_day_key(now)),
+        )
         return {"action": "upgrade_tool", "tool_type": tool_type,
                 "level": next_level, "durability": target["max_durability"],
                 "coins": balance}
@@ -122,12 +134,17 @@ def repair_tool(conn, username, request_id, tool_type, now, adjust_coins):
     tool_type = str(tool_type or "")
 
     def mutate():
+        if tool_type == "pickaxe":
+            refresh_daily_pickaxe(conn, username, now)
         current = _tool(conn, username, tool_type)
         if not current or tool_type not in TOOLS:
             raise estate_error(TOOL_MISSING)
         rule = TOOLS[tool_type][current["level"]]
         if current["durability"] >= rule["max_durability"]:
             raise estate_error(("repair_unneeded", "工具耐久已满"))
+        today = estate_day_key(now)
+        if tool_type == "pickaxe" and current["repair_day"] == today:
+            raise estate_error(("repair_daily_limit", "矿镐今天已经修理过一次，明天再来"))
         missing = rule["max_durability"] - current["durability"]
         cost = max(1.0, round(rule["repair_price"] * missing / rule["max_durability"], 2))
         balance = debit(adjust_coins, conn, username, cost,
@@ -137,6 +154,13 @@ def repair_tool(conn, username, request_id, tool_type, now, adjust_coins):
             "WHERE username=? AND tool_type=?",
             (rule["max_durability"], int(now), username, tool_type),
         )
+        if tool_type == "pickaxe":
+            conn.execute(
+                "INSERT INTO estate_tool_daily(username,tool_type,repair_day) "
+                "VALUES (?,'pickaxe',?) ON CONFLICT(username,tool_type) "
+                "DO UPDATE SET repair_day=excluded.repair_day",
+                (username, today),
+            )
         return {"action": "repair_tool", "tool_type": tool_type,
                 "durability": rule["max_durability"], "cost": cost, "coins": balance}
 
@@ -327,6 +351,7 @@ def start_mining(conn, username, request_id, mine_level, now):
 
     def mutate():
         profile = load_profile(conn, username)
+        refresh_daily_pickaxe(conn, username, now)
         pickaxe = _require_tool(conn, username, "pickaxe", "矿镐")
         rule = MINING_LEVELS.get(mine_level)
         if not rule or profile["level"] < rule["unlock_level"] or pickaxe["level"] < mine_level:

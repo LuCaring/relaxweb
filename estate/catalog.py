@@ -20,11 +20,14 @@ SKINS = {
     "jamie": {"name": "杰米", "description": "亮黄色运动装，活力满满地照料庄园。"},
     "xiaofei": {"name": "小菲", "description": "粉发小礼帽装束，把田园生活变得甜美。"},
     "weichong": {"name": "威虫", "description": "战术装甲造型，沉稳守护庄园的收获。"},
+    "ryu": {"name": "隆", "description": "红色头带与白色道服，带着格斗家的坚定来到庄园。"},
+    "malphite": {"name": "墨菲特", "description": "岩石铠甲坚不可摧，稳稳守护庄园的每一份收获。"},
+    "nailong": {"name": "奶龙", "description": "圆滚滚的金黄色小恐龙，开心地陪你打理庄园。"},
     "xiaoxiaopang": {"name": "小小胖", "description": "黑色棉服与圆框眼镜，悠闲漫步在庄园。"},
 }
 
 for _skin_id, _skin in SKINS.items():
-    _skin["price"] = 20000 if _skin_id not in ("berry", "xiaoxiaopang") else 0
+    _skin["price"] = 5000 if _skin_id not in ("berry", "xiaoxiaopang") else 0
     _skin["unlock"] = "collection" if _skin_id == "xiaoxiaopang" else "default" if _skin_id == "berry" else "purchase"
 
 
@@ -147,13 +150,13 @@ TOOLS = {
             "tension_factor": 0.68},
     },
     "pickaxe": {
-        1: {"name": "铜矿镐", "price": 350.0, "max_durability": 20,
+        1: {"name": "铜矿镐", "price": 350.0, "max_durability": 15,
             "repair_price": 200.0, "upgrade_price": 1100.0, "unlock_level": 1,
             "strikes": 8},
-        2: {"name": "铁矿镐", "price": None, "max_durability": 35,
+        2: {"name": "铁矿镐", "price": None, "max_durability": 20,
             "repair_price": 525.0, "upgrade_price": 2800.0, "unlock_level": 3,
             "strikes": 11},
-        3: {"name": "秘银矿镐", "price": None, "max_durability": 55,
+        3: {"name": "秘银矿镐", "price": None, "max_durability": 25,
             "repair_price": 1100.0, "upgrade_price": None, "unlock_level": 6,
             "strikes": 14},
     },
@@ -237,9 +240,9 @@ MINING_LEVELS = {
 }
 
 PET_LEVELS = {
-    1: {"name": "豆豆", "buy_price": 10000.0, "defend_chance": .15, "upgrade_price": 20000.0},
-    2: {"name": "豆豆", "defend_chance": .20, "upgrade_price": 40000.0},
-    3: {"name": "豆豆", "defend_chance": .30, "upgrade_price": 100000.0},
+    1: {"name": "豆豆", "buy_price": 10000.0, "defend_chance": .15, "upgrade_price": 10000.0},
+    2: {"name": "豆豆", "defend_chance": .20, "upgrade_price": 20000.0},
+    3: {"name": "豆豆", "defend_chance": .30, "upgrade_price": 50000.0},
     4: {"name": "豆豆", "defend_chance": .40, "upgrade_price": None},
 }
 

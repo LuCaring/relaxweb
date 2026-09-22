@@ -80,6 +80,23 @@ def init_estate(conn):
         )
     """)
     conn.execute("""
+        CREATE TABLE IF NOT EXISTS estate_tool_daily (
+            username TEXT NOT NULL COLLATE NOCASE,
+            tool_type TEXT NOT NULL,
+            refill_day TEXT NOT NULL DEFAULT '',
+            repair_day TEXT NOT NULL DEFAULT '',
+            PRIMARY KEY (username, tool_type)
+        )
+    """)
+    conn.execute("""
+        CREATE TRIGGER IF NOT EXISTS delete_estate_tool_daily
+        AFTER DELETE ON estate_tools
+        BEGIN
+            DELETE FROM estate_tool_daily
+            WHERE username=OLD.username AND tool_type=OLD.tool_type;
+        END
+    """)
+    conn.execute("""
         CREATE TABLE IF NOT EXISTS estate_fishing_sessions (
             session_id TEXT PRIMARY KEY,
             username TEXT NOT NULL COLLATE NOCASE,

@@ -7,6 +7,7 @@ import { playGameSound } from "../game-audio.js";
 import { clearEstate, estateStore, setEstateSnapshot, setVisitSnapshot } from "./state.js";
 
 let sequence = 0;
+const onlineWaiters = new Set();
 
 /** 动作完成后播放的音效；没有对应音效的动作直接跳过。 */
 const SOUND_CUES = {
@@ -94,6 +95,32 @@ onMessage("estate_visit_list", (data) => {
   settleRequest(data.request_id, { result: data.estates || [] });
 });
 
+onMessage("online_users", (data) => {
+  const users = Array.isArray(data.users) ? data.users : [];
+  estateStore.onlineUsers = new Set(users.map((user) => String(user.username || "").toLowerCase()));
+  for (const waiter of [...onlineWaiters]) {
+    window.clearTimeout(waiter.timeout);
+    onlineWaiters.delete(waiter);
+    waiter.resolve(estateStore.onlineUsers);
+  }
+});
+
+export function requestEstateOnlineUsers() {
+  return new Promise((resolve) => {
+    const waiter = { resolve, timeout: 0 };
+    waiter.timeout = window.setTimeout(() => {
+      onlineWaiters.delete(waiter);
+      resolve(estateStore.onlineUsers);
+    }, 5000);
+    onlineWaiters.add(waiter);
+    if (!send({ type: "get_online" })) {
+      window.clearTimeout(waiter.timeout);
+      onlineWaiters.delete(waiter);
+      resolve(estateStore.onlineUsers);
+    }
+  });
+}
+
 onMessage("estate_visit_state", (data) => {
   settleRequest(data.request_id, { result: data });
   setVisitSnapshot(data);
@@ -154,6 +181,11 @@ document.addEventListener("authstatechange", ({ detail }) => {
   if (!detail.user) {
     const reason = new Error("登录已结束");
     for (const id of [...estateStore.pending.keys()]) settleRequest(id, { error: reason });
+    for (const waiter of [...onlineWaiters]) {
+      window.clearTimeout(waiter.timeout);
+      onlineWaiters.delete(waiter);
+      waiter.resolve(new Set());
+    }
     clearEstate();
     return;
   }

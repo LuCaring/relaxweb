@@ -9,6 +9,7 @@ export const estateStore = {
   homeSnapshot: null,
   visit: null,
   players: new Map(),
+  onlineUsers: new Set(),
   notifications: [],
 };
 
@@ -35,6 +36,7 @@ export function clearEstate() {
   estateStore.homeSnapshot = null;
   estateStore.visit = null;
   estateStore.players.clear();
+  estateStore.onlineUsers.clear();
   estateStore.notifications = [];
   estateStore.listeners.forEach((listener) => listener(null));
 }

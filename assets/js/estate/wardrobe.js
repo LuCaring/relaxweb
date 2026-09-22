@@ -1,6 +1,7 @@
 "use strict";
 
 import { CHARACTER_IDS, DEFAULT_SKIN_ID, characterAsset, drawCharacterSkin, loadCharacter, retryCharacter } from "./characters.js";
+import { formatCoinsWhole } from "../format.js";
 import { estateRequest } from "./protocol.js";
 import { estateStore, subscribeEstate } from "./state.js";
 
@@ -51,7 +52,7 @@ export function createEstateWardrobe(root, { onOpen, onClose, onShop } = {}) {
       const names = (progress?.missing_collectibles || []).map(key => estateStore.snapshot.catalog.fishing_treasures?.[key]?.name || key);
       return `解锁条件：其他皮肤全部解锁（还差 ${progress?.missing_skins?.length || 0} 套），收集品全部集齐${names.length ? `（还差：${names.join("、")}）` : "（已集齐）"}`;
     }
-    return "前往商店花费 20000 金币永久解锁，再来衣橱换装";
+    return `前往商店花费 ${formatCoinsWhole(catalog[id]?.price || 0)} 金币永久解锁，再来衣橱换装`;
   }
   function equipped() { return estateStore.snapshot?.profile.skin_id || DEFAULT_SKIN_ID; }
   function update() {
@@ -81,7 +82,7 @@ export function createEstateWardrobe(root, { onOpen, onClose, onShop } = {}) {
       card.disabled = saving;
       const wearing = id === equipped();
       card.classList.toggle("is-equipped", wearing);
-      card.querySelector(".estate-skin-badge").textContent = wearing ? "已穿戴" : owned(id) ? "已解锁" : skin.unlock === "collection" ? "收集解锁" : "20000 金币";
+      card.querySelector(".estate-skin-badge").textContent = wearing ? "已穿戴" : owned(id) ? "已解锁" : skin.unlock === "collection" ? "收集解锁" : `${formatCoinsWhole(skin.price)} 金币`;
     }
     layer.querySelector(".estate-selected-name").textContent = catalog[selected]?.name || "角色衣橱";
     const locked = !owned(selected);
