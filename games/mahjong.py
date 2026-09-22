@@ -18,11 +18,11 @@
 """
 import logging
 import os
-import random
 import time
 from collections import Counter
 from itertools import combinations
 
+from games import randomness
 from games.base import BaseRoom, register_room_type
 
 logger = logging.getLogger("live-chat.mahjong")
@@ -68,7 +68,7 @@ def build_wall(include_flowers=True):
     wall = [code for code in range(TILE_KINDS) for _ in range(4)]
     if include_flowers:
         wall.extend(range(FLOWER_MIN, FLOWER_MIN + FLOWER_COUNT))
-    random.shuffle(wall)
+    randomness.shuffle(wall)
     return wall
 
 

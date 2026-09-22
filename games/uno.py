@@ -11,9 +11,9 @@ build_deck / matches / card_label 是纯函数，不依赖任何 IO，可直接�
 import asyncio
 import logging
 import os
-import random
 import time
 
+from games import randomness
 from games.base import BaseRoom, register_room_type
 
 logger = logging.getLogger("live-chat.uno")
@@ -38,7 +38,7 @@ def build_deck():
             deck.extend({"c": color, "v": value} for _ in range(2))
     deck.extend({"c": "w", "v": "wild"} for _ in range(4))
     deck.extend({"c": "w", "v": "wd4"} for _ in range(4))
-    random.shuffle(deck)
+    randomness.shuffle(deck)
     return deck
 
 
@@ -213,7 +213,7 @@ class UnoRoom(BaseRoom):
         for _ in range(count):
             if not g["deck"] and len(g["discard"]) > 1:
                 top = g["discard"].pop()
-                random.shuffle(g["discard"])
+                randomness.shuffle(g["discard"])
                 g["deck"] = g["discard"]
                 g["discard"] = [top]
             if not g["deck"]:

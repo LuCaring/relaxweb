@@ -18,10 +18,10 @@ find_moves 是纯函数，不依赖任何 IO，可直接单元测试；GuandanRo
 import asyncio
 import logging
 import os
-import random
 import time
 from collections import Counter
 
+from games import randomness
 from games.base import BaseRoom, register_room_type
 
 logger = logging.getLogger("live-chat.guandan")
@@ -51,7 +51,7 @@ def build_deck():
             for _ in range(2)]
     deck.extend({"r": 16, "s": 4} for _ in range(2))
     deck.extend({"r": 17, "s": 4} for _ in range(2))
-    random.shuffle(deck)
+    randomness.shuffle(deck)
     return deck
 
 

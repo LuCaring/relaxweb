@@ -7,10 +7,10 @@ evaluate5 / best7 / build_side_pots / distribute_pots 是纯函数，
 import asyncio
 import logging
 import os
-import random
 import time
 from itertools import combinations
 
+from games import randomness
 from games.base import BaseRoom, parse_amount, register_room_type
 
 logger = logging.getLogger("live-chat.holdem")
@@ -108,7 +108,7 @@ def distribute_pots(pots, hands):
 
 def new_deck():
     deck = [(rank, suit) for rank in range(2, 15) for suit in range(4)]
-    random.shuffle(deck)
+    randomness.shuffle(deck)
     return deck
 
 
