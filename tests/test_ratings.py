@@ -235,19 +235,25 @@ class RatingTests(unittest.IsolatedAsyncioTestCase):
         with server.database() as conn:
             self.assertIsNone(conn.execute("SELECT * FROM game_escrows WHERE username='bob'").fetchone())
 
-    async def test_holdem_same_hand_rejoin_preserves_new_buyin(self):
+    async def test_holdem_same_hand_rejoin_is_rejected_without_another_buyin(self):
         room = self.room(names=("alice", "bob", "carol"))
         await room.start()
         await server.rooms.leave_room_internal(room, "bob")
         self.assertEqual(room.rating_results["bob"]["final"], 95)
-        with patch.object(server.hub, "send_json"):
+        with server.database() as conn:
+            refunded_balance = conn.execute("SELECT coins FROM users WHERE username='bob'").fetchone()[0]
+            transactions = conn.execute("SELECT COUNT(*) FROM coin_transactions WHERE username='bob'").fetchone()[0]
+        with patch.object(server.hub, "send_json") as send:
             await server.room_protocol.handle_join_room(None, {"user": {"username": "bob"}, "last_room_op": -1000}, {"room_id": room.id})
-        self.assertEqual(room.members["bob"]["stack"], 100)
+            send.assert_awaited_once_with(None, {"type": "game_error", "message": "游戏已开始，请以观战身份进入"})
+        self.assertNotIn("bob", room.members)
         await room.perform_action(room.game["to_act"], "fold")
-        self.assertEqual(room.members["bob"]["stack"], 100)
+        self.assertNotIn("bob", room.members)
         self.assertEqual(server.ranking.get_rating("bob")["games"], 1)
         with server.database() as conn:
-            self.assertEqual(conn.execute("SELECT amount FROM game_escrows WHERE username='bob'").fetchone()[0], 100)
+            self.assertIsNone(conn.execute("SELECT amount FROM game_escrows WHERE username='bob'").fetchone())
+            self.assertEqual(conn.execute("SELECT coins FROM users WHERE username='bob'").fetchone()[0], refunded_balance)
+            self.assertEqual(conn.execute("SELECT COUNT(*) FROM coin_transactions WHERE username='bob'").fetchone()[0], transactions)
             self.assertEqual(conn.execute("SELECT hands FROM holdem_player_stats WHERE user_id = "
                                           "(SELECT id FROM users WHERE username='bob')").fetchone()[0], 1)
 

@@ -280,9 +280,10 @@ def make_room(rules=None):
     return room
 
 
-def force_hand(room, name, tiles, win_tile=None):
+def force_hand(room, name, tiles, win_tile=None, flowers=()):
     g = room.game
     g["hands"][name] = list(tiles)
+    g["flowers"][name] = list(flowers)
     g["last_draw"] = win_tile if win_tile is not None else (
         tiles[-1] if g["to_act"] == name else None)
 
@@ -329,7 +330,7 @@ def test_chi_claim():
 
 
 def test_gang_claim_and_draw():
-    async def run():
+    async def run(replacement_flowers):
         room = make_room()
         await room.start()
         g = room.game
@@ -342,6 +343,9 @@ def test_gang_claim_and_draw():
                                m(9), p(1), p(2), p(3), s(5)])
         force_hand(room, "d", [m(1), m(2), m(3), m(4), m(5), m(6), m(7), m(8),
                                m(9), p(1), p(2), p(3), s(9)])
+        # 杠从牌尾补牌；分别验证普通补牌和连续补花，不依赖随机牌尾。
+        consumed = 1 + len(replacement_flowers)
+        g["wall"][-consumed:] = [p(9), *replacement_flowers]
         wall_before = len(g["wall"])
         await room.perform_action("a", "discard", {"index": 0})
         can_gang = g["claim"]["options"]["b"].get("gang")
@@ -351,21 +355,26 @@ def test_gang_claim_and_draw():
                    and len(meld.get("tiles", [])) == 4
                    and g["to_act"] == "b" and g["phase"] == "discard"
                    and g["gang_draw"] and len(g["hands"]["b"]) == 11
-                   and len(g["wall"]) == wall_before - 1)
+                   and len(g["wall"]) == wall_before - consumed
+                   and g["flowers"]["b"] == list(reversed(replacement_flowers)))
         # 暗杠：把 b 手牌换成四张相同
         force_hand(room, "b", [s(7)] * 4 + [m(1), m(2), m(3), p(1), p(2), p(3)])
         g["gang_draw"] = False
+        g["wall"][-consumed:] = [p(9), *replacement_flowers]
         wall2 = len(g["wall"])
         await room.perform_action("b", "angang", {"index": 0})
         angang_ok = (len(g["melds"]["b"]) == 2
                      and g["melds"]["b"][1]["type"] == "angang"
                      and len(g["hands"]["b"]) == 7
-                     and len(g["wall"]) == wall2 - 1)
+                     and len(g["wall"]) == wall2 - consumed
+                     and g["flowers"]["b"] == list(reversed(replacement_flowers)))
         return gang_ok, angang_ok
 
-    gang_ok, angang_ok = asyncio.run(run())
-    check("明杠成副露并补牌", gang_ok)
-    check("暗杠成副露并补牌", angang_ok)
+    for flowers in ((), (34, 35)):
+        gang_ok, angang_ok = asyncio.run(run(flowers))
+        suffix = "（连续补花）" if flowers else ""
+        check("明杠成副露并补牌" + suffix, gang_ok)
+        check("暗杠成副露并补牌" + suffix, angang_ok)
 
 
 def test_rules_sanitize():
@@ -461,7 +470,9 @@ def test_hu_below_min_fan():
         room = make_room()
         await room.start()
         g = room.game
-        # b 只能胡 门前清2+单钓1 = 3 分，不足 8 起和
+        # 确保固定手牌夹具不会继承开局随机发到的花牌加分。
+        g["flowers"]["b"] = [34, 35, 36, 37]
+        # b 的固定手牌不含花牌加分，不足 8 分起和。
         force_hand(room, "a", [s(5), m(1), m(2), m(3), s(1), s(2), s(3),
                                p(1), p(2), p(3), h("北"), h("南"), h("西"), h("东")])
         force_hand(room, "b", [m(1), m(2), m(3), m(4), m(5), m(6), p(7), p(8),

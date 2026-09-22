@@ -15,8 +15,8 @@ def card(rank, suit=0):
     return {"r": rank, "s": suit}
 
 
-async def room_for(game):
-    room = create_room(game, room_id=1, name="回归测试", owner="a", buy_in=200, blind=1)
+async def room_for(game, rules=None):
+    room = create_room(game, room_id=1, name="回归测试", owner="a", buy_in=200, blind=1, rules=rules)
     for name in "abcd":
         room.add_member(name, 200)
 
@@ -189,8 +189,10 @@ class TableState(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(room.make_ctx("c", 4, zimo=False)["juezhang"])
 
     async def test_robbing_kong_uses_bonus_for_eligibility_and_moves_tile(self):
-        room = await room_for("mahjong")
+        # 只考察抢杠加番，不让开局随机花牌把基础分推过 8 分门槛。
+        room = await room_for("mahjong", {"flowers": False})
         g = room.game
+        self.assertEqual(g["flowers"]["b"], [])
         g["hands"]["a"] = [4]
         g["melds"]["a"] = [{"type": "peng", "tiles": [4] * 3, "from": "d"}]
         g["hands"]["b"] = [0, 1, 2, 12, 13, 14, 23, 24, 25, 13, 14, 15, 4]
