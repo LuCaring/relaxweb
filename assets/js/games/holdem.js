@@ -449,8 +449,8 @@ registerGame("holdem", {
   blindLabel: "下一局盲注",
   waitingHint: "等待房主开局。中途退出会自动弃牌，已投入的筹码留在底池。",
   noNextHint: () =>
-    `再来一局需每人再买入 ${formatCoins(state.myRoom.buy_in)}，余额不足者将离桌；`
-    + "过半数投「解散」则按当前筹码退还所有人并关闭房间。",
+    `再来一局会先结清本局，再由每人以 ${formatCoins(state.myRoom.buy_in)} 全新买入；`
+    + "不会继承本局桌上筹码，余额不足者将离桌。",
   renderTable: renderPokerTable,
   renderHandResult: (result) => reviewNode(result),
   renderReview: (result) => {

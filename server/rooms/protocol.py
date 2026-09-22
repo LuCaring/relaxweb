@@ -271,7 +271,7 @@ class RoomProtocol:
         await self.rooms.broadcast_room_list()
 
     async def handle_settle_vote(self, websocket, state, data):
-        """对局结束投票：过半数生效；票中可携带下一局盲注偏好，再来一局会按买入额重新买入。"""
+        """对局结束投票：过半数生效；再来一局会结清当前轮并按买入额重置筹码。"""
         user = state.get("user")
         if not user:
             return
@@ -293,7 +293,7 @@ class RoomProtocol:
         await room.broadcast_views()
 
     async def handle_hand_continue(self, websocket, state, data):
-        """每手结束后的「继续下一手」：全员确认或 10 秒倒计时到点即开下一手。"""
+        """手牌结果确认：全员确认或倒计时结束后开下一手或进入整局结算。"""
         user = state.get("user")
         if not user:
             return

@@ -1,8 +1,6 @@
 import asyncio
 import logging
 
-from server.wallet import adjust_coins, user_balance
-
 logger = logging.getLogger("live-chat")
 
 
@@ -93,29 +91,32 @@ class RoomHost:
         room.record_ratings = record_ratings
 
     async def rebuy_members(self, room):
-        """对局结束「再来一局」：每人按买入额重新买入，余额不足者自动离桌退币。
-
-        筹码与累计买入（paid）同步增加，最终离桌结算仍只留一条净额流水。
-        """
+        """结清上一轮，再让成员以标准买入额和全新筹码进入下一轮。"""
         for username in list(room.seating):
-            try:
-                with self.database() as conn, conn:
-                    balance = user_balance(conn, username)
-                    if balance is None or balance < room.buy_in:
-                        raise ValueError("金币不足")
-                    balance = adjust_coins(
-                        conn, username, -room.buy_in, "game_buyin",
-                        f"游戏厅重新买入：{room.name}", ref=f"room:{room.id}:{username}",
-                    )
-            except ValueError:
+            member = room.members[username]
+            old_ref = member.get("buyin_ref", f"room:{room.id}:{username}")
+            new_ref = f"room:{room.id}:match:{room.match_no}:{username}"
+            rebought, balance = self.settlement.settle_and_rebuy_room_member(
+                room, username, member["stack"], member.get("paid", room.buy_in),
+                old_ref, new_ref,
+            )
+            if not rebought:
                 logger.info("%s 金币不足，未能重新买入 %s", username, room.id)
                 await self.hub.send_to_user(username, {"type": "game_error",
                                               "message": f"金币不足 {room.buy_in:,.2f}，已离桌"})
-                await self.leave_room_internal(room, username)
+                room.remove_member(username)
+                await self.hub.send_to_user(
+                    username, {"type": "room_closed", "reason": "已结算离桌"},
+                )
+                if balance is not None:
+                    await self.wallet.push_balance(username, balance)
                 continue
-            room.add_chips(username, room.buy_in)
+            member["stack"] = room.buy_in
+            member["paid"] = room.buy_in
+            member["buyin_ref"] = new_ref
             await self.wallet.push_balance(username, balance)   # 客户端金币牌要立刻反映扣款
-        room.stacks_changed()
+        if room.owner not in room.members and room.seating:
+            room.owner = room.seating[0]
         await room.broadcast_views()
         await self.broadcast_room_list()
 
@@ -165,7 +166,8 @@ class RoomHost:
         mid_hand = room.note_leave(username)
         self.settlement.set_escrow(username, room.id, None)
         self.settlement.settle_room_coins(room, username, member["stack"],
-                          f"游戏厅离桌：{room.name}", member.get("paid"))
+                          f"游戏厅离桌：{room.name}", member.get("paid"),
+                          member.get("buyin_ref"))
         await self.ranking.publish_ratings(room)
         logger.info("%s left game room %s", username, room.id)
         await self.hub.send_to_user(username, {"type": "room_closed", "reason": "已离桌"})

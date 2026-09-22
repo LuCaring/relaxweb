@@ -40,21 +40,24 @@ function syncHandResultOverlay() {
     .filter((p) => !ready.has(p.username))
     .map((p) => p.nickname);
   const progress = overlay.querySelector(".hand-result-progress");
+  const endsMatch = Boolean(info.ends_match);
   if (progress) {
     progress.textContent = waiting.length
-      ? `已准备 ${ready.size}/${total} · 等待 ${waiting.join("、")}`
-      : "全员已准备，正在开始下一手…";
+      ? `已确认 ${ready.size}/${total} · 等待 ${waiting.join("、")}`
+      : endsMatch ? "全员已确认，正在结算本局…" : "全员已确认，正在开始下一手…";
   }
   const button = overlay.querySelector(".hand-continue-button");
   if (!button) return;
   if (handResultPressed || (me && ready.has(me))) {
     button.disabled = true;
-    button.textContent = "已准备，等待其他人…";
+    button.textContent = "已确认，等待其他人…";
     return;
   }
   const left = Math.max(0, Math.ceil((handResultDeadline - Date.now()) / 1000));
   button.disabled = false;
-  button.textContent = left > 0 ? `继续下一手（${left}）` : "开始下一手…";
+  button.textContent = endsMatch
+    ? (left > 0 ? `结束本局（${left}）` : "正在结算本局…")
+    : (left > 0 ? `继续下一手（${left}）` : "开始下一手…");
 }
 
 export function renderHandResultOverlay() {
@@ -103,11 +106,11 @@ export function renderHandResultOverlay() {
     const button = document.createElement("button");
     button.className = "login-submit hand-continue-button";
     button.type = "button";
-    button.textContent = "继续下一手";
+    button.textContent = info.ends_match ? "结束本局" : "继续下一手";
     button.addEventListener("click", () => {
       handResultPressed = true;
       button.disabled = true;
-      button.textContent = "已准备，等待其他人…";
+      button.textContent = "已确认，等待其他人…";
       send({ type: "hand_continue" });
     });
     foot.append(button);
@@ -129,7 +132,7 @@ export function renderHandResultOverlay() {
 
 
 
-/* 对局结束（有人筹码不足盲注）：展示每人的资产与段位分变化，投票再来一局或解散。 */
+/* 对局结束：只展示整局盈亏与段位变化，不重复最后一手牌型。 */
 function renderMatchSettlement(body) {
   const room = state.myRoom;
   const data = room.match_result;
@@ -151,7 +154,7 @@ function renderMatchSettlement(body) {
   const title = document.createElement("div");
   title.className = "hall-section-title";
   title.style.marginTop = "0";
-  title.textContent = `资产与段位分（第 ${data.match_no} 局）`;
+  title.textContent = `本场盈亏（第 ${data.match_no} 局）`;
   card.append(title);
 
   const rows = document.createElement("div");
@@ -170,17 +173,11 @@ function renderMatchSettlement(body) {
     nameText.textContent = item.nickname || displayNameOf(item.username);
     who.append(nameText, ratingBadge(item.rating));
 
-    const lastHand = document.createElement("div");
-    lastHand.className = "match-hand";
-    lastHand.textContent = item.folded
-      ? "最后一手已弃牌"
-      : (item.hand_name ? `最后一手：${item.hand_name}` : "最后一手未摊牌");
-
     const assets = document.createElement("div");
     assets.className = "match-assets";
     const stack = document.createElement("span");
     stack.className = "match-stack";
-    stack.textContent = `${formatCoins(item.stack)} 资产`;
+    stack.textContent = `${formatCoins(item.stack)} 结算资产`;
     assets.append(stack);
     if (Number(item.paid) > Number(data.buy_in)) {
       const paid = document.createElement("span");
@@ -198,7 +195,7 @@ function renderMatchSettlement(body) {
     delta.className = `match-rating ${ratingDelta > 0 ? "up" : ratingDelta < 0 ? "down" : "flat"}`;
     delta.textContent = `段位 ${ratingDelta > 0 ? "+" : ""}${ratingDelta}`;
 
-    row.append(who, lastHand, assets, net, delta);
+    row.append(who, assets, net, delta);
     rows.append(row);
   }
   card.append(rows);

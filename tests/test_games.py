@@ -77,7 +77,8 @@ def test_room_lifecycle():
     check("开局发牌", started)
     check("暂停清计时器", paused)
     check("恢复", resumed)
-    check("成员移除", left == {"stack": 90.0, "paid": 100.0}, "开局后大盲注已提交，累计买入仍记 100")
+    check("成员移除", left["stack"] == 90.0 and left["paid"] == 100.0,
+          "开局后大盲注已提交，累计买入仍记 100")
 
 
 def test_holdem_settlement_payload():
@@ -239,11 +240,18 @@ def test_holdem_match_settlement_and_vote():
         room.members["b"]["stack"] = 1
         await room.start_next_hand()
         await _play_hand(room, "b")
+        gate = room.view_for("a")
+        await room.mark_ready("a")
+        gate_mid = room.view_for("a")
+        await room.mark_ready("b")
         view = room.view_for("a")
         result = view.get("match_result") or {}
         rows = {item["username"]: item for item in result.get("players", [])}
         snapshot = {
             "status": room.status,
+            "gate": gate.get("hand_ready"),
+            "gate_result": gate.get("match_result"),
+            "gate_mid": gate_mid.get("hand_ready"),
             "reason": result.get("reason"),
             "can_next": result.get("can_next"),
             "rows": rows,
@@ -275,6 +283,7 @@ def test_holdem_match_settlement_and_vote():
         room2.members["b"]["stack"] = 1
         await room2.start_next_hand()
         await _play_hand(room2, "b")
+        await room2.continue_timeout()
         await room2.cast_vote("a", "dissolve", 5)
         await room2.cast_vote("b", "dissolve", 5)
         room2.close()
@@ -283,6 +292,13 @@ def test_holdem_match_settlement_and_vote():
     snapshot, mid, after, dissolved2 = asyncio.run(run())
     rows = snapshot["rows"]
     stacks = snapshot["stacks"]
+    check("盲注不足仍先展示最后一手倒计时",
+          snapshot["gate"] and snapshot["gate"]["ends_match"]
+          and 0 < snapshot["gate"]["left"] <= 10
+          and snapshot["gate_result"] is None,
+          str(snapshot["gate"]))
+    check("结束本局需要全员确认", snapshot["gate_mid"]["ready"] == ["a"],
+          str(snapshot["gate_mid"]))
     check("筹码不足盲注即对局结束", snapshot["status"] == "settled", snapshot["status"])
     check("结束原因写明筹码不足", "筹码不足" in (snapshot["reason"] or ""), str(snapshot["reason"]))
     check("结算列出每位玩家", sorted(rows) == ["a", "b"], str(sorted(rows)))
@@ -292,8 +308,8 @@ def test_holdem_match_settlement_and_vote():
         check(f"{name} 的盈亏等于资产减累计买入",
               rows[name]["net"] == round(stacks[name] - 100, 2),
               f"{rows[name]['net']}")
-        check(f"{name} 带段位与最后一手", rows[name]["rating"]["tier"] == "白银"
-              and "hand_name" in rows[name])
+        check(f"{name} 结算只含本场盈亏", rows[name]["rating"]["tier"] == "白银"
+              and not ({"cards", "hand_name", "folded"} & set(rows[name])))
     check("段位分按本局累计（两手各 +5）",
           snapshot["first_delta"] == 5 and rows["a"]["rating_delta"] == 10,
           f"{snapshot['first_delta']} / {rows['a']['rating_delta']}")
@@ -304,7 +320,7 @@ def test_holdem_match_settlement_and_vote():
           after["status"] == "playing" and after["match_no"] == 2 and after["hand_no"] == 3,
           f"{after['status']} m{after['match_no']} h{after['hand_no']}")
     check("再来一局按票中盲注", after["blind"] == 2, str(after["blind"]))
-    check("再来一局已重新买入", after["paid"] == {"a": 200.0, "b": 200.0}, str(after["paid"]))
+    check("再来一局不继承上轮筹码", after["paid"] == {"a": 100.0, "b": 100.0}, str(after["paid"]))
     check("再来一局后清零本局段位累计", after["delta"] == {}, str(after["delta"]))
     check("新一局结算明细已清空", after["match_result"] is None)
     check("解散票过半数即解散房间", dissolved2 == ["结算解散"], str(dissolved2))
@@ -317,10 +333,11 @@ def _dissolve_recorder(sink):
 
 
 def _rebuy_stub(room, sink):
-    """模拟宿主：每人扣款再加筹码（宿主还要写数据库，引擎这边只关心筹码）。"""
+    """模拟宿主：结清上一轮后，每人以标准买入额重新入桌。"""
     async def rebuy():
         for name in list(room.seating):
-            room.add_chips(name, room.buy_in)
+            room.members[name]["stack"] = room.buy_in
+            room.members[name]["paid"] = room.buy_in
         sink.append(len(room.seating))
     return rebuy
 

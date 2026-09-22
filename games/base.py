@@ -66,8 +66,8 @@ class BaseRoom:
         record_ratings(id, starts, endings, stakes=None, statistics=None)
                                     同步提交积分、筹码与可选德扑下注流水/统计
         on_dissolve_requested(reason)    async，房间解散（含结算解散、流局）
-        on_rebuy_requested()             async，对局结束「再来一局」：按买入额重新买入，
-                                         余额不足者由宿主负责离桌退币
+        on_rebuy_requested()             async，对局结束「再来一局」：结清本轮后按买入额
+                                         重置筹码，余额不足者由宿主负责离桌
     """
 
     max_seats = 9
@@ -142,9 +142,13 @@ class BaseRoom:
     def has_member(self, username):
         return username in self.members
 
-    def add_member(self, username, buy_in):
+    def add_member(self, username, buy_in, buyin_ref=None):
         self.seating.append(username)
-        self.members[username] = {"stack": buy_in, "paid": buy_in}
+        self.members[username] = {
+            "stack": buy_in,
+            "paid": buy_in,
+            "buyin_ref": buyin_ref or f"room:{self.id}:{username}",
+        }
 
     def remove_member(self, username):
         member = self.members.pop(username, None)

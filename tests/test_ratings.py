@@ -150,6 +150,40 @@ class RatingTests(unittest.IsolatedAsyncioTestCase):
         await room.restart()
         self.assertEqual(room.rating_starts, settled)  # 已结算的盲注不能再退款
 
+    async def test_holdem_rematch_settles_previous_round_and_resets_every_stack(self):
+        room = self.room()
+        with server.database() as conn, conn:
+            for name in ("alice", "bob"):
+                wallet_module.adjust_coins(
+                    conn, name, -100, "game_buyin", "游戏厅买入：段位测试",
+                    ref=f"room:{room.id}:{name}",
+                )
+        room.members["alice"]["stack"] = 160
+        room.members["bob"]["stack"] = 40
+        room.stacks_changed()
+        room.match_no = 2
+
+        await server.rooms.rebuy_members(room)
+
+        self.assertEqual({name: member["stack"] for name, member in room.members.items()},
+                         {"alice": 100, "bob": 100})
+        self.assertEqual({name: member["paid"] for name, member in room.members.items()},
+                         {"alice": 100, "bob": 100})
+        with server.database() as conn:
+            self.assertEqual(dict(conn.execute("SELECT username, coins FROM users")),
+                             {"alice": 860, "bob": 740, "carol": 900})
+            self.assertEqual(dict(conn.execute("SELECT username, amount FROM game_escrows")),
+                             {"alice": 100, "bob": 100})
+            transactions = conn.execute(
+                "SELECT username, amount, kind, ref FROM coin_transactions ORDER BY username, id"
+            ).fetchall()
+        self.assertEqual(transactions, [
+            ("alice", 60, "game_result", f"room:{room.id}:alice"),
+            ("alice", -100, "game_buyin", f"room:{room.id}:match:2:alice"),
+            ("bob", -60, "game_result", f"room:{room.id}:bob"),
+            ("bob", -100, "game_buyin", f"room:{room.id}:match:2:bob"),
+        ])
+
     async def test_mahjong_and_guandan_feed_shared_rating_pool(self):
         with server.database() as conn, conn:
             conn.execute("INSERT INTO users (username, password_hash, salt, created_at, coins) "

@@ -99,12 +99,14 @@ class Settlement:
         if rows:
             logger.info("refunded %d game escrows on startup", len(rows))
 
-    def settle_room_coins(self, room, username, refund, detail, paid=None):
+    def settle_room_coins(self, room, username, refund, detail, paid=None, ref=None):
         """离桌/解散时结算该房间的流水：买入（含重新买入）与退款合并为一条净额记录。
 
         净额为零（如未开局的流局退款）时只删除扣款条目，不留痕。
         """
         paid = room.buy_in if paid is None else paid
+        member = room.members.get(username)
+        ref = ref or (member or {}).get("buyin_ref", f"room:{room.id}:{username}")
         with self.database() as conn, conn:
             if refund > 0:
                 conn.execute(
@@ -112,7 +114,38 @@ class Settlement:
                     (refund, username),
                 )
             merge_ref_coins(
-                conn, username, f"room:{room.id}:{username}",
+                conn, username, ref,
                 round(refund - paid, 2), "game_result", detail,
                 stake_kind="game_buyin", stake_detail=f"游戏厅买入：{room.name}",
             )
+
+    def settle_and_rebuy_room_member(self, room, username, refund, paid, old_ref, new_ref):
+        """原子结清上一轮，并尝试用标准买入额进入下一轮。"""
+        with self.database() as conn, conn:
+            conn.execute("BEGIN IMMEDIATE")
+            if refund > 0:
+                conn.execute(
+                    "UPDATE users SET coins = round(coins + ?, 2) WHERE username = ?",
+                    (refund, username),
+                )
+            balance = merge_ref_coins(
+                conn, username, old_ref, round(refund - paid, 2),
+                "game_result", f"游戏厅结算：{room.name}",
+                stake_kind="game_buyin", stake_detail=f"游戏厅买入：{room.name}",
+            )
+            conn.execute(
+                "DELETE FROM game_escrows WHERE username = ? AND room_id = ?",
+                (username, room.id),
+            )
+            if balance is None or balance < room.buy_in:
+                return False, balance
+            balance = adjust_coins(
+                conn, username, -room.buy_in, "game_buyin",
+                f"游戏厅买入：{room.name}", ref=new_ref,
+            )
+            conn.execute(
+                "INSERT INTO game_escrows (username, room_id, amount) VALUES (?, ?, ?) "
+                "ON CONFLICT(username, room_id) DO UPDATE SET amount = excluded.amount",
+                (username, room.id, round(room.buy_in, 2)),
+            )
+            return True, balance
