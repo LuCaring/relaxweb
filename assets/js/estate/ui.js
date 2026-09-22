@@ -232,11 +232,13 @@ export function createEstateUI(root, activities = {}) {
   function renderFishing() {
     const snapshot = estateStore.snapshot; if (!snapshot) return;
     show("静谧湖钓场");
+    const daily = snapshot.fishing_daily || { retained: 0, remaining: 30, limit: 30 };
     sheetBody.append(note(
       `湖中有 ${Object.keys(snapshot.catalog.fish).length} 种鱼类，`
       + `还有 ${Object.keys(snapshot.catalog.fishing_treasures || {}).length} 种神秘收藏物。`
       + `每轮消耗1份鱼饵和1点耐久，失败也会消耗。按住收线，张力过高时松开卸力；`
-      + `高级鱼竿与荧光虫饵能提高稀有鱼机会。`));
+      + `高级鱼竿与荧光虫饵能提高稀有鱼机会。今日已保留普通鱼获 ${daily.retained}/${daily.limit}；`
+      + `额度用完后普通鱼将自动放生，收集品获取不受影响。`));
     const rod = toolPanel("rod", "🎣");
     if (snapshot.fishing_session) {
       sheetBody.append(button("继续未完成的钓鱼", () => {

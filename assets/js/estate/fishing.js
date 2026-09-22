@@ -4,6 +4,7 @@ import { estateRequest } from "./protocol.js";
 import { estateStore } from "./state.js";
 import { catchAsset, drawAsset, toolAsset } from "./assets.js";
 import { rodFactor, tensionStep } from "./rules.js";
+import { alertDialog } from "../dialog.js";
 
 /** 张力条转警示色的阈值：纯客户端表现，不参与结算。 */
 const DANGER_TENSION = .78;
@@ -91,7 +92,9 @@ export function openFishingGame(root, session, options = {}) {
     }
     card.querySelector(".fishing-catch-portrait > b").textContent = collectible ? "🎁" : caught ? "🐟" : "🌊";
     card.querySelector("h2").textContent = caught ? (result.catch_name || result.fish_name) : result.outcome === "snapped" ? "鱼线断了" : "鱼儿逃走了";
-    card.querySelector("p").textContent = caught
+    card.querySelector("p").textContent = result.released
+      ? "今日普通鱼获保留额度已用完，本次渔获已放归静谧湖。收集品获取不受影响。"
+      : caught
       ? `已放入仓库 · 获得 ${result.xp_awarded} 经验`
       : "鱼饵和耐久已经消耗，控制张力后再试一次。";
     card.hidden = false;
@@ -104,6 +107,13 @@ export function openFishingGame(root, session, options = {}) {
       const result = await estateRequest("estate_finish_fishing", { session_id: session.session_id, trace });
       layer.classList.add("is-result");
       showCatch(result);
+      if (result.release_notice && !result.replayed && !result.session_replayed) {
+        void alertDialog(
+          `依据静谧湖生态资源保护规定，每位玩家每日仅可保留前 ${result.daily_limit} 条普通鱼获。`
+          + "今日保留额度已用完，本次及今日后续钓获的普通鱼将放归湖中；收集品获取不受影响。感谢您共同维护水域生态。",
+          { title: "静谧湖生态保护提示" },
+        );
+      }
     } catch { layer.remove(); }
   }
   function tick(now) {

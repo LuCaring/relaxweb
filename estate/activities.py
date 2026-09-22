@@ -23,7 +23,8 @@ from estate.catalog import (
 )
 from estate.store import (
     LEVEL_LOCKED, TOOL_MISSING, award_xp, change_inventory, debit, estate_error,
-    estate_day_key, load_profile, refresh_daily_pickaxe, require_capacity, run_action,
+    estate_day_key, load_profile, refresh_daily_pickaxe, require_capacity,
+    retain_daily_fish, run_action,
 )
 
 # 只保留多处复用的规则；单处使用的文案直接内联在抛出处。
@@ -298,16 +299,26 @@ def finish_fishing(conn, username, request_id, session_id, trace, now):
                 catch = FISHING_TREASURES[catch_id]
                 item = collectible_item(catch_id)
                 payload.update({"catch_kind": "collectible", "collectible_id": catch_id})
+                change_inventory(conn, username, item, 1)
+                payload["level"] = award_xp(conn, username, catch["xp"])
             else:
                 catch_id = row[0]
                 catch = FISH[catch_id]
                 item = fish_item(catch_id)
-                payload.update({"catch_kind": "fish", "fish_id": catch_id})
-            change_inventory(conn, username, item, 1)
+                daily = retain_daily_fish(conn, username, now)
+                payload.update({"catch_kind": "fish", "fish_id": catch_id,
+                                "released": not daily["retained"],
+                                "release_notice": daily["show_notice"],
+                                "daily_retained": daily["retained_count"],
+                                "daily_remaining": daily["remaining"],
+                                "daily_limit": daily["limit"]})
+                if daily["retained"]:
+                    change_inventory(conn, username, item, 1)
+                    payload["level"] = award_xp(conn, username, catch["xp"])
             payload.update({"fish_name": catch["name"], "catch_name": catch["name"],
-                            "quantity": 1, "xp_awarded": catch["xp"],
+                            "quantity": 0 if payload.get("released") else 1,
+                            "xp_awarded": 0 if payload.get("released") else catch["xp"],
                             "rarity": catch["rarity"], "difficulty": catch["difficulty"]})
-            payload["level"] = award_xp(conn, username, catch["xp"])
         conn.execute("UPDATE estate_profiles SET reserved_capacity=max(0,reserved_capacity-1) "
                      "WHERE username=?", (username,))
         conn.execute("UPDATE estate_fishing_sessions SET status='finished',result_json=? "

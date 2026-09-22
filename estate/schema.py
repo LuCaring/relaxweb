@@ -128,6 +128,21 @@ def init_estate(conn):
         )
     """)
     conn.execute("CREATE INDEX IF NOT EXISTS idx_fishing_user ON estate_fishing_sessions(username,status)")
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS estate_fishing_daily (
+            username TEXT PRIMARY KEY COLLATE NOCASE,
+            fishing_day TEXT NOT NULL,
+            retained_count INTEGER NOT NULL DEFAULT 0 CHECK(retained_count >= 0),
+            notice_shown INTEGER NOT NULL DEFAULT 0 CHECK(notice_shown IN (0,1))
+        )
+    """)
+    conn.execute("""
+        CREATE TRIGGER IF NOT EXISTS delete_estate_fishing_daily
+        AFTER DELETE ON estate_profiles
+        BEGIN
+            DELETE FROM estate_fishing_daily WHERE username=OLD.username;
+        END
+    """)
     mining_columns = {row[1] for row in conn.execute("PRAGMA table_info(estate_mining_runs)")}
     if "reserved_slots" not in mining_columns:
         conn.execute("ALTER TABLE estate_mining_runs ADD COLUMN reserved_slots INTEGER NOT NULL DEFAULT 12")

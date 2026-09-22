@@ -10,7 +10,7 @@ from datetime import datetime
 from zoneinfo import ZoneInfo
 
 from estate.catalog import (
-    FISHING_STEPS, INITIAL_PLOTS, MAX_PLOTS, MINE_BOARD_SIZE, MINING_LEVELS, TOOLS,
+    DAILY_FISH_RETAIN_LIMIT, FISHING_STEPS, INITIAL_PLOTS, MAX_PLOTS, MINE_BOARD_SIZE, MINING_LEVELS, TOOLS,
     WAREHOUSE_LEVELS, FISHING_TREASURES, SKINS, collectible_item, item_info, public_catalog, xp_for_next,
 )
 
@@ -74,6 +74,42 @@ def refresh_daily_pickaxe(conn, username, now):
         (username, today),
     )
     return True
+
+
+def fishing_daily_state(conn, username, now):
+    """读取当日普通鱼保留额度；跨日时原子重置计数和公告状态。"""
+    today = estate_day_key(now)
+    conn.execute(
+        "INSERT INTO estate_fishing_daily(username,fishing_day) VALUES (?,?) "
+        "ON CONFLICT(username) DO UPDATE SET "
+        "fishing_day=excluded.fishing_day,retained_count=0,notice_shown=0 "
+        "WHERE estate_fishing_daily.fishing_day<>excluded.fishing_day",
+        (username, today),
+    )
+    retained, notice_shown = conn.execute(
+        "SELECT retained_count,notice_shown FROM estate_fishing_daily WHERE username=?",
+        (username,),
+    ).fetchone()
+    return {"day": today, "retained": int(retained),
+            "remaining": max(0, DAILY_FISH_RETAIN_LIMIT - int(retained)),
+            "limit": DAILY_FISH_RETAIN_LIMIT, "notice_shown": bool(notice_shown)}
+
+
+def retain_daily_fish(conn, username, now):
+    """为普通鱼消耗一个当日保留名额，额度用尽后只首次返回公告标记。"""
+    state = fishing_daily_state(conn, username, now)
+    if state["retained"] < DAILY_FISH_RETAIN_LIMIT:
+        conn.execute(
+            "UPDATE estate_fishing_daily SET retained_count=retained_count+1 WHERE username=?",
+            (username,),
+        )
+        return {**state, "retained": True, "remaining": state["remaining"] - 1,
+                "retained_count": state["retained"] + 1, "show_notice": False}
+    show_notice = not state["notice_shown"]
+    if show_notice:
+        conn.execute("UPDATE estate_fishing_daily SET notice_shown=1 WHERE username=?", (username,))
+    return {**state, "retained": False, "retained_count": state["retained"],
+            "show_notice": show_notice}
 
 
 def positive_int(value, spec=("invalid_quantity", "数量无效"), maximum=9999):
@@ -416,6 +452,7 @@ def estate_state(conn, username, now):
     ensure_estate(conn, username, now)
     sweep_expired_fishing(conn, username, now)
     refresh_daily_pickaxe(conn, username, now)
+    fishing_daily = fishing_daily_state(conn, username, now)
 
     skins = skin_state(conn, username)
     profile = load_profile(conn, username)
@@ -446,6 +483,7 @@ def estate_state(conn, username, now):
         "inventory": _inventory_views(conn, username),
         "tools": _tool_views(conn, username, now),
         "fishing_session": _fishing_view(conn, username),
+        "fishing_daily": {key: fishing_daily[key] for key in ("retained", "remaining", "limit")},
         "mining_run": _mining_view(conn, username),
         "catalog": public_catalog(),
         "skins": skins,

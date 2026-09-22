@@ -40,6 +40,7 @@ for _skin_id, _skin in SKINS.items():
 FISHING_STEPS = 36              # 每局收线操作数，同时是下发给客户端的操作上限
 FISHING_STEPS_PER_FRAME = 10    # 每 10 次操作推进一个张力采样点
 FISHING_TIMEOUT_SECONDS = 90    # 超过该秒数未收线即判过期
+DAILY_FISH_RETAIN_LIMIT = 30   # 每日可保留并出售的普通鱼数量；收集品不计入
 TRACE_MIN_STEPS = 20            # 客户端回传操作序列的长度下限
 TRACE_MAX_STEPS = 400           # 客户端回传操作序列的长度上限
 
