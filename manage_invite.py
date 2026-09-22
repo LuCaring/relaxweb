@@ -4,7 +4,8 @@ import secrets
 import sys
 import time
 
-from chat_server import database, init_db
+from server.database import database
+from server.schema import init_db
 
 
 def gen(count):

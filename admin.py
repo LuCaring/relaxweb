@@ -38,14 +38,10 @@ import subprocess
 import sys
 import time
 
-from chat_server import (
-    NEW_USER_COINS,
-    adjust_coins,
-    database,
-    hash_password,
-    init_db,
-    valid_username,
-)
+from server.accounts import NEW_USER_COINS, hash_password, valid_username
+from server.database import database
+from server.schema import init_db
+from server.wallet import adjust_coins
 
 PROG = "admin.py"
 SERVICES = ("live-chat", "live-web", "live-auth")
