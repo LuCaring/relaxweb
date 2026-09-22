@@ -278,8 +278,8 @@ def debit(adjust_coins, conn, username, amount, detail, request_id):
             conn, username, -round(amount, 2), "estate_purchase", detail,
             ref=f"estate:{request_id}",
         )
-    except ValueError as error:
-        raise estate_error(("insufficient_coins", "金币不足"), str(error)) from None
+    except ValueError:
+        raise estate_error(("insufficient_coins", "金币不足")) from None
 
 
 def credit(adjust_coins, conn, username, amount, detail, request_id):

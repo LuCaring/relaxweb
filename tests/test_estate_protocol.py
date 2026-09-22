@@ -40,7 +40,7 @@ async def main():
             with server.database() as conn, conn:
                 conn.execute(
                     "INSERT INTO users(username,password_hash,salt,created_at,coins) "
-                    "VALUES ('alice','','',0,10000)"
+                    "VALUES ('alice','','',0,19)"
                 )
             token = server.accounts.create_session("alice")
             async with websockets.serve(server.handler, "127.0.0.1", 0) as host:
@@ -57,6 +57,27 @@ async def main():
                     initial = await receive(a, "estate_state")
                     assert initial["profile"]["plot_count"] == 4
                     assert len(initial["plots"]) == 12
+
+                    # Use the real wallet: insufficient funds must keep the domain
+                    # message and roll back ownership, inventory, ledger and replay keys.
+                    for purchase in (
+                        dict(type="estate_buy", request_id="buy-wheat-001",
+                             kind="seed", item_id="wheat", quantity=1),
+                        dict(type="estate_buy_skin", request_id="poor-skin-001", skin_id="steve"),
+                    ):
+                        await send(a, **purchase)
+                        rejected = await receive(a, "estate_error")
+                        assert rejected["code"] == "insufficient_coins", rejected["code"]
+                        assert rejected["message"] == "金币不足", rejected["message"]
+                        assert rejected["request_id"] == purchase["request_id"]
+                    await send(a, type="get_estate")
+                    unchanged = await receive(a, "estate_state")
+                    for field in ("coins", "inventory", "skins", "version"):
+                        assert unchanged[field] == initial[field], field
+                    with server.database() as conn, conn:
+                        assert conn.execute("SELECT COUNT(*) FROM coin_transactions").fetchone()[0] == 0
+                        assert conn.execute("SELECT COUNT(*) FROM estate_actions").fetchone()[0] == 0
+                        conn.execute("UPDATE users SET coins=10000 WHERE username='alice'")
 
                     await send(a, type="estate_buy", request_id="buy-wheat-001",
                                kind="seed", item_id="wheat", quantity=1)
