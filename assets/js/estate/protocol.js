@@ -126,6 +126,13 @@ onMessage("estate_visit_state", (data) => {
   setVisitSnapshot(data);
 });
 
+function presenceBelongsHere(data) {
+  const currentOwner = estateStore.visit?.owner_username
+    || estateStore.snapshot?.profile?.username;
+  return Boolean(currentOwner && data.owner_username
+    && String(currentOwner).toLowerCase() === String(data.owner_username).toLowerCase());
+}
+
 onMessage("estate_steal_result", (data) => {
   settleRequest(data.request_id, { result: data.result });
   if (data.result?.coins_dropped && estateStore.homeSnapshot) {
@@ -140,12 +147,16 @@ onMessage("estate_steal_result", (data) => {
 });
 
 onMessage("estate_visit_joined", (data) => {
-  estateStore.players.set(data.username, data);
+  if (presenceBelongsHere(data)) estateStore.players.set(data.username, data);
 });
-onMessage("estate_visit_left", (data) => estateStore.players.delete(data.username));
-onMessage("estate_visit_moved", (data) => estateStore.players.set(data.username, data));
+onMessage("estate_visit_left", (data) => {
+  if (presenceBelongsHere(data)) estateStore.players.delete(data.username);
+});
+onMessage("estate_visit_moved", (data) => {
+  if (presenceBelongsHere(data)) estateStore.players.set(data.username, data);
+});
 onMessage("estate_crop_stolen", (data) => {
-  if (!estateStore.visit) return;
+  if (!estateStore.visit || !presenceBelongsHere(data)) return;
   const plot = estateStore.snapshot.plots.find((item) => item.index === data.plot_id);
   if (plot) { plot.crop_id = null; plot.planted_at = null; plot.ready_at = null; }
   if (estateStore.snapshot.steal_limits) {

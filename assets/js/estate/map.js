@@ -290,7 +290,7 @@ export function createEstateMap(canvas, input, onInteract, onTarget, onMove = ()
     for (const remote of estateStore.players.values()) {
       const avatar = { ...remote, facing: remote.direction === "left" ? -1 : 1,
         walking: remote.walking ? performance.now() / 90 : 0, lastMove: performance.now() };
-      if (!drawPlayerAsset(ctx, avatar, performance.now())) drawCharacter(ctx, avatar, performance.now());
+      if (!drawPlayerAsset(ctx, avatar, performance.now(), remote.skin_id)) drawCharacter(ctx, avatar, performance.now());
       ctx.font = 'bold 12px "Microsoft YaHei", sans-serif';
       ctx.textAlign = "center"; ctx.lineWidth = 3; ctx.strokeStyle = "#26372d"; ctx.fillStyle = "#fff3c2";
       ctx.strokeText(remote.username, remote.x, remote.y - 58);

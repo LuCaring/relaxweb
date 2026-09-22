@@ -26,6 +26,7 @@ from server.estate.protocol import EstateProtocol
 from server.routing import merge_handlers
 from server.schema import init_db
 from server.wallet import adjust_coins, user_balance
+from estate import ensure_estate
 
 
 class DatabaseTests(unittest.TestCase):
@@ -163,8 +164,59 @@ class ProtocolTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(other_messages, [])
         messages.clear()
         await presence.leave("a", clients["a"])
-        self.assertEqual(messages, [("b", {"type": "estate_visit_left", "username": "alice"})])
+        self.assertEqual(messages, [("b", {"type": "estate_visit_left", "username": "alice",
+                                           "owner_username": "alice"})])
         self.assertNotIn("estate_owner", clients["a"])
+
+    async def test_estate_presence_carries_skin_and_full_context_on_switch(self):
+        database, messages, send, encoded, _, _ = self.host("estate-presence")
+        now = int(time.time())
+        with database() as conn, conn:
+            for username, skin_id in (("alice", "dva"), ("bob", "steve")):
+                ensure_estate(conn, username, now)
+                conn.execute("UPDATE estate_profiles SET level=3, skin_id=? WHERE username=?",
+                             (skin_id, username))
+                conn.execute("INSERT INTO estate_owned_skins VALUES (?, ?)",
+                             (username, skin_id))
+
+        clients = {
+            "alice": {"user": {"username": "alice"}},
+            "bob": {"user": {"username": "bob"}},
+        }
+        presence = EstatePresence(clients=clients, send_encoded=encoded,
+                                  rate_limited=lambda *args: False)
+        protocol = EstateProtocol(database=database, clients=clients,
+                                  send_json=send, send_encoded=encoded, presence=presence)
+
+        await protocol.handlers()["get_estate"]("bob", clients["bob"], {})
+        bob_home = next(payload for socket, payload in messages
+                        if socket == "bob" and payload["type"] == "estate_state")
+        self.assertEqual(bob_home["players"], [])
+
+        messages.clear()
+        await protocol.handlers()["estate_enter_visit"](
+            "alice", clients["alice"],
+            {"request_id": "visit-bob", "owner_username": "bob"},
+        )
+        visit = next(payload for socket, payload in messages
+                     if socket == "alice" and payload["type"] == "estate_visit_state")
+        joined = next(payload for socket, payload in messages
+                      if socket == "bob" and payload["type"] == "estate_visit_joined")
+        self.assertEqual(visit["players"], [{
+            "username": "bob", "skin_id": "steve", "x": 275, "y": 440,
+            "direction": "down", "walking": False,
+        }])
+        self.assertEqual(joined["owner_username"], "bob")
+        self.assertEqual(joined["skin_id"], "dva")
+
+        messages.clear()
+        await protocol.handlers()["get_estate"]("alice", clients["alice"], {})
+        alice_home = next(payload for socket, payload in messages
+                          if socket == "alice" and payload["type"] == "estate_state")
+        left = next(payload for socket, payload in messages
+                    if socket == "bob" and payload["type"] == "estate_visit_left")
+        self.assertEqual(alice_home["players"], [])
+        self.assertEqual(left["owner_username"], "bob")
 
 
 class RoutingTests(unittest.TestCase):

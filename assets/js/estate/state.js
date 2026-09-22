@@ -20,6 +20,9 @@ export function setEstateSnapshot(data) {
   estateStore.snapshot = data;
   estateStore.homeSnapshot = data;
   estateStore.visit = null;
+  if (Array.isArray(data.players)) {
+    estateStore.players = new Map(data.players.map((player) => [player.username, player]));
+  }
   estateStore.clockOffset = Number(data.server_time || 0) * 1000 - Date.now();
   estateStore.listeners.forEach((listener) => listener(data));
 }

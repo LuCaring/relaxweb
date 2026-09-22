@@ -108,8 +108,11 @@ class EstateProtocol:
             return
         try:
             with self.database() as conn:
-                snapshot = public_estate_state(conn, user["username"], data.get("owner_username"), int(time.time()))
-            players = await self.presence.join(websocket, state, snapshot["owner_username"])
+                now = int(time.time())
+                snapshot = public_estate_state(conn, user["username"], data.get("owner_username"), now)
+                visitor = estate_state(conn, user["username"], now)
+            players = await self.presence.join(websocket, state, snapshot["owner_username"],
+                                               visitor["profile"]["skin_id"])
             await self.send_json(websocket, {"type": "estate_visit_state", **snapshot,
                                         "players": players, "request_id": data.get("request_id")})
         except EstateError as error:
@@ -270,18 +273,21 @@ class EstateProtocol:
             return
         if action == "get":
             user["coins"] = snapshot["coins"]
+            players = await self.presence.join(websocket, state, username,
+                                               snapshot["profile"]["skin_id"])
             await self.send_json(websocket, {
-                "type": "estate_state", **snapshot, "request_id": None,
+                "type": "estate_state", **snapshot, "players": players, "request_id": None,
                 "result": None,
             })
         else:
             await self.publish_estate(username, snapshot, result, request_id)
+            if action == "set_skin":
+                await self.presence.update_skin(username, snapshot["profile"]["skin_id"])
 
     async def handle_get_estate(self, websocket, state, data):
         await self.handle_estate_action(websocket, state, data, "get")
         user = state.get("user")
         if user:
-            await self.presence.join(websocket, state, user["username"])
             with self.database() as conn, conn:
                 rows = estate_notifications(conn, user["username"], int(time.time()))
             await self.send_json(websocket, {"type": "estate_notifications", "notifications": rows})

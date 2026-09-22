@@ -31,7 +31,8 @@ class EstatePresence:
         self.channels = {}
 
     async def broadcast(self, owner, payload, exclude=None):
-        encoded = json.dumps(payload, ensure_ascii=False, separators=(",", ":"))
+        scoped = {**payload, "owner_username": owner}
+        encoded = json.dumps(scoped, ensure_ascii=False, separators=(",", ":"))
         for socket in list(self.channels.get(owner.lower(), set())):
             if socket is exclude or socket not in self.clients:
                 continue
@@ -52,26 +53,36 @@ class EstatePresence:
                 "type": "estate_visit_left", "username": user["username"],
             }, exclude=websocket)
 
-    async def join(self, websocket, state, owner):
+    @staticmethod
+    def player_state(state):
+        user = state.get("user")
+        if not user:
+            return None
+        return {
+            "username": user["username"],
+            "skin_id": state.get("estate_skin_id", "berry"),
+            **state.get("estate_position", {
+                "x": 275, "y": 440, "direction": "down", "walking": False,
+            }),
+        }
+
+    async def join(self, websocket, state, owner, skin_id="berry"):
         await self.leave(websocket, state)
         members = self.channels.setdefault(owner.lower(), set())
         players = []
         for socket in list(members):
             other_state = self.clients.get(socket, {})
-            other = other_state.get("user")
+            other = self.player_state(other_state)
             if other:
-                players.append({"username": other["username"],
-                                **other_state.get("estate_position", {"x": 275, "y": 440,
-                                  "direction": "down", "walking": False})})
+                players.append(other)
         members.add(websocket)
         state["estate_owner"] = owner
+        state["estate_skin_id"] = skin_id
         state["estate_position"] = {"x": 275, "y": 440, "direction": "down", "walking": False}
         state["estate_position_at"] = time.monotonic()
-        user = state.get("user")
-        await self.broadcast(owner, {
-            "type": "estate_visit_joined", "username": user["username"],
-            **state["estate_position"],
-        }, exclude=websocket)
+        player = self.player_state(state)
+        await self.broadcast(owner, {"type": "estate_visit_joined", **player},
+                             exclude=websocket)
         return players
 
     async def move(self, websocket, state, data):
@@ -97,4 +108,18 @@ class EstatePresence:
         state["estate_position"] = position
         state["estate_position_at"] = now_mono
         await self.broadcast(owner, {"type": "estate_visit_moved",
-            "username": user["username"], **position}, exclude=websocket)
+            "username": user["username"], "skin_id": state.get("estate_skin_id", "berry"),
+            **position}, exclude=websocket)
+
+    async def update_skin(self, username, skin_id):
+        """更新同账号各连接的频道状态，并立即让同场玩家看到新皮肤。"""
+        for websocket, state in list(self.clients.items()):
+            user = state.get("user")
+            if not user or user["username"].lower() != username.lower():
+                continue
+            state["estate_skin_id"] = skin_id
+            owner = state.get("estate_owner")
+            player = self.player_state(state)
+            if owner and player:
+                await self.broadcast(owner, {"type": "estate_visit_moved", **player},
+                                     exclude=websocket)
