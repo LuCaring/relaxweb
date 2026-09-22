@@ -26,10 +26,11 @@ const assert = require('node:assert/strict');
       core.handleServerMessage({type: 'resume_success', username: 'alice', nickname: '爱丽丝',
         coins: 900, rating});
     });
-    assert.match(await page.locator('.rating-card').innerText(), /白银 1000/);
+    const ratingCard = page.locator('.rating-card:not(.asset-card)');
+    assert.match(await ratingCard.innerText(), /白银 1000/);
     assert.equal(await page.evaluate(() => sent.some(m => m.type === 'get_rating_history')), true);
     await page.getByText('积分怎么算？', {exact: true}).click();
-    assert.match(await page.locator('.rating-card').innerText(), /盈利 × 40，亏损 × 20/);
+    assert.match(await ratingCard.innerText(), /盈利 × 40，亏损 × 20/);
     await page.evaluate(() => core.handleServerMessage({type: 'rating_history',
       rating: {...rating, score: 1008, games: 1}, entries: [{game_type: 'uno',
         room_name: '<img src=x onerror=alert(1)>', hand_no: 1, initial: 100, final: 120,
@@ -68,7 +69,7 @@ const assert = require('node:assert/strict');
         rating: {...rating, score: 1200, tier: '黄金', games: 20, next_score: 1600, next_tier: '铂金'}});
       core.renderGameView();
     });
-    assert.match(await page.locator('.rating-card').innerText(), /黄金 1200/);
+    assert.match(await ratingCard.innerText(), /黄金 1200/);
     assert.match(await page.locator('#dropdownName').textContent(), /黄金 1200/);
     assert.deepEqual(errors, []);
     console.log('PASS rating rules, history, identity updates, roster, both settlements, mobile layouts and safe text');

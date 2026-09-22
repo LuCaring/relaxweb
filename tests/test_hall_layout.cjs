@@ -127,9 +127,12 @@ const summaries = [
     assert.equal(await page.evaluate(() => chatInput === document.getElementById('roomChatInput')), true);
     assert.equal(await page.locator('#roomChatInput').inputValue(), '保留聊天草稿');
     await page.evaluate(() => core.handleServerMessage({type: 'room_chat', room_id: 17, username: 'p1', nickname: '玩家 2', text: '大家好'}));
-    assert.equal(await page.locator('.waiting-seat[data-username="p1"] .seat-bubble').innerText(), '大家好');
+    // Bubbles live on the table to escape each seat's transform stacking context.
+    const playerBubble = page.locator('.waiting-table > .seat-bubble[data-username="p1"]');
+    assert.equal(await playerBubble.innerText(), '大家好');
     await updateRoom(room('guandan', 4));
-    assert.equal(await page.locator('.waiting-seat[data-username="p1"] .seat-bubble').innerText(), '大家好');
+    assert.equal(await playerBubble.innerText(), '大家好');
+    assert.equal(await playerBubble.count(), 1, 'snapshot updates must not duplicate the player bubble');
     await page.evaluate(async () => (await import('/assets/js/room-chat.js')).closeChatOverlay());
     await page.getByRole('button', {name: '开始游戏', exact: true}).click();
     assert.deepEqual(await page.evaluate(() => sent.at(-1)), {type: 'start_game'});
@@ -160,10 +163,19 @@ const summaries = [
     await search.fill('');
     await page.getByRole('button', {name: '游戏中', exact: true}).click();
     assert.equal(await page.locator('.hall-room-row').count(), 1);
+    const joinsBefore = await page.evaluate(() => sent.filter(message => message.type === 'join_room').length);
     await page.locator('.hall-room-row[data-room-id="2"] button').click();
-    assert.deepEqual(await page.evaluate(() => sent.at(-1)), {type: 'join_room', room_id: 2});
+    assert.match(await page.locator('#liveDialog').innerText(), /观战进入/);
+    assert.equal(await page.evaluate(() => sent.filter(message => message.type === 'join_room').length), joinsBefore);
+    await page.locator('.live-dialog-cancel').click();
+    assert.equal(await page.evaluate(() => sent.filter(message => message.type === 'join_room').length), joinsBefore);
+    await page.locator('.hall-room-row[data-room-id="2"] button').click();
+    await page.locator('.live-dialog-confirm').click();
+    assert.deepEqual(await page.evaluate(() => sent.at(-1)), {type: 'join_room', room_id: 2, spectate: true});
     await page.getByRole('button', {name: '全部', exact: true}).click();
     assert.equal(await page.locator('.hall-room-row[data-room-id="3"] button').isDisabled(), true);
+    await page.locator('.hall-room-row[data-room-id="1"] button').click();
+    assert.deepEqual(await page.evaluate(() => sent.at(-1)), {type: 'join_room', room_id: 1});
     await page.getByRole('button', {name: /创建房间/}).click();
     const roomName = page.getByLabel('房间名称', {exact: false});
     const amount = page.getByLabel('买入金币', {exact: true});
