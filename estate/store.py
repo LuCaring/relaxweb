@@ -11,7 +11,8 @@ from zoneinfo import ZoneInfo
 
 from estate.catalog import (
     DAILY_FISH_RETAIN_LIMIT, FISHING_STEPS, INITIAL_PLOTS, MAX_PLOTS, MINE_BOARD_SIZE, MINING_LEVELS, TOOLS,
-    WAREHOUSE_LEVELS, FISHING_TREASURES, SKINS, collectible_item, item_info, public_catalog, xp_for_next,
+    WAREHOUSE_LEVELS, FISHING_TREASURES, SKINS, collectible_item, item_id, item_info, public_catalog,
+    xp_for_next,
 )
 
 
@@ -196,9 +197,16 @@ def inventory_rows(conn, username):
 
 
 def inventory_used(conn, username):
+    """仓库占用格数。
+
+    普通物品按数量计格；收藏品不可出售（见 ``catalog.item_info``），
+    重复获得时只计一格。否则同一种收藏品的副本既卖不掉也丢不掉，
+    会永久占满仓库，最终连收获、挖矿和钓鱼都无法进行。
+    """
     row = conn.execute(
-        "SELECT COALESCE(SUM(quantity),0) FROM estate_inventory WHERE username = ?",
-        (username,),
+        "SELECT COALESCE(SUM(CASE WHEN item_id LIKE ? THEN 1 ELSE quantity END),0) "
+        "FROM estate_inventory WHERE username = ?",
+        (f"{item_id('collectible', '')}%", username),
     ).fetchone()
     return int(row[0] or 0)
 
