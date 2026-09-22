@@ -1,11 +1,21 @@
-"""Requires bash live-test/reset.sh; uses local test accounts and local WebSocket only."""
+"""独立临时数据库及随机端口上的 UNO 真实 WebSocket 回归。"""
 import asyncio
+from functools import partial
 import json
+from pathlib import Path
+import sys
+import tempfile
 import time
 import websockets
 
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+from server.accounts import hash_password
+from server.app import create_app
+from server.database import database
+from server.schema import init_db
 
-async def main():
+
+async def exercise(uri):
     clients = {}
     async def send(name, payload):
         await clients[name]['ws'].send(json.dumps(payload))
@@ -23,7 +33,7 @@ async def main():
                 clients[name]['revision'] += 1
     try:
         for name in ('玩家1', '玩家2', '玩家3'):
-            ws = await websockets.connect('ws://localhost:8765/?client=game')
+            ws = await websockets.connect(uri)
             clients[name] = {'ws': ws, 'view': {}, 'revision': 0}
             clients[name]['reader'] = asyncio.create_task(read(name))
             await send(name, {'type': 'login', 'username': name, 'password': 'test123456'})
@@ -79,6 +89,23 @@ async def main():
         for client in clients.values():
             await client['ws'].close()
             await client['reader']
+
+
+async def main():
+    with tempfile.TemporaryDirectory() as tmp:
+        app = create_app(partial(database, str(Path(tmp) / 'uno.db')))
+        init_db(app.database)
+        password, salt = hash_password('test123456')
+        with app.database() as conn, conn:
+            conn.executemany(
+                'INSERT INTO users(username,password_hash,salt,created_at,coins) VALUES (?,?,?,0,1000)',
+                [(name, password, salt) for name in ('玩家1', '玩家2', '玩家3')],
+            )
+        try:
+            async with websockets.serve(app.handler, '127.0.0.1', 0) as host:
+                await exercise(f'ws://127.0.0.1:{host.sockets[0].getsockname()[1]}/?client=game')
+        finally:
+            await app.aclose()
 
 
 if __name__ == '__main__':

@@ -70,7 +70,7 @@ ffmpeg -re -i 你的视频源 -c:v libx264 -c:a aac \
 
 ## 5. 数据库初始化
 
-首次启动 `live-chat` 时会自动建表（`chat_server.init_db()`）。注册需要邀请码，
+首次启动 `live-chat` 时会自动建表（`server.schema.init_db()`）。注册需要邀请码，
 用 `manage_invite.py` 生成：
 
 ```bash
