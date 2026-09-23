@@ -77,7 +77,8 @@ class PreviewStartup(unittest.TestCase):
                             for connection in psutil.Process(new.pid).net_connections(kind='tcp')),
                         '--lan listens on all IPv4 interfaces')
         with urllib.request.urlopen(f'http://127.0.0.1:{port}/__preview/fixtures') as response:
-            self.assertEqual(set(json.load(response)), {'mahjong', 'guandan', 'holdem', 'uno'})
+            self.assertEqual(set(json.load(response)),
+                             {'mahjong', 'guandan', 'holdem', 'uno', 'ludo', 'liarsbar'})
         # Changing port still replaces the previous preview.
         newest = self.spawn(None, '--port', '0', '--landscape')
         _, url, _ = self.ready(newest)

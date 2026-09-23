@@ -14,16 +14,16 @@ function updateURL() {
   history.replaceState(null, "", `?${next}`);
   $("direct").href = `/game.html?${next}`;
 }
-function load() {
+function load(force = false) {
   const spectating = $("perspective").value === "spectator";
   $("watch-label").hidden = !spectating;
   $("scene").querySelector('[value="waiting"]').disabled = spectating;
   if (spectating && $("scene").value === "waiting") $("scene").value = "normal";
   updateURL();
-  $("table").src = $("direct").href;
+  if (force || $("table").src !== $("direct").href) $("table").src = $("direct").href;
   resize();
 }
-for (const id of ["game", "scene", "perspective", "watch"]) $(id).addEventListener("change", load);
+for (const id of ["game", "scene", "perspective", "watch"]) $(id).addEventListener("change", () => load());
 $("size").addEventListener("change", () => { updateURL(); resize(); });
 $("mobile").addEventListener("click", () => {
   $("size").value = "390x844";
@@ -33,7 +33,7 @@ $("rotate").addEventListener("click", () => {
   $("size").value = $("size").value === "844x390" ? "390x844" : "844x390";
   updateURL(); resize();
 });
-$("reset").addEventListener("click", load);
+$("reset").addEventListener("click", () => load(true));
 $("bubbles").addEventListener("click", () => $("table").contentWindow.postMessage({type: "preview-bubbles"}, location.origin));
 window.addEventListener("resize", resize);
 window.addEventListener("message", event => {

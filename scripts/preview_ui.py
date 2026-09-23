@@ -16,6 +16,7 @@ import time
 import webbrowser
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
+from unittest.mock import patch
 from urllib.parse import quote, unquote, urlsplit
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -23,8 +24,9 @@ UI = Path(__file__).resolve().parent / "ui_preview"
 sys.path.insert(0, str(ROOT))
 
 from games.base import create_room  # noqa: E402
+from games.ludo import GOAL  # noqa: E402
 
-GAMES = ("guandan", "mahjong", "holdem", "uno")
+GAMES = ("guandan", "mahjong", "holdem", "uno", "ludo", "liarsbar")
 SCENES = ("normal", "dense", "waiting", "paused")
 PLAYERS = ("p0", "p1", "p2", "p3")
 
@@ -174,6 +176,26 @@ async def make_fixtures():
                     {"c": "w", "v": "wild"}, {"c": "w", "v": "wd4"}, {"c": "r", "v": "d2"}]
                 g["color"], g["value"] = "r", "5"
                 g["discard"][-1] = {"c": "r", "v": "5"}
+            elif game == "ludo":
+                # Show the board in progress, with a rolled six and movable planes.
+                g["planes"] = {
+                    "p0": [-1, 0, 17, 53], "p1": [-1, 4, 25, 48],
+                    "p2": [2, 8, 34, 55], "p3": [0, 12, 50, GOAL],
+                }
+                g["dice"] = 6
+                g["awaiting_move"] = True
+                g["last_action"] = {"username": "p0", "nickname": names[0], "text": "掷出 6 点"}
+            elif game == "liarsbar":
+                # A prior claim gives p0 both play and challenge controls.
+                g["table_card"] = "K"
+                g["hands"] = {
+                    "p0": ["K", "K", "Q", "A", "R"],
+                    "p1": ["K", "Q", "Q", "A", "A"],
+                    "p2": ["K", "K", "Q", "A", "R"],
+                    "p3": ["K", "Q", "Q", "A", "A"],
+                }
+                g["to_act"] = "p3"
+                await room.perform_action("p3", "play", {"cards": [0, 1]})
             normal, normal_spectators = capture()
 
             if game == "mahjong":
@@ -187,6 +209,15 @@ async def make_fixtures():
             elif game == "holdem":
                 g["board"] += [(13, 3), (14, 0)]
                 g["stage"] = "river"
+            elif game == "ludo":
+                g["planes"] = {
+                    "p0": [0, 0, 53, 54], "p1": [1, 13, 31, 50],
+                    "p2": [2, 16, 40, 55], "p3": [0, 25, 51, GOAL],
+                }
+            elif game == "liarsbar":
+                # Exercise the real duel/reveal view with a predictable blank shot.
+                with patch("games.liarsbar.randomness.roll_die", return_value=2):
+                    await room.perform_action("p0", "challenge")
             dense, dense_spectators = capture()
             for view in [dense, *dense_spectators.values()]:
                 view["last_action"] = {"nickname": "一个很长的玩家昵称", "text": "打出了手中的牌，现在等待下一位玩家行动"}
@@ -213,6 +244,8 @@ def revision():
 
 
 class PreviewHandler(BaseHTTPRequestHandler):
+    protocol_version = "HTTP/1.1"
+
     def log_message(self, *args):
         pass
 
@@ -258,6 +291,13 @@ class PreviewHandler(BaseHTTPRequestHandler):
         return self.reply(file.read_bytes(), mimetypes.guess_type(str(file))[0] or "application/octet-stream")
 
 
+class PreviewHTTPServer(ThreadingHTTPServer):
+    # Switching scenes reloads many assets at once; the default 5-slot backlog
+    # can reset module requests before the browser reaches the table script.
+    request_queue_size = 128
+    daemon_threads = True
+
+
 def main():
     parser = argparse.ArgumentParser(description="一行命令启动本地游戏 UI 预览，无需登录或数据库。")
     parser.add_argument("--game", choices=GAMES, default="guandan")
@@ -285,7 +325,7 @@ def main():
         except (OSError, RuntimeError) as error:
             parser.exit(1, f'无法替换旧预览：{error}\n')
     try:
-        server = ThreadingHTTPServer(("0.0.0.0" if args.lan else "127.0.0.1", args.port), PreviewHandler)
+        server = PreviewHTTPServer(("0.0.0.0" if args.lan else "127.0.0.1", args.port), PreviewHandler)
     except OSError as error:
         parser.exit(1, f"无法启动端口 {args.port}：{error}。可用 --port 0 自动选择空闲端口。\n")
     server.fixtures = fixtures

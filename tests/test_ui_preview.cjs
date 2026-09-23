@@ -31,15 +31,24 @@ const python = process.env.PYTHON || path.join(root, '.venv', 'bin', 'python');
       ['scripts/preview_ui.py', '--spectator', '--scene', 'waiting', '--no-open', '--no-replace'],
       {cwd:root, encoding:'utf8', timeout:5000});
     assert.equal(invalid.status,2,'the CLI rejects spectating a game that has not started');
+    const fixtureViews = await (await fetch(origin + '/__preview/fixtures')).json();
     const spectatorViews = await (await fetch(origin + '/__preview/spectators')).json();
+    assert.deepEqual(Object.keys(fixtureViews.ludo), ['normal','dense','waiting','paused']);
+    assert.equal(fixtureViews.ludo.normal.dice, 6);
+    assert.ok(fixtureViews.ludo.normal.your_options.plane.length > 0);
+    assert.equal(fixtureViews.liarsbar.normal.last_play.username, 'p3');
+    assert.equal(fixtureViews.liarsbar.normal.your_options.can_challenge, true);
+    assert.equal(fixtureViews.liarsbar.dense.stage, 'reveal');
+    assert.ok(fixtureViews.liarsbar.dense.last_duel);
     for (const file of ['/config.json', '/users.db', '/scripts/preview_ui.py', '/assets/%2e%2e%2fconfig.json']) {
       assert.equal((await fetch(origin + file)).status, 404, `${file} is not served`);
     }
     browser = await chromium.launch({headless: true,
       executablePath: process.env.CHROME_PATH || chromium.executablePath(), args: ['--no-sandbox']});
     const page = await browser.newPage({viewport: {width: 1500, height: 1050}});
-    const errors = [], sockets = [], external = [];
+    const errors = [], sockets = [], external = [], failedRequests = [];
     page.on('pageerror', error => errors.push(error.message));
+    page.on('requestfailed', request => failedRequests.push(`${request.url()}: ${request.failure()?.errorText}`));
     page.on('websocket', socket => sockets.push(socket.url()));
     page.on('request', request => {
       if (/^https?:/.test(request.url()) && new URL(request.url()).origin !== origin) external.push(request.url());
@@ -47,13 +56,18 @@ const python = process.env.PYTHON || path.join(root, '.venv', 'bin', 'python');
     await page.goto(url);
     async function table(game) {
       const frame = page.frameLocator('#table');
-      await page.waitForFunction(game => {
-        const data = document.querySelector('#table').contentDocument?.documentElement?.dataset;
-        const value = id => document.getElementById(id).value;
-        return data?.previewReady === game && data.previewScene === value('scene')
-          && data.previewPerspective === value('perspective')
-          && (value('perspective') === 'player' || data.previewWatch === value('watch'));
-      }, game);
+      try {
+        await page.waitForFunction(game => {
+          const data = document.querySelector('#table').contentDocument?.documentElement?.dataset;
+          const value = id => document.getElementById(id).value;
+          return data?.previewReady === game && data.previewScene === value('scene')
+            && data.previewPerspective === value('perspective')
+            && (value('perspective') === 'player' || data.previewWatch === value('watch'));
+        }, game);
+      } catch (error) {
+        const current = await page.locator('#table').evaluate(el => ({src: el.src, ready: el.contentDocument?.documentElement?.dataset.previewReady, scene: el.contentDocument?.documentElement?.dataset.previewScene}));
+        throw new Error(`Preview failed for ${game}/${await page.locator('#scene').inputValue()}/${await page.locator('#perspective').inputValue()}/${await page.locator('#watch').inputValue()}: ${JSON.stringify(current)} frames=${page.frames().map(frame => frame.url()).join(',')} server=${server.exitCode} requests=${failedRequests.slice(-5).join('; ')} errors=${errors.join('; ')}`, {cause: error});
+      }
       await frame.locator(`html[data-preview-ready="${game}"]`).waitFor();
       return frame;
     }
@@ -85,9 +99,10 @@ const python = process.env.PYTHON || path.join(root, '.venv', 'bin', 'python');
     await frame.getByRole('button', {name: /出牌 ·/}).click();
     await page.locator('#feedback').filter({hasText: '已捕获操作'}).waitFor();
 
-    const selectors = {guandan: '.gd-page', mahjong: '.mj-page', holdem: '.poker-table', uno: '.uno-table'};
+    const selectors = {guandan: '.gd-page', mahjong: '.mj-page', holdem: '.poker-table', uno: '.uno-table', ludo: '.ludo-table', liarsbar: '.liar-table'};
     for (const game of Object.keys(selectors)) {
       await page.locator('#game').selectOption(game);
+      await table(game);
       for (const scene of ['normal', 'dense', 'waiting', 'paused']) {
         await page.locator('#scene').selectOption(scene);
         frame = await table(game);
@@ -97,7 +112,21 @@ const python = process.env.PYTHON || path.join(root, '.venv', 'bin', 'python');
         if (scene === 'paused') assert.equal(current.paused, true);
       }
     }
+    await page.locator('#game').selectOption('ludo');
+    await table('ludo');
+    await page.locator('#scene').selectOption('normal');
+    frame = await table('ludo');
+    assert.equal(await frame.locator('.ludo-plane').count(), 16);
+    await frame.locator('.ludo-plane.can-move').first().click();
+    await page.locator('#feedback').filter({hasText: '"action":"move"'}).waitFor();
+    await page.locator('#game').selectOption('liarsbar');
+    frame = await table('liarsbar');
+    assert.equal(await frame.locator('.liar-hand .liar-card').count(), 5);
+    await frame.locator('.liar-actions .danger').click();
+    await page.locator('#feedback').filter({hasText: '"action":"challenge"'}).waitFor();
     // Enabling spectating from a waiting room selects a playable sample.
+    await page.locator('#game').selectOption('uno');
+    await table('uno');
     await page.locator('#scene').selectOption('waiting');
     await table('uno');
     await page.locator('#perspective').selectOption('spectator');
@@ -106,9 +135,11 @@ const python = process.env.PYTHON || path.join(root, '.venv', 'bin', 'python');
     assert.equal(await page.locator('#scene option[value="waiting"]').evaluate(option=>option.disabled),true);
     for (const game of Object.keys(selectors)) {
       await page.locator('#game').selectOption(game);
+      await table(game);
       assert.equal(spectatorViews[game].waiting,undefined);
       for (const scene of ['normal','dense','paused']) {
         await page.locator('#scene').selectOption(scene);
+        await table(game);
         for (const watched of ['p0','p1','p2','p3']) {
           await page.locator('#watch').selectOption(watched);
           frame = await table(game);
@@ -125,13 +156,18 @@ const python = process.env.PYTHON || path.join(root, '.venv', 'bin', 'python');
           assert.deepEqual(actual.room.your_hole,expected.your_hole);
           assert.deepEqual(actual.room.your_flowers,expected.your_flowers);
           assert.equal(actual.room.my_team,expected.my_team);
-          assert.equal(await frame.locator('.mj-hand-card:enabled,.gd-hand-card:enabled,.uno-hand-card:enabled,.mj-actions button:enabled,.gd-dock .action-bar button:enabled,.poker-dock .action-bar button:enabled').count(),0);
+          assert.equal(await frame.locator('.mj-hand-card:enabled,.gd-hand-card:enabled,.uno-hand-card:enabled,.mj-actions button:enabled,.gd-dock .action-bar button:enabled,.poker-dock .action-bar button:enabled,.ludo-side .ludo-btn:enabled,.ludo-plane:enabled,.liar-actions button:enabled,.liar-card.clickable').count(),0);
           assert.equal(await frame.locator('#roomManage').isVisible(),false);
         }
       }
-      assert.notDeepEqual(spectatorViews[game].normal.p0.your_hand || spectatorViews[game].normal.p0.your_hole,
-        spectatorViews[game].normal.p1.your_hand || spectatorViews[game].normal.p1.your_hole,
-        `${game} switching seats must not reuse p0's cards`);
+      if (game === 'ludo') {
+        assert.notDeepEqual(spectatorViews.ludo.normal.p0.players[0].planes,
+          spectatorViews.ludo.normal.p0.players[1].planes);
+      } else {
+        assert.notDeepEqual(spectatorViews[game].normal.p0.your_hand || spectatorViews[game].normal.p0.your_hole,
+          spectatorViews[game].normal.p1.your_hand || spectatorViews[game].normal.p1.your_hole,
+          `${game} switching seats must not reuse p0's cards`);
+      }
       await frame.locator('#spectateButton').click();
       await frame.locator('#spectateMenu .room-manage-item').nth(1).click();
       await page.waitForFunction(()=>document.querySelector('#watch').value==='p1');
@@ -167,6 +203,7 @@ const python = process.env.PYTHON || path.join(root, '.venv', 'bin', 'python');
     await table('uno');
     for (const game of Object.keys(selectors)) {
       await page.locator('#game').selectOption(game);
+      await table(game);
       await page.locator('#scene').selectOption('dense');
       for (const size of ['320x568','390x844']) {
         await page.locator('#size').selectOption(size);
@@ -181,7 +218,10 @@ const python = process.env.PYTHON || path.join(root, '.venv', 'bin', 'python');
         await page.waitForFunction(()=>document.querySelector('#watch').value==='p0');
       }
     }
+    await page.locator('#game').selectOption('uno');
+    await table('uno');
     await page.locator('#scene').selectOption('paused');
+    await table('uno');
     await page.locator('#watch').selectOption('p1');
     await page.locator('#size').selectOption('1440x900');
     await table('uno');
@@ -205,7 +245,7 @@ const python = process.env.PYTHON || path.join(root, '.venv', 'bin', 'python');
     assert.deepEqual(errors, []);
     assert.deepEqual(sockets, [], 'preview never opens a network WebSocket');
     assert.deepEqual(external, [], 'all requests remain on the local preview server');
-    console.log('PASS startup, 4 games × 4 player scenes and 3 spectator scenes × 4 seats, target switching, spectator chat/exit, viewport, reload and local-only requests');
+    console.log('PASS startup, 6 games × 4 player scenes and 3 spectator scenes × 4 seats, target switching, spectator chat/exit, viewport, reload and local-only requests');
   } finally {
     if (fs.existsSync(marker)) fs.unlinkSync(marker);
     if (browser) await browser.close();
