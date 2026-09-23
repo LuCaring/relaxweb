@@ -249,6 +249,19 @@ class BaseRoom:
         """房间关闭：清掉所有计时器；聊天随对象一起被回收。"""
         self.cancel_timers()
 
+    # ---- 房间聊天钩子（默认全公开；子类可按阶段定向，如狼人杀）----
+    def chat_route(self, username, message):
+        """返回 None 公开广播；"" 拦截该消息；子频道名则定向给 chat_audience。"""
+        return None
+
+    def chat_audience(self, channel):
+        """定向频道的接收者列表；None 表示回退为全员广播。"""
+        return None
+
+    def visible_chat(self, username):
+        """历史消息按查看者过滤（含定向频道的消息）。"""
+        return list(self.chat)
+
     # ---- 视图 ----
     def summary(self):
         """房间列表条目（公开信息）。"""

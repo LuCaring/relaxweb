@@ -11,5 +11,6 @@ from games import guandan  # noqa: F401  导入即注册 guandan
 from games import mahjong  # noqa: F401  导入即注册 mahjong
 from games import ludo  # noqa: F401  导入即注册 ludo
 from games import liarsbar  # noqa: F401  导入即注册 liarsbar
+from games import werewolf  # noqa: F401  导入即注册 werewolf
 
 __all__ = ["BaseRoom", "ROOM_TYPES", "create_room", "register_room_type"]

@@ -61,7 +61,7 @@ class RoomProtocol:
                 {
                     "type": "room_chat_history",
                     "room_id": room.id,
-                    "messages": list(room.chat),
+                    "messages": room.visible_chat(user["username"]),
                 },
             )
         else:
@@ -160,7 +160,7 @@ class RoomProtocol:
                 {
                     "type": "room_chat_history",
                     "room_id": room.id,
-                    "messages": list(room.chat),
+                    "messages": room.visible_chat(username),
                 },
             )
             await self.rooms.broadcast_spectator_notice(room, username, joined=True)
@@ -194,7 +194,7 @@ class RoomProtocol:
             {
                 "type": "room_chat_history",
                 "room_id": room.id,
-                "messages": list(room.chat),
+                "messages": room.visible_chat(username),
             },
         )
         await room.broadcast_views()
@@ -363,5 +363,16 @@ class RoomProtocol:
             "text": text,
             "time": time.strftime("%m/%d %H:%M"),
         }
+        # 子类可按阶段定向（狼人杀夜晚狼频道/死者频道），返回 "" 表示拦截
+        channel = room.chat_route(user["username"], message)
+        if channel == "":
+            await self.hub.send_json(websocket, {"type": "error", "message": "当前阶段不能发言"})
+            return
+        if channel:
+            message["channel"] = channel
         room.chat.append(message)
-        await room.broadcast_payload(dict(message))
+        audience = room.chat_audience(channel) if channel else None
+        if audience is None:
+            await room.broadcast_payload(dict(message))
+        else:
+            await self.rooms.send_to_members(room, audience, dict(message))

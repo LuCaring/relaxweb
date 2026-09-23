@@ -126,6 +126,18 @@ class RoomHost:
             {"type": "room_list", "rooms": [room.summary() for room in self.game_rooms.values()]}
         )
 
+    async def send_to_members(self, room, usernames, payload):
+        """把消息发给房间内指定成员/观战者的所有连接（定向频道聊天用）。"""
+        wanted = set(usernames)
+        sockets = []
+        for socket, client_state in list(self.hub.clients.items()):
+            user = client_state.get("user")
+            if not user or user["username"] not in wanted:
+                continue
+            if room.has_member(user["username"]) or room.has_spectator(user["username"]):
+                sockets.append(socket)
+        await asyncio.gather(*(self.hub.send_json(socket, payload) for socket in sockets))
+
     async def broadcast_spectator_notice(self, room, username, joined):
         """将观战进出写入房间聊天，并通知仍在房间的所有连接。"""
         name = self.accounts.display_name(username)
