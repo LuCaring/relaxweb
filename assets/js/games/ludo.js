@@ -1,7 +1,4 @@
-/* 飞行棋场景：左侧正方形棋盘（15×15 网格，四角机场、52 格主圈、
-   终点跑道），右侧竖排操作列（掷骰 / 选机 / 提示）。桌面端沿用麻将
-   布局：棋局与操作在左，整高房间聊天栏在右。起飞、撞机与结算全部
-   以服务器视图为准。 */
+/* 飞行棋场景：棋盘、赛况与回合操作均以服务器视图为准。 */
 
 import {
   displayNameOf, elements, formatCoins, formatCoinsWhole, playerAvatarNode,
@@ -122,10 +119,15 @@ function topbarNode() {
   const room = state.myRoom;
   const bar = document.createElement("div");
   bar.className = "ludo-topbar";
-  const left = document.createElement("span");
+  const left = document.createElement("div");
   left.className = "ludo-topbar-info";
-  left.textContent = `飞行棋 · ${rulesSummary(room.rules)} · 底注 ${formatCoinsWhole(room.blind)}`;
-  left.title = `房主 ${displayNameOf(room.owner)} · 第 ${room.race_no || 1} 局竞速`;
+  const heading = document.createElement("strong");
+  heading.textContent = `飞行棋 · 第 ${room.race_no || 1} 局 · 底注 ${formatCoinsWhole(room.blind)}`;
+  const rules = document.createElement("span");
+  rules.className = "ludo-rules";
+  rules.textContent = rulesSummary(room.rules);
+  left.append(heading, rules);
+  left.title = `房主 ${displayNameOf(room.owner)} · ${rulesSummary(room.rules)}`;
   const right = document.createElement("div");
   right.className = "ludo-topbar-right";
   const chatToggle = document.createElement("button");
@@ -143,10 +145,12 @@ function statusNode() {
   const room = state.myRoom;
   const status = document.createElement("div");
   status.className = "ludo-status";
-  const la = room.last_action;
-  status.textContent = la
-    ? `${la.nickname} ${la.text}`
-    : room.to_act ? `等待 ${displayNameOf(room.to_act)} 掷骰子…` : "准备开局…";
+  const actor = !room.to_act ? ""
+    : room.to_act === selfUsername() && !room.spectator ? "你" : displayNameOf(room.to_act);
+  status.textContent = room.paused ? "已暂停"
+    : room.settlement ? "本局结束 · 等待下一局"
+    : room.to_act ? `${actor}${room.awaiting_move ? " 选择飞机" : " 掷骰"}`
+    : "准备开局";
   status.title = status.textContent;
   return status;
 }
@@ -275,8 +279,56 @@ function planeTokensNode(room) {
   return frag;
 }
 
+function progressNode(room) {
+  const section = document.createElement("section");
+  section.className = "ludo-progress";
+  section.setAttribute("aria-label", "本局赛况");
+  const head = document.createElement("div");
+  head.className = "ludo-progress-head";
+  const title = document.createElement("strong");
+  title.textContent = "本局赛况";
+  const note = document.createElement("span");
+  note.textContent = "4 架飞机全部到达即获胜";
+  head.append(title, note);
+  const grid = document.createElement("div");
+  grid.className = "ludo-progress-grid";
+  for (const p of room.players || []) {
+    const card = document.createElement("div");
+    card.className = `ludo-progress-card p${p.color}`;
+    if (room.to_act === p.username && !room.paused) card.classList.add("active");
+    const cardHead = document.createElement("div");
+    cardHead.className = "ludo-progress-card-head";
+    const name = document.createElement("span");
+    name.className = "ludo-progress-name";
+    name.textContent = p.username === selfUsername() && !room.spectator
+      ? "我" : (p.nickname || displayNameOf(p.username));
+    name.title = p.nickname || displayNameOf(p.username);
+    const count = document.createElement("strong");
+    count.className = "ludo-progress-count";
+    count.textContent = p.in_race ? `到达 ${p.finished || 0}/4` : "未参与";
+    cardHead.append(name, count);
+    card.append(cardHead);
+    if (p.in_race) {
+      const planes = document.createElement("div");
+      planes.className = "ludo-progress-planes";
+      (p.planes || []).forEach((journey, idx) => {
+        const chip = document.createElement("span");
+        chip.className = "ludo-progress-plane";
+        if (journey === GOAL) chip.classList.add("finished");
+        chip.textContent = `${idx + 1} ${journey === -1 ? "机场" : journey === GOAL ? "到达" : journey >= LOOP_STEPS ? `跑道${journey - LOOP_STEPS + 1}` : `主圈${journey + 1}`}`;
+        chip.title = `${idx + 1}号机 · ${positionText(journey)}`;
+        planes.append(chip);
+      });
+      card.append(planes);
+    }
+    grid.append(card);
+  }
+  section.append(head, grid);
+  return section;
+}
+
 /* =========================================================
-   操作列（竖排）：提示 / 骰子 / 掷骰 / 选机 / 战报
+   回合操作：当前阶段 / 骰子 / 可执行动作 / 上一手
 ========================================================= */
 
 const DICE_PIPS = {
@@ -287,6 +339,8 @@ const DICE_PIPS = {
 function diceNode(value) {
   const dice = document.createElement("div");
   dice.className = "ludo-dice";
+  dice.setAttribute("role", "img");
+  dice.setAttribute("aria-label", value ? `掷出 ${value} 点` : "尚未掷骰");
   if (!value) {
     dice.classList.add("idle");
     dice.textContent = "🎲";
@@ -308,11 +362,12 @@ function hintNode() {
   hint.className = "ludo-hint";
   const me = selfUsername();
   hint.textContent = room.paused ? "牌局已暂停，等待房主继续"
+    : room.settlement ? "本局已结束 · 等待下一局投票"
     : room.spectator ? "观战视角 · 等待玩家操作"
-    : room.to_act === me && !room.awaiting_move ? "轮到你 · 点击「掷骰子」"
+    : room.to_act === me && !room.awaiting_move ? "轮到你 · 请掷骰子"
     : room.to_act === me && room.awaiting_move
-      ? `掷出 ${room.dice} 点 · 点选棋盘上要移动的飞机`
-    : room.awaiting_move ? `等待 ${displayNameOf(room.to_act)} 移动飞机…`
+      ? `掷出 ${room.dice} 点 · 请选择飞机移动`
+    : room.awaiting_move ? `等待 ${displayNameOf(room.to_act)} 选择飞机…`
     : room.to_act ? `等待 ${displayNameOf(room.to_act)} 掷骰子…`
     : "准备开局…";
   return hint;
@@ -323,27 +378,39 @@ function sideNode() {
   const side = document.createElement("div");
   side.className = "ludo-side";
   side.setAttribute("aria-label", "操作区");
-  side.append(hintNode());
+  const turn = document.createElement("section");
+  turn.className = "ludo-turn";
+  const turnLabel = document.createElement("div");
+  turnLabel.className = "ludo-section-label";
+  turnLabel.textContent = "当前回合";
+  turn.append(turnLabel, hintNode());
+  side.append(turn);
 
-  const diceBox = document.createElement("div");
-  diceBox.className = "ludo-dice-box";
-  diceBox.append(diceNode(room.awaiting_move ? room.dice : null));
-  side.append(diceBox);
-
-  const roll = document.createElement("button");
-  roll.type = "button";
-  roll.className = "ludo-btn primary";
-  roll.textContent = "🎲 掷骰子";
-  roll.disabled = actionLock || room.paused || room.spectator
-    || !isMyTurn() || Boolean(room.awaiting_move);
-  roll.addEventListener("click", () => ludoAct({ action: "roll" }));
-  if (room.spectator || room.paused) roll.hidden = true;
-  side.append(roll);
+  if (!room.settlement) {
+    const diceBox = document.createElement("div");
+    diceBox.className = "ludo-dice-box";
+    const diceLabel = document.createElement("span");
+    diceLabel.textContent = room.awaiting_move ? "本次点数" : "等待掷骰";
+    diceBox.append(diceNode(room.awaiting_move ? room.dice : null), diceLabel);
+    side.append(diceBox);
+  }
 
   const myPlanes = room.your_options?.plane || [];
-  if (!room.paused && !room.spectator && isMyTurn() && room.awaiting_move && myPlanes.length) {
+  if (!room.paused && !room.settlement && !room.spectator && isMyTurn() && !room.awaiting_move) {
+    const roll = document.createElement("button");
+    roll.type = "button";
+    roll.className = "ludo-btn primary";
+    roll.textContent = "🎲 掷骰子";
+    roll.disabled = actionLock || !room.your_options?.roll;
+    roll.addEventListener("click", () => ludoAct({ action: "roll" }));
+    side.append(roll);
+  } else if (!room.paused && !room.settlement && !room.spectator && isMyTurn() && room.awaiting_move && myPlanes.length) {
     const list = document.createElement("div");
     list.className = "ludo-plane-list";
+    const label = document.createElement("div");
+    label.className = "ludo-section-label";
+    label.textContent = "可移动飞机 · 也可直接点棋盘";
+    list.append(label);
     for (const idx of myPlanes) {
       const journey = (room.players || []).find((p) => p.username === selfUsername())
         ?.planes?.[idx];
@@ -361,8 +428,13 @@ function sideNode() {
   const la = room.last_action;
   const last = document.createElement("div");
   last.className = "ludo-last";
-  last.textContent = la ? `${la.nickname} ${la.text}` : "";
-  last.title = last.textContent;
+  const lastLabel = document.createElement("div");
+  lastLabel.className = "ludo-section-label";
+  lastLabel.textContent = "上一手";
+  const lastText = document.createElement("div");
+  lastText.textContent = la ? `${la.nickname} ${la.text}` : "暂无操作";
+  lastText.title = lastText.textContent;
+  last.append(lastLabel, lastText);
   side.append(last);
 
   if (!room.paused && !room.spectator && isMyTurn() && room.turn_left > 0) {
@@ -411,7 +483,7 @@ function renderLudoTable() {
     board.append(plateNode(p, index));
   }
   board.append(planeTokensNode(room));
-  boardWrap.append(board);
+  boardWrap.append(board, progressNode(room));
   main.append(boardWrap, sideNode());
   table.append(main);
 
