@@ -15,6 +15,8 @@ def init_dungeon(conn):
         owner TEXT NOT NULL COLLATE NOCASE,
         template_id TEXT NOT NULL,
         template_version TEXT NOT NULL,
+        display_name TEXT,
+        visual_id TEXT,
         slot TEXT NOT NULL CHECK(slot IN ('weapon','helmet','chest','belt','boots','accessory')),
         quality TEXT NOT NULL CHECK(quality IN ('normal','excellent','rare','epic')),
         stats_json TEXT NOT NULL,
@@ -27,6 +29,11 @@ def init_dungeon(conn):
         version INTEGER NOT NULL DEFAULT 1 CHECK(version > 0),
         created_at INTEGER NOT NULL
     )""")
+    # Existing databases predate the frozen display fields.
+    columns = {row[1] for row in conn.execute("PRAGMA table_info(dungeon_items)")}
+    for column in ("display_name", "visual_id"):
+        if column not in columns:
+            conn.execute(f"ALTER TABLE dungeon_items ADD COLUMN {column} TEXT")
     conn.execute("CREATE INDEX IF NOT EXISTS idx_dungeon_items_owner ON dungeon_items(owner,location)")
     conn.execute("""CREATE TABLE IF NOT EXISTS dungeon_loadout (
         username TEXT NOT NULL COLLATE NOCASE,

@@ -103,6 +103,48 @@ class DungeonFoundationTests(unittest.TestCase):
         public["challenges"][0]["enemy"]["stats"]["max_hp"] = 1
         self.assertEqual(CATALOG["enemies"][0]["stats"]["max_hp"], 100)
 
+    def test_new_challenges_reconcile_existing_progress_and_difficulty_keys(self):
+        with self.database() as conn, conn:
+            original = dungeon_state(conn, "alice", 100)
+        catalog = deepcopy(CATALOG)
+        root = deepcopy(catalog["challenges"][0])
+        root["challenge_id"] = "new_root"
+        catalog["challenges"].append(root)
+        hard = deepcopy(catalog["challenges"][0])
+        hard["difficulty_id"] = "hard"
+        hard["requires"] = [{"challenge_id": "ruins_slime_01", "difficulty_id": "normal"}]
+        catalog["challenges"].append(hard)
+        validate_catalog(catalog)
+        with self.database() as conn, conn:
+            updated = dungeon_state(conn, "alice", 200, catalog)
+            again = dungeon_state(conn, "alice", 201, catalog)
+        self.assertEqual(updated["profile_version"], original["profile_version"] + 1)
+        self.assertEqual(updated, again)
+        progress = {(row["challenge_id"], row["difficulty_id"]): row
+                    for row in updated["progress"]}
+        self.assertTrue(progress[("new_root", "normal")]["unlocked"])
+        self.assertFalse(progress[("ruins_slime_01", "hard")]["unlocked"])
+        with self.database() as conn, conn:
+            conn.execute("""UPDATE dungeon_progress SET clear_count=1
+                WHERE username='alice' AND challenge_id='ruins_slime_01' AND difficulty_id='normal'""")
+            unlocked = dungeon_state(conn, "alice", 202, catalog)
+        self.assertTrue(next(row for row in unlocked["progress"]
+                             if row["difficulty_id"] == "hard")["unlocked"])
+        self.assertEqual(unlocked["profile_version"], updated["profile_version"] + 1)
+
+    def test_owned_item_keeps_display_fields_after_catalog_edit(self):
+        with self.database() as conn, conn:
+            first = dungeon_state(conn, "alice", 100)
+            item = next(row for row in first["items"] if row["slot"] == "weapon")
+            catalog = deepcopy(CATALOG)
+            catalog["items"][0]["name"] = "新名称"
+            catalog["items"][0]["visual_id"] = "new_art"
+            current = dungeon_state(conn, "alice", 101, catalog)
+        owned = next(row for row in current["items"] if row["item_id"] == item["item_id"])
+        self.assertEqual(owned["name"], item["name"])
+        self.assertEqual(owned["visual_id"], item["visual_id"])
+        self.assertEqual(current["catalog"]["item_templates"]["starter_blade"]["visual_id"], "new_art")
+
     def test_reward_catalog_rejects_missing_refs_and_oversized_drops(self):
         broken = deepcopy(CATALOG)
         broken["challenges"][0]["reward_table_id"] = "missing"

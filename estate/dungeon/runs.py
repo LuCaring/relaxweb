@@ -6,10 +6,12 @@ import secrets
 from copy import deepcopy
 from uuid import uuid4
 
-from estate.dungeon.actions import REQUEST_ID_PATTERN
-from estate.dungeon.catalog import CATALOG, DungeonConfigError, validate_catalog
+from estate.dungeon.catalog import (CATALOG, DungeonConfigError,
+                                    prerequisite_key, validate_catalog)
 from estate.dungeon.combat import (BattleSnapshot, CombatError, advance,
                                    make_battle_snapshot, start)
+from estate.dungeon.receipts import (REQUEST_ID_PATTERN, load_receipt,
+                                     request_digest, save_receipt)
 from estate.dungeon.service import DungeonError, dungeon_state
 
 
@@ -37,27 +39,6 @@ def _version(value, label):
     if isinstance(value, bool) or not isinstance(value, int) or value < 1:
         raise DungeonError("invalid_request", f"{label}无效")
     return value
-
-
-def _hash(action, payload):
-    return hashlib.sha256(_json({"action": action, "payload": payload}).encode()).hexdigest()
-
-
-def _receipt(conn, username, request_id, action, digest):
-    row = conn.execute("""SELECT action_type,request_hash,result_json FROM dungeon_actions
-        WHERE username=? AND request_id=?""", (username, request_id)).fetchone()
-    if row is None:
-        return None
-    if row[0] != action or row[1] != digest:
-        raise DungeonError("request_conflict", "请求编号已用于其他操作")
-    return {**json.loads(row[2]), "replayed": True}
-
-
-def _save_receipt(conn, username, request_id, action, digest, result, now_ms):
-    conn.execute("""INSERT INTO dungeon_actions
-        (username,request_id,action_type,request_hash,result_json,created_at)
-        VALUES (?,?,?,?,?,?)""",
-        (username, request_id, action, digest, _json(result), now_ms // 1000))
 
 
 def _load(conn, username, battle_id):
@@ -116,10 +97,11 @@ def start_run(conn, username, request_id, challenge_id, difficulty_id,
     _version(expected_version, "存档版本")
     payload = {"challenge_id": challenge_id, "difficulty_id": difficulty_id,
                "expected_version": expected_version}
-    digest = _hash("dungeon_start", payload)
+    digest = request_digest("dungeon_start", payload)
     state = dungeon_state(conn, username, now_ms // 1000, catalog)
-    replay = _receipt(conn, username, request_id, "dungeon_start", digest)
+    replay = load_receipt(conn, username, request_id, "dungeon_start", digest)
     if replay is not None:
+        replay["battle"] = _public(_load(conn, username, replay["battle"]["battle_id"]))
         return replay
     if state["profile_version"] != expected_version:
         raise DungeonError("version_conflict", "地下城存档已更新，请刷新后重试")
@@ -163,7 +145,7 @@ def start_run(conn, username, request_id, challenge_id, difficulty_id,
     run = _load(conn, username, battle_id)
     result = {"request_id": request_id, "battle": _public(run),
               "profile_version": version, "changed": True, "replayed": False}
-    _save_receipt(conn, username, request_id, "dungeon_start", digest, result, now_ms)
+    save_receipt(conn, username, request_id, "dungeon_start", digest, result, now_ms // 1000)
     return result
 
 
@@ -182,16 +164,11 @@ def _target(run, now_ms):
                max(0, now_ms - run["wall_anchor_ms"]) * 1000 * run["playback_rate"])
 
 
-def _award(conn, run, now_ms, adjust_coins):
-    data = json.loads(run["snapshot_json"])
+def _roll_reward_v1(data, battle_id):
+    """纯掉落计算；旧快照缺版本字段时仍按 v1 重放。"""
     reward = data["reward_table"]
     seed = bytes.fromhex(data["seed_hex"])
-    token = hashlib.sha256(f"{run['username'].casefold()}:{run['battle_id']}".encode()).hexdigest()
     total_weight = sum(entry["weight"] for entry in reward["entries"])
-    capacity = conn.execute("SELECT bag_capacity FROM dungeon_profiles WHERE username=?",
-                            (run["username"],)).fetchone()[0]
-    occupied = conn.execute("""SELECT COUNT(*) FROM dungeon_items
-        WHERE owner=? AND location='bag'""", (run["username"],)).fetchone()[0]
     items = []
     for index in range(reward["rolls"]):
         draw = int.from_bytes(hashlib.sha256(seed + b":reward:" +
@@ -202,16 +179,36 @@ def _award(conn, run, now_ms, adjust_coins):
                 selected = entry["item"]
                 break
             draw -= entry["weight"]
-        item_id = hashlib.sha256(f"{run['battle_id']}:{index}:item".encode()).hexdigest()[:32]
-        location = "bag" if occupied < capacity else "pending"
-        occupied += location == "bag"
+        item_id = hashlib.sha256(f"{battle_id}:{index}:item".encode()).hexdigest()[:32]
         item = {"item_id": item_id, "template_id": selected["template_id"],
                 "template_version": data["config_version"], "slot": selected["slot"],
+                "name": selected["name"],
+                "visual_id": selected.get("visual_id", selected["template_id"]),
                 "quality": selected["quality"], "stats": selected["stats"],
                 "tags": selected["tags"], "effects": selected["effects"],
-                "affixes": [], "sell_coins": selected.get("sell_coins", 0),
-                "location": location}
+                "affixes": [], "sell_coins": selected.get("sell_coins", 0)}
         items.append(item)
+    return items
+
+
+REWARD_ROLLERS = {1: _roll_reward_v1}
+
+
+def _award(conn, run, now_ms, adjust_coins):
+    data = json.loads(run["snapshot_json"])
+    reward = data["reward_table"]
+    roller = REWARD_ROLLERS.get(data.get("reward_rng_version", 1))
+    if roller is None:
+        raise DungeonError("unsupported_version", "挑战奖励规则版本暂不支持")
+    token = hashlib.sha256(f"{run['username'].casefold()}:{run['battle_id']}".encode()).hexdigest()
+    capacity = conn.execute("SELECT bag_capacity FROM dungeon_profiles WHERE username=?",
+                            (run["username"],)).fetchone()[0]
+    occupied = conn.execute("""SELECT COUNT(*) FROM dungeon_items
+        WHERE owner=? AND location='bag'""", (run["username"],)).fetchone()[0]
+    items = roller(data, run["battle_id"])
+    for item in items:
+        item["location"] = "bag" if occupied < capacity else "pending"
+        occupied += item["location"] == "bag"
     payload = {"reward_token": token, "coins": reward["coins"], "items": items}
     conn.execute("""INSERT INTO dungeon_rewards
         (reward_token,username,battle_id,payload_json,created_at) VALUES (?,?,?,?,?)""",
@@ -221,11 +218,12 @@ def _award(conn, run, now_ms, adjust_coins):
                      "地下城挑战奖励", ref=f"dungeon:{run['battle_id']}")
     for item in items:
         conn.execute("""INSERT INTO dungeon_items
-            (item_id,owner,template_id,template_version,slot,quality,stats_json,tags_json,
-             effects_json,affixes_json,sell_coins,location,created_at)
-            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+            (item_id,owner,template_id,template_version,display_name,visual_id,
+             slot,quality,stats_json,tags_json,effects_json,affixes_json,sell_coins,location,created_at)
+            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
             (item["item_id"], run["username"], item["template_id"], item["template_version"],
-             item["slot"], item["quality"], _json(item["stats"]), _json(item["tags"]),
+             item["name"], item["visual_id"], item["slot"], item["quality"],
+             _json(item["stats"]), _json(item["tags"]),
              _json(item["effects"]), _json(item["affixes"]), item["sell_coins"],
              item["location"], now_ms // 1000))
     conn.execute("""UPDATE dungeon_progress
@@ -237,7 +235,7 @@ def _award(conn, run, now_ms, adjust_coins):
             continue
         if all(conn.execute("""SELECT 1 FROM dungeon_progress
                 WHERE username=? AND challenge_id=? AND difficulty_id=? AND clear_count>0""",
-                (run["username"], required, rule["difficulty_id"])).fetchone()
+                (run["username"], *prerequisite_key(required, rule["difficulty_id"]))).fetchone()
                for required in rule["requires"]):
             conn.execute("""INSERT INTO dungeon_progress
                 (username,challenge_id,difficulty_id,unlocked) VALUES (?,?,?,1)
@@ -336,12 +334,12 @@ def progress_run(database, username, battle_id, now_ms, adjust_coins, *,
             raise DungeonError("invalid_request", "此指令不接受倍速参数")
     payload = {"battle_id": battle_id, "command": command,
                "expected_revision": expected_revision, "rate": rate}
-    digest = _hash("dungeon_control", payload) if command is not None else None
+    digest = request_digest("dungeon_control", payload) if command is not None else None
     for _ in range(3):
         with database() as conn:
             run = _load(conn, username, battle_id)
             if command is not None:
-                replay = _receipt(conn, username, request_id, "dungeon_control", digest)
+                replay = load_receipt(conn, username, request_id, "dungeon_control", digest)
                 if replay is not None:
                     replay["battle"] = _public(run)
                     return replay
@@ -367,7 +365,7 @@ def progress_run(database, username, battle_id, now_ms, adjust_coins, *,
             conn.execute("BEGIN IMMEDIATE")
             current = _load(conn, username, battle_id)
             if command is not None:
-                replay = _receipt(conn, username, request_id, "dungeon_control", digest)
+                replay = load_receipt(conn, username, request_id, "dungeon_control", digest)
                 if replay is not None:
                     replay["battle"] = _public(current)
                     return replay
@@ -380,8 +378,8 @@ def progress_run(database, username, battle_id, now_ms, adjust_coins, *,
             if command is not None:
                 result = {"request_id": request_id, "battle": _public(current),
                           "changed": changed, "replayed": False}
-                _save_receipt(conn, username, request_id, "dungeon_control", digest,
-                              result, now_ms)
+                save_receipt(conn, username, request_id, "dungeon_control", digest,
+                             result, now_ms // 1000)
                 return result
             return {"battle": _public(current), **_events(conn, battle_id, after_sequence),
                     "changed": changed}

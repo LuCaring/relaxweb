@@ -184,7 +184,7 @@ target_hp = target_hp - hp_loss
 }
 ```
 
-启动时校验目录：ID 唯一、装备部位合法、引用存在、权重为非负整数且池总权重大于零、关卡前置无环、阈值严格降序、持续时间为正、资源路径存在。发现错误阻止新挑战并记录具体配置路径，不以默认值悄悄补齐。已保存挑战使用自己的完整配置快照。
+启动时校验目录：装备与敌人的 ID 唯一，挑战以 `(challenge_id, difficulty_id)` 判重；装备部位、引用、正权重、前置无环、阶段阈值、持续时间及 `visual_id` 格式均需合法。字符串前置指同难度关卡；跨难度前置写成 `{ "challenge_id": "...", "difficulty_id": "..." }`。资源文件存在性由素材交付检查负责。配置错误阻止新挑战；已保存挑战使用自己的完整配置快照。
 
 快照使用规范 JSON：键排序、紧凑分隔、UTF-8、不允许 NaN，保存 SHA-256 摘要。快照包含基础属性、六件装备的固定属性副本、敌人、阶段、战斗常量、奖励表、配置版本、模拟版本与种子；不能只保存对可变目录的 ID 引用。
 
@@ -333,7 +333,7 @@ target_time_us = min(timeout_us, max(checkpoint.sim_time_us,
 | 表 | 关键字段 | 索引和约束 |
 | --- | --- | --- |
 | `dungeon_profiles` | username、starter_granted、bag_capacity、version | username 主键；容量正数；version 每次业务变更递增 |
-| `dungeon_items` | 第 6.1 节实例字段；owner 对应 username | item_id 主键；索引 `(owner, location)`；品质、部位、位置枚举校验 |
+| `dungeon_items` | 第 6.1 节实例字段；owner 对应 username；取得时冻结 display_name、visual_id | item_id 主键；索引 `(owner, location)`；品质、部位、位置枚举校验 |
 | `dungeon_loadout` | username、slot、item_id | 主键 `(username, slot)`；item_id 唯一；服务层校验所属账号与槽位 |
 | `dungeon_runs` | battle_id、username、challenge_id、difficulty_id、status、snapshot_json、snapshot_hash、checkpoint_json、result_json、reward_token、revision、sim_anchor_us、wall_anchor_ms、playback_rate、created_at、updated_at | battle_id 主键；索引 `(username, created_at)`；版本非负、速率枚举 |
 | `dungeon_active_jobs` | username、job_kind、job_id | username 主键，确保挑战与扫荡共享一把账号级活动锁；job_id 唯一 |
@@ -348,7 +348,7 @@ request_id 由客户端生成，长度 1～96，限制为字母、数字、下�
 
 建表采用 `CREATE TABLE IF NOT EXISTS`；新增字段先检查 PRAGMA。当前连接工厂没有启用 `PRAGMA foreign_keys`，不能仅写 REFERENCES 就假定级联生效：本模块使用显式所有权检查和事务内清理，并增加用户删除触发器清理地下城从属记录。触发器、动作与挑战查询均采用统一账号比较规则；清理行为必须有测试。
 
-配置更新不重算已有装备、不改已发奖励。进行中挑战绑定 simulation_version；部署必须保留活跃版本的模拟器，或先关闭新开局并等待旧局清空。遇到不支持的活跃版本时保持存档并返回 `unsupported_version`，禁止用新版本重算或悄悄清空。
+配置更新不重算已有装备、不改已发奖励。已开档账号读取状态时补齐新增关卡进度，并依据已通关前置更新解锁。进行中挑战绑定 simulation_version 和 reward_rng_version；部署必须保留活跃版本的模拟器与奖励抽取器，或先关闭新开局并等待旧局清空。遇到不支持的活跃版本时保持存档并返回 `unsupported_version`，禁止用新版本重算或悄悄清空。
 
 ## 8 WebSocket 协议
 
@@ -367,7 +367,7 @@ DungeonProtocol 只从连接登录态取得 username。`get_dungeon`、装备操
 | `dungeon_claim_items` | request_id、item_ids、expected_version | 将指定 pending 实例移入背包，无新增奖励 |
 | `dungeon_get_result` | request_id、battle_id | 只读已提交结果；未结算返回当前状态，不相信客户端胜利声明 |
 
-`get_dungeon` 返回 `dungeon_state`，动作返回 `dungeon_result`，事件页为 `dungeon_events`，错误为 `dungeon_error`。动作响应中的业务结果和当前状态分开：重放回执返回原操作结果，同时附最新版本状态，避免旧快照覆盖后来操作。`dungeon_sync` 不把高频读取写入动作回执；其可重复执行性由 revision、事件主键、奖励唯一凭据保证。
+`get_dungeon` 返回 `dungeon_state`，动作返回 `dungeon_result`，事件页为 `dungeon_events`，错误为 `dungeon_error`。动作响应带 `result_kind="action"`，业务结果和最新状态分开；结算查询仍保留顶层 `battle/result`，带 `result_kind="lookup"`，以免破坏现有客户端。重放起局回执保留原操作结果，但其中 battle 刷新为当前状态。`dungeon_sync` 不把高频读取写入动作回执；其可重复执行性由 revision、事件主键、奖励唯一凭据保证。
 
 示例请求：
 

@@ -3,7 +3,7 @@
 import json
 from uuid import uuid4
 
-from estate.dungeon.catalog import CATALOG, SLOTS, public_catalog
+from estate.dungeon.catalog import CATALOG, SLOTS, prerequisite_key, public_catalog
 from estate.dungeon.effects import resolve_stats
 
 
@@ -25,27 +25,54 @@ def ensure_dungeon(conn, username, now, catalog=CATALOG):
         VALUES (?,0,60,1,?,?)""", (username, int(now), int(now)))
     granted = conn.execute("SELECT starter_granted FROM dungeon_profiles WHERE username=?",
                            (username,)).fetchone()[0]
-    if granted:
-        return
-    starters = [item for item in catalog["items"] if item["template_id"].startswith("starter_")]
-    for template in starters:
-        item_id = uuid4().hex
-        conn.execute("""INSERT INTO dungeon_items
-            (item_id,owner,template_id,template_version,slot,quality,stats_json,tags_json,effects_json,created_at)
-            VALUES (?,?,?,?,?,?,?,?,?,?)""",
-            (item_id, username, template["template_id"], catalog["config_version"],
-             template["slot"], template["quality"], _json(template["stats"]),
-             _json(template["tags"]), _json(template["effects"]), int(now)))
-        conn.execute("INSERT INTO dungeon_loadout(username,slot,item_id) VALUES (?,?,?)",
-                     (username, template["slot"], item_id))
+    changed = not granted
+    if not granted:
+        starters = [item for item in catalog["items"] if item["template_id"].startswith("starter_")]
+        for template in starters:
+            item_id = uuid4().hex
+            conn.execute("""INSERT INTO dungeon_items
+                (item_id,owner,template_id,template_version,display_name,visual_id,
+                 slot,quality,stats_json,tags_json,effects_json,created_at)
+                VALUES (?,?,?,?,?,?,?,?,?,?,?,?)""",
+                (item_id, username, template["template_id"], catalog["config_version"],
+                 template["name"], template.get("visual_id", template["template_id"]),
+                 template["slot"], template["quality"], _json(template["stats"]),
+                 _json(template["tags"]), _json(template["effects"]), int(now)))
+            conn.execute("INSERT INTO dungeon_loadout(username,slot,item_id) VALUES (?,?,?)",
+                         (username, template["slot"], item_id))
+    # Freeze display fields on pre-upgrade items while their template still exists.
+    missing_display = conn.execute("""SELECT item_id,template_id FROM dungeon_items
+        WHERE owner=? AND (display_name IS NULL OR visual_id IS NULL)""", (username,)).fetchall()
+    if missing_display:
+        templates = {item["template_id"]: item for item in catalog["items"]}
+        for item_id, template_id in missing_display:
+            template = templates.get(template_id)
+            if template is not None:
+                conn.execute("""UPDATE dungeon_items SET display_name=COALESCE(display_name,?),
+                    visual_id=COALESCE(visual_id,?) WHERE item_id=?""",
+                    (template["name"], template.get("visual_id", template_id), item_id))
+    progress = {(row[0], row[1]): (row[2], bool(row[3])) for row in conn.execute(
+        """SELECT challenge_id,difficulty_id,clear_count,unlocked FROM dungeon_progress
+        WHERE username=?""", (username,))}
     for challenge in catalog["challenges"]:
-        if not challenge["requires"]:
-            conn.execute("""INSERT OR IGNORE INTO dungeon_progress
-                (username,challenge_id,difficulty_id,unlocked) VALUES (?,?,?,1)""",
-                (username, challenge["challenge_id"], challenge["difficulty_id"]))
-    conn.execute("""UPDATE dungeon_profiles
-        SET starter_granted=1,version=version+1,updated_at=? WHERE username=?""",
-        (int(now), username))
+        key = challenge["challenge_id"], challenge["difficulty_id"]
+        unlocked = all(progress.get(prerequisite_key(required, key[1]), (0, False))[0] > 0
+                       for required in challenge["requires"])
+        if key not in progress:
+            conn.execute("""INSERT INTO dungeon_progress
+                (username,challenge_id,difficulty_id,unlocked) VALUES (?,?,?,?)""",
+                (username, *key, int(unlocked)))
+            progress[key] = (0, unlocked)
+            changed = True
+        elif unlocked and not progress[key][1]:
+            conn.execute("""UPDATE dungeon_progress SET unlocked=1
+                WHERE username=? AND challenge_id=? AND difficulty_id=?""", (username, *key))
+            progress[key] = (progress[key][0], True)
+            changed = True
+    if changed:
+        conn.execute("""UPDATE dungeon_profiles
+            SET starter_granted=1,version=version+1,updated_at=? WHERE username=?""",
+            (int(now), username))
 
 
 def dungeon_state(conn, username, now, catalog=CATALOG):
@@ -54,12 +81,15 @@ def dungeon_state(conn, username, now, catalog=CATALOG):
         WHERE username=?""", (username,)).fetchone()
     templates = {item["template_id"]: item for item in catalog["items"]}
     rows = conn.execute("""SELECT item_id,template_id,template_version,slot,quality,
-        stats_json,tags_json,effects_json,affixes_json,sell_coins,locked,location,version FROM dungeon_items
+        stats_json,tags_json,effects_json,affixes_json,sell_coins,locked,location,version,
+        display_name,visual_id FROM dungeon_items
         WHERE owner=? AND location<>'sold' ORDER BY created_at,item_id""", (username,)).fetchall()
     items = []
     for row in rows:
         template = templates.get(row[1])
-        items.append({"item_id": row[0], "template_id": row[1], "name": template["name"] if template else row[1],
+        items.append({"item_id": row[0], "template_id": row[1],
+                      "name": row[13] or (template["name"] if template else row[1]),
+                      "visual_id": row[14] or (template.get("visual_id", row[1]) if template else row[1]),
                       "template_version": row[2], "slot": row[3], "quality": row[4],
                       "stats": json.loads(row[5]), "tags": json.loads(row[6]),
                       "effects": json.loads(row[7]), "affixes": json.loads(row[8]),

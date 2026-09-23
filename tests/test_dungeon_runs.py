@@ -4,6 +4,7 @@
 from concurrent.futures import ThreadPoolExecutor
 from copy import deepcopy
 from functools import partial
+import hashlib
 import json
 from pathlib import Path
 import sqlite3
@@ -110,6 +111,48 @@ class DungeonRunTests(unittest.TestCase):
         awarded = self.sync(battle_id, 115_000)["battle"]["result"]
         self.assertEqual(awarded["coins_gained"], 20)
         self.assertEqual(awarded["items"][0]["stats"]["atk"], 38)
+
+    def test_cross_difficulty_clear_unlocks_following_challenge(self):
+        catalog = deepcopy(CATALOG)
+        hard = deepcopy(catalog["challenges"][0])
+        hard["difficulty_id"] = "hard"
+        hard["requires"] = [{"challenge_id": "ruins_slime_01", "difficulty_id": "normal"}]
+        catalog["challenges"].append(hard)
+        with self.db() as conn, conn:
+            version = dungeon_state(conn, "alice", 100, catalog)["profile_version"]
+        battle_id = self.start(catalog=catalog, version=version)["battle"]["battle_id"]
+        self.sync(battle_id, 115_000)
+        with self.db() as conn:
+            self.assertEqual(conn.execute("""SELECT unlocked FROM dungeon_progress
+                WHERE username='alice' AND challenge_id='ruins_slime_01'
+                AND difficulty_id='hard'""").fetchone()[0], 1)
+
+    def test_start_replay_reads_current_battle_after_settlement(self):
+        battle_id = self.start()["battle"]["battle_id"]
+        self.sync(battle_id, 115_000)
+        replay = self.start()
+        self.assertTrue(replay["replayed"])
+        self.assertEqual(replay["battle"]["status"], "settled")
+
+    def test_old_reward_snapshot_and_unknown_reward_version(self):
+        battle_id = self.start()["battle"]["battle_id"]
+        with self.db() as conn, conn:
+            raw = json.loads(conn.execute("SELECT snapshot_json FROM dungeon_runs WHERE battle_id=?",
+                                          (battle_id,)).fetchone()[0])
+            raw["reward_rng_version"] = 99
+            encoded = json.dumps(raw, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+            conn.execute("UPDATE dungeon_runs SET snapshot_json=?,snapshot_hash=? WHERE battle_id=?",
+                         (encoded, hashlib.sha256(encoded.encode()).hexdigest(), battle_id))
+        with self.assertRaises(DungeonError) as error:
+            self.sync(battle_id, 115_000)
+        self.assertEqual(error.exception.code, "unsupported_version")
+        with self.db() as conn, conn:
+            self.assertEqual(conn.execute("SELECT COUNT(*) FROM dungeon_rewards").fetchone()[0], 0)
+            raw.pop("reward_rng_version")
+            encoded = json.dumps(raw, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+            conn.execute("UPDATE dungeon_runs SET snapshot_json=?,snapshot_hash=? WHERE battle_id=?",
+                         (encoded, hashlib.sha256(encoded.encode()).hexdigest(), battle_id))
+        self.assertEqual(self.sync(battle_id, 115_000)["battle"]["result"]["outcome"], "victory")
 
     def test_pause_resume_rate_and_control_replay(self):
         battle = self.start()["battle"]

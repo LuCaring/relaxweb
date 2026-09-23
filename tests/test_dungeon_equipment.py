@@ -224,6 +224,15 @@ class ExistingDatabaseUpgradeTests(unittest.TestCase):
                 conn.execute("""INSERT INTO coin_transactions
                     (username,amount,balance,kind,created_at)
                     VALUES ('alice',15,837.5,'old_reward',1)""")
+                conn.execute("""CREATE TABLE dungeon_items (
+                    item_id TEXT PRIMARY KEY, owner TEXT NOT NULL,
+                    template_id TEXT NOT NULL, template_version TEXT NOT NULL,
+                    slot TEXT NOT NULL, quality TEXT NOT NULL, stats_json TEXT NOT NULL,
+                    tags_json TEXT NOT NULL DEFAULT '[]',
+                    effects_json TEXT NOT NULL DEFAULT '[]',
+                    affixes_json TEXT NOT NULL DEFAULT '[]', sell_coins INTEGER NOT NULL DEFAULT 0,
+                    locked INTEGER NOT NULL DEFAULT 0, location TEXT NOT NULL DEFAULT 'bag',
+                    version INTEGER NOT NULL DEFAULT 1, created_at INTEGER NOT NULL)""")
             db = partial(database, path)
             init_db(db)
             init_db(db)
@@ -236,6 +245,8 @@ class ExistingDatabaseUpgradeTests(unittest.TestCase):
                     [(15, 837.5, "old_reward")])
                 self.assertEqual(conn.execute("""SELECT COUNT(*) FROM dungeon_profiles
                     WHERE username='alice'""").fetchone()[0], 1)
+                columns = {row[1] for row in conn.execute("PRAGMA table_info(dungeon_items)")}
+                self.assertTrue({"display_name", "visual_id"} <= columns)
 
 
 class Socket:

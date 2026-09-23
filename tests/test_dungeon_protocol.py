@@ -7,7 +7,9 @@ import json
 from pathlib import Path
 import sys
 import tempfile
+import time
 import unittest
+from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
@@ -134,6 +136,21 @@ class DungeonProtocolTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(self.a2.messages[-1]["result"]["outcome"], "victory")
         with self.db() as conn:
             self.assertEqual(conn.execute("SELECT COUNT(*) FROM dungeon_rewards").fetchone()[0], 1)
+
+    async def test_progress_worker_does_not_block_other_coroutines(self):
+        with patch("server.estate.dungeon.progress_run", side_effect=lambda: time.sleep(0.08)):
+            work = asyncio.create_task(self.app.dungeon_protocol._advance())
+            await asyncio.sleep(0.01)
+            self.assertFalse(work.done())
+            await work
+
+    async def test_result_messages_discriminate_action_and_lookup(self):
+        battle = await self._start()
+        action = next(row for row in reversed(self.a.messages) if row["type"] == "dungeon_result")
+        self.assertEqual(action["result_kind"], "action")
+        await self.app.handlers["dungeon_get_result"](self.a, self.a_state,
+            {"request_id": "lookup-1", "battle_id": battle["battle_id"]})
+        self.assertEqual(self.a.messages[-1]["result_kind"], "lookup")
 
 
 if __name__ == "__main__":

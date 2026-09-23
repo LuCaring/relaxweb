@@ -43,7 +43,7 @@
 
 现有前端的接法：`assets/js/main.js` 导入视图模块，模块用 `registry.js` 的 `registerView()` / `onMessage()` 注册，`core.js` 的 `renderGameView()` 切换页面；`game.html` 引入新 CSS 并更新资源版本。规划要求从庄园进入准备页；庄园现有交互点在 `assets/js/estate/map.js`，面板分派表在 `assets/js/estate/ui.js`。新增入口时应只在庄园层放导航，再由独立地下城视图接管页面；离开战斗视图只停止本地动画和定时器。若产品也需要大厅卡片，可按 `assets/js/game-config.js` 的单人视图元数据另加入口，这并非现有功能。
 
-目前 `catalog.py` 的敌人有 `visual_id`，但 `public_catalog()` 尚未向浏览器输出该字段，也未输出首领阶段展示数据。美术接线前需先明确公开资源元数据合同，补服务端公开字段及相应测试；不要靠敌人中文名推导文件路径。战斗响应的 `battle` 只含状态、HP、阶段索引和结果，敌人名称、最大 HP、可能奖励应从 `get_dungeon.catalog.challenges` 对应项读取。
+`get_dungeon.catalog.challenges[].enemy` 已提供 `visual_id` 与 `phases`，`catalog.item_templates` 提供可见装备的名称、部位、品质和 `visual_id`；不要靠中文名推导文件路径。战斗响应的 `battle` 只含状态、HP、阶段索引和结果，敌人名称、最大 HP、可能奖励仍从对应关卡目录项读取。已经获得的装备在 `items[]` 中保留取得时的名称与资源编号，目录后续改动不会改写旧实例的展示字段。
 
 资源建议按 `visual_id` 和动作组织：待机、攻击、受击、死亡至少各有可用表现，另列帧矩形、帧时长、脚底锚点、像素缩放倍率和横向翻转规则。具体像素尺寸与动画帧数尚未由代码锁定，首批交付应先给一份资源清单和帧元数据，再定加载器。缺图时保留明确占位，不能阻止事件或结算展示。`deploy/serve.py` 当前公开 `.png/.webp/.svg/.json` 等静态类型；若交付独立音频文件，需要先扩展静态白名单。素材来源和许可记录可仿照 `assets/estate/ATTRIBUTION.md`。
 
@@ -64,7 +64,7 @@
 | `dungeon_control` | `request_id, battle_id, command, expected_revision`；`set_rate` 另带 `rate` | `command` 为 `pause/resume/set_rate/abandon`；倍率仅 1 或 2 |
 | `dungeon_get_result` | `request_id, battle_id` | `dungeon_result.battle` 和 `result`；不替客户端补算 |
 
-装备和起局请求使用最新 `dungeon_state.profile_version`；控制请求使用最新 `battle.revision`。写入返回 `dungeon_result.result` 和新 `state`；服务端另向本人全部连接推送 `dungeon_state`，该推送的 `request_id` 为 `null`。`dungeon_get_result` 也使用 `dungeon_result` 类型，但返回形状是顶层 `battle/result`，没有嵌套 `state`；前端应按请求类型关联 `request_id`，不要只按消息类型解析。
+装备和起局请求使用最新 `dungeon_state.profile_version`；控制请求使用最新 `battle.revision`。写入返回 `dungeon_result`，其中 `result_kind="action"`、`result` 为操作回执、`state` 为最新状态；服务端另向本人全部连接推送 `dungeon_state`，该推送的 `request_id` 为 `null`。查询结算保留现有顶层 `battle/result` 结构，并带 `result_kind="lookup"`；前端按此字段和 `request_id` 区分两种响应。重发起局请求时，回执仍标记 `replayed`，其中 `battle` 会刷新为当前状态。
 
 `dungeon_events.battle.hp` 的键为 `player:0` 和 `enemy:0`；`status` 为 `running/paused/settled/abandoned/error`。事件依 `sequence_id` 递增，可能有 `BattleStarted`、`AttackStarted`、`DamageApplied`、`BossPhaseChanged`、`ActorDied`、`BattleEnded`。伤害事件包含 `hp_after`、`hp_loss`、`damage`、`is_critical`；同一页事件最多 200 条、128 KiB。展示层只播放未消费序号；发现缺号就按 `next_cursor` 补页。断线后先以权威检查点恢复 HP，再补文本日志，不把历史伤害动画重新施加到当前 HP。
 
@@ -76,13 +76,13 @@
 
 | 改动目标 | 入口与当前约束 | 必要验证 |
 | --- | --- | --- |
-| 敌人与难度 | `enemies` 的 `stats/type/visual_id/phases`，`challenges` 的前置与难度 | `validate_catalog()`、首领阈值/超时与新手胜率模拟 |
+| 敌人与难度 | `enemies` 的 `stats/type/visual_id/phases`，`challenges` 的前置与难度；同一关卡可有不同难度，字符串前置表示同难度，对象 `{challenge_id,difficulty_id}` 可跨难度 | `validate_catalog()`、首领阈值/超时与新手胜率模拟 |
 | 装备模板 | `items` 的部位、品质、固定 `stats`、标签、常驻效果、`sell_coins` | 六槽不变；掉落实例固化属性；比较与出售测试 |
 | 掉落与金币 | `reward_tables` 的 `coins/rolls/entries.weight`，关卡的 `reward_table_id` | 单场最多 20 件；背包满转 pending；金币与物品同事务 |
 | 战斗节奏 | `combat` 的攻击间隔、首击比例、波动、超时及首领阶段倍率 | 固定种子事件顺序与结算结果回归；P95 性能 |
 | 基础角色 | `base_stats` 与六件 `starter_` 模板 | 新账号首次开档只发一套；现有账号装备不自动改值 |
 
-目录修改后更新 `config_version` 并跑校验。一次挑战创建时会冻结敌人、战斗常量、已穿装备、奖励表、解锁规则及种子；之后改目录不重算活动挑战，也不改变已经入库装备的 `stats_json`。`simulation_version/rng_version` 是执行规则版本，不能只因调数值而随意改变。当前掉落使用冻结种子加独立的奖励哈希输入域；不要从浏览器提供或展示种子。
+目录修改后更新 `config_version` 并跑校验。已有账号读取状态时会幂等补齐新增关卡及其可满足的解锁条件；如进度发生变化，`profile_version` 随之更新。一次挑战创建时会冻结敌人、战斗常量、已穿装备、奖励表、解锁规则及种子；之后改目录不重算活动挑战，也不改变已入库装备的属性和展示字段。`simulation_version/rng_version/reward_rng_version` 是执行规则版本，不能只因调数值而随意改变。当前掉落使用冻结种子加独立的奖励哈希输入域；不要从浏览器提供或展示种子。
 
 当前效果执行器只接受 `trigger="passive"`，操作为 `stat_flat` 或 `stat_add_bp`。它已经能为装备、将来局内选择和环境效果记录不同 `source_kind`；`on_hit`、状态叠层、主动技能、随机词缀和装备联动尚未实现，单纯把它们写进配置会被校验拒绝。若要启用新机制，应先补执行器、事件/快照字段、存档迁移和确定性测试，再配置内容。
 

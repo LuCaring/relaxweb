@@ -1,5 +1,6 @@
 """地下城 WebSocket 入口；读写协议共享账号事务与状态广播。"""
 
+import asyncio
 import logging
 import sqlite3
 import time
@@ -18,6 +19,14 @@ class DungeonProtocol:
         self.database = database
         self.hub = hub
         self.clock = clock or time.time
+        self._storage_slots = asyncio.Semaphore(4)
+
+    async def _blocking(self, function, *args, **kwargs):
+        async with self._storage_slots:
+            return await asyncio.to_thread(function, *args, **kwargs)
+
+    async def _advance(self, *args, **kwargs):
+        return await self._blocking(progress_run, *args, **kwargs)
 
     def handlers(self):
         return {"get_dungeon": self.handle_get_dungeon,
@@ -62,9 +71,11 @@ class DungeonProtocol:
             await self._error(websocket, request_id, "auth_required", "请先登录")
             return
         try:
-            with self.database() as conn, conn:
-                conn.execute("BEGIN IMMEDIATE")
-                snapshot = dungeon_state(conn, user["username"], int(self.clock()))
+            def read_state():
+                with self.database() as conn, conn:
+                    conn.execute("BEGIN IMMEDIATE")
+                    return dungeon_state(conn, user["username"], int(self.clock()))
+            snapshot = await self._blocking(read_state)
         except DungeonError as error:
             await self._error(websocket, request_id, error.code, str(error))
             return
@@ -93,9 +104,11 @@ class DungeonProtocol:
             await self._error(websocket, request_id, "invalid_request", "装备编号无效")
             return
         try:
-            with self.database() as conn, conn:
-                conn.execute("BEGIN IMMEDIATE")
-                result = compare_item(conn, user["username"], item_id, int(self.clock()))
+            def read_comparison():
+                with self.database() as conn, conn:
+                    conn.execute("BEGIN IMMEDIATE")
+                    return compare_item(conn, user["username"], item_id, int(self.clock()))
+            result = await self._blocking(read_comparison)
         except DungeonError as error:
             await self._error(websocket, request_id, error.code, str(error))
             return
@@ -118,13 +131,16 @@ class DungeonProtocol:
             return
         username = user["username"]
         try:
-            with self.database() as conn, conn:
-                conn.execute("BEGIN IMMEDIATE")
-                now = int(self.clock())
-                result = run_dungeon_action(
-                    conn, username, request_id, data.get("type"), data,
-                    data.get("expected_version"), now, adjust_coins)
-                snapshot = dungeon_state(conn, username, now)
+            def apply_action():
+                with self.database() as conn, conn:
+                    conn.execute("BEGIN IMMEDIATE")
+                    now = int(self.clock())
+                    result = run_dungeon_action(
+                        conn, username, request_id, data.get("type"), data,
+                        data.get("expected_version"), now, adjust_coins)
+                    snapshot = dungeon_state(conn, username, now)
+                    return result, snapshot
+            result, snapshot = await self._blocking(apply_action)
         except DungeonError as error:
             await self._error(websocket, request_id, error.code, str(error))
             return
@@ -138,6 +154,7 @@ class DungeonProtocol:
             return
         await self.hub.send_json(websocket, {"type": "dungeon_result",
                                               "request_id": request_id,
+                                              "result_kind": "action",
                                               "result": result, "state": snapshot})
         await self._broadcast_state(username, snapshot)
 
@@ -149,13 +166,16 @@ class DungeonProtocol:
             return
         username = user["username"]
         try:
-            with self.database() as conn, conn:
-                conn.execute("BEGIN IMMEDIATE")
-                now_ms = int(self.clock() * 1000)
-                result = start_run(conn, username, request_id, data.get("challenge_id"),
-                                   data.get("difficulty_id"), data.get("expected_version"),
-                                   now_ms)
-                snapshot = dungeon_state(conn, username, now_ms // 1000)
+            def apply_start():
+                with self.database() as conn, conn:
+                    conn.execute("BEGIN IMMEDIATE")
+                    now_ms = int(self.clock() * 1000)
+                    result = start_run(conn, username, request_id, data.get("challenge_id"),
+                                       data.get("difficulty_id"), data.get("expected_version"),
+                                       now_ms)
+                    snapshot = dungeon_state(conn, username, now_ms // 1000)
+                    return result, snapshot
+            result, snapshot = await self._blocking(apply_start)
         except DungeonError as error:
             await self._error(websocket, request_id, error.code, str(error))
             return
@@ -168,6 +188,7 @@ class DungeonProtocol:
             await self._error(websocket, request_id, "storage_failed", "地下城暂时不可用，请稍后重试")
             return
         await self.hub.send_json(websocket, {"type": "dungeon_result", "request_id": request_id,
+                                              "result_kind": "action",
                                               "result": result, "state": snapshot})
         await self._broadcast_state(username, snapshot)
 
@@ -181,13 +202,15 @@ class DungeonProtocol:
         try:
             self._request_id(data)
             now_ms = int(self.clock() * 1000)
-            result = progress_run(self.database, username, data.get("battle_id"),
-                                  now_ms, adjust_coins,
-                                  after_sequence=data.get("after_sequence", 0))
+            result = await self._advance(self.database, username, data.get("battle_id"),
+                                         now_ms, adjust_coins,
+                                         after_sequence=data.get("after_sequence", 0))
             if result["changed"]:
-                with self.database() as conn, conn:
-                    conn.execute("BEGIN IMMEDIATE")
-                    snapshot = dungeon_state(conn, username, now_ms // 1000)
+                def read_updated_state():
+                    with self.database() as conn, conn:
+                        conn.execute("BEGIN IMMEDIATE")
+                        return dungeon_state(conn, username, now_ms // 1000)
+                snapshot = await self._blocking(read_updated_state)
             else:
                 snapshot = None
         except DungeonError as error:
@@ -216,14 +239,16 @@ class DungeonProtocol:
         try:
             if data.get("command") is None:
                 raise DungeonError("invalid_request", "挑战控制指令无效")
-            result = progress_run(self.database, username, data.get("battle_id"),
-                                  int(self.clock() * 1000), adjust_coins,
-                                  command=data.get("command"), request_id=request_id,
-                                  expected_revision=data.get("expected_revision"),
-                                  rate=data.get("rate"))
-            with self.database() as conn, conn:
-                conn.execute("BEGIN IMMEDIATE")
-                snapshot = dungeon_state(conn, username, int(self.clock()))
+            result = await self._advance(self.database, username, data.get("battle_id"),
+                                         int(self.clock() * 1000), adjust_coins,
+                                         command=data.get("command"), request_id=request_id,
+                                         expected_revision=data.get("expected_revision"),
+                                         rate=data.get("rate"))
+            def read_updated_state():
+                with self.database() as conn, conn:
+                    conn.execute("BEGIN IMMEDIATE")
+                    return dungeon_state(conn, username, int(self.clock()))
+            snapshot = await self._blocking(read_updated_state)
         except DungeonError as error:
             await self._error(websocket, request_id, error.code, str(error))
             return
@@ -236,6 +261,7 @@ class DungeonProtocol:
             await self._error(websocket, request_id, "storage_failed", "地下城暂时不可用，请稍后重试")
             return
         await self.hub.send_json(websocket, {"type": "dungeon_result", "request_id": request_id,
+                                              "result_kind": "action",
                                               "result": result, "state": snapshot})
         if result["changed"]:
             await self._broadcast_state(username, snapshot)
@@ -248,8 +274,10 @@ class DungeonProtocol:
             return
         try:
             self._request_id(data)
-            with self.database() as conn:
-                battle = read_run(conn, user["username"], data.get("battle_id"))
+            def read_result():
+                with self.database() as conn:
+                    return read_run(conn, user["username"], data.get("battle_id"))
+            battle = await self._blocking(read_result)
         except DungeonError as error:
             await self._error(websocket, request_id, error.code, str(error))
             return
@@ -262,4 +290,5 @@ class DungeonProtocol:
             await self._error(websocket, request_id, "storage_failed", "地下城暂时不可用，请稍后重试")
             return
         await self.hub.send_json(websocket, {"type": "dungeon_result", "request_id": request_id,
+                                              "result_kind": "lookup",
                                               "battle": battle, "result": battle["result"]})

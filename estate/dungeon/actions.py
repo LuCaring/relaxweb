@@ -1,15 +1,14 @@
 """装备写操作；调用者以 BEGIN IMMEDIATE 包裹动作和后续状态读取。"""
 
-import hashlib
 import json
-import re
 
 from estate.dungeon.catalog import SLOTS
+from estate.dungeon.receipts import (REQUEST_ID_PATTERN, load_receipt,
+                                     request_digest, save_receipt)
 from estate.dungeon.service import DungeonError, ensure_dungeon
 
 
-REQUEST_ID_PATTERN = re.compile(r"[A-Za-z0-9_-]{1,96}\Z")
-ITEM_ID_PATTERN = re.compile(r"[A-Za-z0-9_-]{1,96}\Z")
+ITEM_ID_PATTERN = REQUEST_ID_PATTERN
 ACTION_TYPES = frozenset(("dungeon_equip", "dungeon_lock_item",
                           "dungeon_sell_item", "dungeon_claim_items"))
 
@@ -156,16 +155,10 @@ def run_dungeon_action(conn, username, request_id, action_type, payload,
     if isinstance(expected_version, bool) or not isinstance(expected_version, int) or expected_version < 1:
         raise DungeonError("invalid_request", "存档版本无效")
     ensure_dungeon(conn, username, now)
-    digest = hashlib.sha256(json.dumps(
-        {"action": action_type, "payload": payload, "expected_version": expected_version},
-        ensure_ascii=False, sort_keys=True, separators=(",", ":")
-    ).encode("utf-8")).hexdigest()
-    existing = conn.execute("""SELECT action_type,request_hash,result_json FROM dungeon_actions
-        WHERE username=? AND request_id=?""", (username, request_id)).fetchone()
-    if existing:
-        if existing[0] != action_type or existing[1] != digest:
-            raise DungeonError("request_conflict", "请求编号已用于其他操作")
-        return {**json.loads(existing[2]), "replayed": True}
+    digest = request_digest(action_type, payload, expected_version=expected_version)
+    existing = load_receipt(conn, username, request_id, action_type, digest)
+    if existing is not None:
+        return existing
     version = conn.execute("SELECT version FROM dungeon_profiles WHERE username=?",
                            (username,)).fetchone()[0]
     if expected_version != version:
@@ -184,9 +177,5 @@ def run_dungeon_action(conn, username, request_id, action_type, payload,
         version += 1
     stored = {**result, "request_id": request_id, "profile_version": version,
               "changed": changed, "replayed": False}
-    conn.execute("""INSERT INTO dungeon_actions
-        (username,request_id,action_type,request_hash,result_json,created_at)
-        VALUES (?,?,?,?,?,?)""",
-        (username, request_id, action_type, digest,
-         json.dumps(stored, ensure_ascii=False, separators=(",", ":")), int(now)))
+    save_receipt(conn, username, request_id, action_type, digest, stored, now)
     return stored
