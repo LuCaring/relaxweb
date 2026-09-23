@@ -12,6 +12,7 @@ from server.betting import Betting
 from server.chat import ChatProtocol
 from server.database import database as default_database
 from server.estate.presence import EstatePresence
+from server.estate.dungeon import DungeonProtocol
 from server.estate.protocol import EstateProtocol
 from server.ranking import Ranking
 from server.rewards import RewardsProtocol
@@ -54,13 +55,15 @@ class Application:
             database=database, clients=self.hub.clients, send_json=self.hub.send_json,
             send_encoded=self.hub.send_encoded, presence=self.estate_presence,
         )
+        self.dungeon_protocol = DungeonProtocol(database=database, hub=self.hub)
         self.auth = AuthProtocol(database, self.hub, self.accounts, self.rooms, self.betting)
         self.admin = AdminProtocol(database, self.hub, self.wallet)
         self.handlers = merge_handlers(
             self.hub.handlers(), self.auth.handlers(), self.chat.handlers(),
             self.wallet.handlers(), self.ranking.handlers(), self.rewards.handlers(),
             self.admin.handlers(), self.room_protocol.handlers(),
-            self.estate_protocol.handlers(), self.betting.handlers(),
+            self.estate_protocol.handlers(), self.dungeon_protocol.handlers(),
+            self.betting.handlers(),
         )
         self._watcher = None
 

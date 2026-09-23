@@ -1,5 +1,6 @@
 """共享数据库建表与兼容迁移；管理命令和 WebSocket 宿主共用。"""
 from estate import init_estate
+from estate.dungeon.schema import init_dungeon
 from holdem_stats import init_holdem_stats
 from rewards import init_rewards
 from server.database import database
@@ -65,6 +66,7 @@ def init_db(database=database):
             conn.execute("ALTER TABLE users ADD COLUMN rating_games INTEGER NOT NULL DEFAULT 0")
         init_rewards(conn)
         init_estate(conn)
+        init_dungeon(conn)
         init_holdem_stats(conn)
         conn.execute("""
             CREATE TABLE IF NOT EXISTS rating_history (
