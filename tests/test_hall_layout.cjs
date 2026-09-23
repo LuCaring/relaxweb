@@ -1,4 +1,4 @@
-// Run with deploy/serve.py on :8000 and Playwright on NODE_PATH.
+// Run: npm run test:browser -- tests/test_hall_layout.cjs
 const {chromium} = require('playwright');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
@@ -23,7 +23,7 @@ const summaries = [
 
 (async () => {
   const browser = await chromium.launch({headless: true,
-    executablePath: process.env.CHROME_PATH || '/usr/bin/google-chrome', args: ['--no-sandbox']});
+    executablePath: process.env.CHROME_PATH || chromium.executablePath(), args: ['--no-sandbox']});
   try {
     const page = await browser.newPage({viewport: {width: 1440, height: 900}});
     const errors = [];

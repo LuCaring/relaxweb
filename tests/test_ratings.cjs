@@ -4,7 +4,7 @@ const assert = require('node:assert/strict');
 
 (async () => {
   const browser = await chromium.launch({headless: true,
-    executablePath: process.env.CHROME_PATH || '/usr/bin/google-chrome', args: ['--no-sandbox']});
+    executablePath: process.env.CHROME_PATH || chromium.executablePath(), args: ['--no-sandbox']});
   try {
     const page = await browser.newPage({viewport: {width: 1440, height: 900}});
     const errors = [];

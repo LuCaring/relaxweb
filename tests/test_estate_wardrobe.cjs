@@ -1,5 +1,5 @@
 // No server required: Playwright serves this checkout through an intercepted test origin.
-// NODE_PATH=/path/to/playwright/node_modules CHROME_PATH=/path/to/chrome node tests/test_estate_wardrobe.cjs
+// Run: npm run test:browser -- tests/test_estate_wardrobe.cjs
 const { chromium } = require('playwright');
 const assert = require('node:assert/strict');
 const fs = require('node:fs/promises');
@@ -7,7 +7,8 @@ const path = require('node:path');
 const { execFileSync } = require('node:child_process');
 const { pathToFileURL } = require('node:url');
 const ROOT = path.resolve(__dirname, '..');
-const fixture = JSON.parse(execFileSync(process.env.PYTHON || 'python3', ['-B', '-c', `
+const python = process.env.PYTHON || path.join(ROOT, '.venv', 'bin', 'python');
+const fixture = JSON.parse(execFileSync(python, ['-B', '-c', `
 import json, sqlite3, time
 from estate import init_estate, estate_state
 conn = sqlite3.connect(':memory:')
@@ -31,7 +32,7 @@ print(json.dumps(estate_state(conn, 'alice', int(time.time()))))
   assert.deepEqual([0,125,250,375].map(t => characterFrame(manifest, { direction: 'down' }, t, 'walk').sx), [0,148,296,444]);
   assert.equal(characterFrame(manifest, { direction: 'up' }, 0, 'run').sy, 784);
   assert.equal(characterFrame(manifest, { direction: 'down' }, 0, 'harvest').sy, 0);
-  const browser = await chromium.launch({ headless: true, executablePath: process.env.CHROME_PATH || '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome', args: ['--no-sandbox'] });
+  const browser = await chromium.launch({ headless: true, executablePath: process.env.CHROME_PATH || chromium.executablePath(), args: ['--no-sandbox'] });
   try {
     const errors = [];
     async function makePage() {

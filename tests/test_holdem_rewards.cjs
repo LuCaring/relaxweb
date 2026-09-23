@@ -4,7 +4,7 @@ const assert = require('node:assert/strict');
 
 (async () => {
   const browser = await chromium.launch({headless: true,
-    executablePath: process.env.CHROME_PATH || '/usr/bin/google-chrome', args: ['--no-sandbox']});
+    executablePath: process.env.CHROME_PATH || chromium.executablePath(), args: ['--no-sandbox']});
   try {
     for (const path of ['game.html', 'index.html']) {
       const page = await browser.newPage({viewport: {width: 390, height: 844}, hasTouch: true});

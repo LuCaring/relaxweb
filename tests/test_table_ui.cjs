@@ -1,4 +1,4 @@
-// Local deploy/serve.py + Playwright. Override CHROME_PATH, NODE_PATH and PYTHON as needed.
+// Run: npm run test:browser -- tests/test_table_ui.cjs
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
@@ -6,9 +6,10 @@ const vm = require('node:vm');
 const {execFileSync} = require('node:child_process');
 const {chromium} = require('playwright');
 const root = path.resolve(__dirname, '..');
+const python = process.env.PYTHON || path.join(root, '.venv', 'bin', 'python');
 
 // Compare actual Python and browser rule implementations, including wildcard hands.
-const fixtures = JSON.parse(execFileSync(process.env.PYTHON || 'python3', ['-c', `
+const fixtures = JSON.parse(execFileSync(python, ['-c', `
 import asyncio, json, random
 from games.base import create_room
 from games.guandan import build_deck, resolve_combo, find_moves
@@ -91,7 +92,7 @@ console.log(`PASS Python/JavaScript parity for ${fixtures.cases.length} hands an
 
 (async()=>{
  const browser = await chromium.launch({headless:true,
-   executablePath:process.env.CHROME_PATH || '/usr/bin/google-chrome', args:['--no-sandbox']});
+   executablePath:process.env.CHROME_PATH || chromium.executablePath(), args:['--no-sandbox']});
  try {
   const page = await browser.newPage({viewport:{width:1440,height:900}, reducedMotion:'reduce', hasTouch:true});
   const errors=[]; page.on('pageerror',e=>errors.push(e.message));

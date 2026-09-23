@@ -1,4 +1,4 @@
-// NODE_PATH=/path/to/playwright/node_modules CHROME_PATH=/path/to/chrome node tests/test_estate_presence.cjs
+// Run: npm run test:browser -- tests/test_estate_presence.cjs
 const { chromium } = require('playwright');
 const assert = require('node:assert/strict');
 const fs = require('node:fs/promises');
@@ -6,7 +6,8 @@ const path = require('node:path');
 const { execFileSync } = require('node:child_process');
 
 const ROOT = path.resolve(__dirname, '..');
-const fixture = JSON.parse(execFileSync(process.env.PYTHON || 'python3', ['-B', '-c', `
+const python = process.env.PYTHON || path.join(ROOT, '.venv', 'bin', 'python');
+const fixture = JSON.parse(execFileSync(python, ['-B', '-c', `
 import json, sqlite3, time
 from estate import init_estate, estate_state
 conn = sqlite3.connect(':memory:')
@@ -19,7 +20,7 @@ print(json.dumps(estate_state(conn, 'alice', int(time.time()))))
 (async () => {
   const browser = await chromium.launch({
     headless: true,
-    executablePath: process.env.CHROME_PATH || '/usr/bin/google-chrome',
+    executablePath: process.env.CHROME_PATH || chromium.executablePath(),
     args: ['--no-sandbox'],
   });
   try {

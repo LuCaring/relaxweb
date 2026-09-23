@@ -1,8 +1,8 @@
-// NODE_PATH=<playwright node_modules> node tests/test_uno_ui.cjs (local web server on :8000)
+// Run: npm run test:browser -- tests/test_uno_ui.cjs
 const {chromium} = require('playwright');
 const assert = require('node:assert/strict');
 (async()=>{
- const browser=await chromium.launch({headless:true,executablePath:process.env.CHROME_PATH || '/usr/bin/google-chrome',args:['--no-sandbox']});
+ const browser=await chromium.launch({headless:true,executablePath:process.env.CHROME_PATH || chromium.executablePath(),args:['--no-sandbox']});
  const page=await browser.newPage({viewport:{width:1440,height:900}});
  const errors=[];page.on('pageerror',e=>errors.push(e.message));
  await page.addInitScript(()=>{window.WebSocket=class {static OPEN=1;constructor(){this.readyState=1;}send(){}close(){}addEventListener(){}};});

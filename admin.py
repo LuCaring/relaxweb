@@ -24,15 +24,17 @@
                           password <新密码>          重置密码（至少 6 位）
                           username <新用户名>        改名（同步迁移全部关联记录）
 
-运维命令（仅服务器上有 systemd + 免密 sudo 时可用，本机执行会提示不可用）：
-  status                服务器详细状态：服务/系统/数据库/在线/最近错误
-  restart [-y]          一键重启 live-chat / live-web / live-auth
+运维命令：
+  status                服务/系统/数据库状态（本地开发显示 Python 服务进程）
+  restart [-y]          服务器上用 systemd 重启 live-chat / live-web / live-auth
 
 说明：还原/清空是物理删除记录、不写对账明细；set/add/sub 会记一条
 「管理员调整」明细。修改新玩家默认金币请改 config.json 的
 economy.new_user_coins（或环境变量 NEW_USER_COINS），改后需重启 live-chat 服务。
 """
 import os
+from pathlib import Path
+import psutil
 import shutil
 import subprocess
 import sys
@@ -45,6 +47,7 @@ from server.wallet import adjust_coins
 
 PROG = "admin.py"
 SERVICES = ("live-chat", "live-web", "live-auth")
+LOCAL_SERVICES = dict(zip(SERVICES, ("chat_server.py", "deploy/serve.py", "auth_server.py")))
 ROLES = ("user", "admin", "streamer")
 EDIT_FIELDS = ("nickname", "role", "password", "username")
 # 这些表以 username 文本关联用户，改名时要一并迁移（user_id 关联的表不用动）
@@ -375,6 +378,26 @@ def cmd_edit(username, field, value, assume_yes=False):
 # =========================================================
 
 def service_lines():
+    if not Path('/run/systemd/system').exists():
+        root = Path(__file__).resolve().parent
+        found = {}
+        for process in psutil.process_iter():
+            try:
+                if process.uids().real != os.getuid():
+                    continue
+                if not Path(process.exe()).name.lower().startswith('python'):
+                    continue
+                args = process.cmdline()
+                if len(args) < 2 or args[1].startswith('-'):
+                    continue
+                script = (Path(process.cwd()) / args[1]).resolve()
+                for service, relative in LOCAL_SERVICES.items():
+                    if script == root / relative:
+                        found[service] = process.pid
+            except (psutil.Error, OSError, UnicodeError):
+                continue
+        return [f"  {service:<10} 本地运行中（PID {found[service]}）" if service in found
+                else f"  {service:<10} 本地未启动" for service in SERVICES]
     lines = []
     for service in SERVICES:
         ok, state = run_quiet(["systemctl", "is-active", service])
@@ -389,6 +412,8 @@ def service_lines():
 
 
 def online_count_line():
+    if not Path('/run/systemd/system').exists():
+        return None
     ok, out = run_quiet(
         ["journalctl", "-u", "live-chat", "--since", "-30min", "--no-pager", "-q"]
     )
@@ -408,8 +433,10 @@ def cmd_status():
         print(f"  最近在线：{online}")
 
     print("\n== 系统 ==")
-    ok, out = run_quiet(["uptime", "-p"])
-    print(f"  运行时长：{out if ok else '未知'}")
+    uptime = max(0, int(time.time() - psutil.boot_time()))
+    days, remainder = divmod(uptime, 86400)
+    hours, minutes = divmod(remainder, 3600)
+    print(f"  运行时长：{days} 天 {hours} 小时 {minutes // 60} 分钟")
     load = ", ".join(f"{v:.2f}" for v in os.getloadavg())
     print(f"  负载：{load}")
     total, used, free = shutil.disk_usage(os.getcwd())
@@ -417,19 +444,9 @@ def cmd_status():
         f"  磁盘（应用目录）：已用 {used >> 30}G / 共 {total >> 30}G"
         f"（剩 {free >> 30}G）"
     )
-    try:
-        with open("/proc/meminfo", encoding="ascii") as handle:
-            info = {}
-            for line in handle:
-                key, _, rest = line.partition(":")
-                info[key] = int(rest.strip().split()[0])  # kB
-        mem_used = info["MemTotal"] - info["MemAvailable"]
-        print(
-            f"  内存：{mem_used // 1024}M 已用 / {info['MemTotal'] // 1024}M"
-            f"（可用 {info['MemAvailable'] // 1024}M）"
-        )
-    except (OSError, KeyError, ValueError, IndexError):
-        print("  内存：未知（非 Linux 环境）")
+    memory = psutil.virtual_memory()
+    print(f"  内存：{memory.used >> 20}M 已用 / {memory.total >> 20}M"
+          f"（可用 {memory.available >> 20}M）")
 
     print("\n== 数据库 ==")
     with database() as conn:
@@ -455,6 +472,9 @@ def cmd_status():
             print(f"  庄园档案：{estates} 份")
 
     print("\n== 最近 24h 错误 ==")
+    if not Path('/run/systemd/system').exists():
+        print("  本地服务日志请查看启动服务的终端")
+        return
     found = False
     for service in SERVICES:
         ok, out = run_quiet(
@@ -470,6 +490,8 @@ def cmd_status():
 
 
 def cmd_restart(assume_yes=False):
+    if not Path('/run/systemd/system').exists():
+        fail("本地开发服务请在对应终端按 Ctrl+C 停止后重新启动；systemd 重启仅用于服务器部署")
     ok, _ = run_quiet(["sudo", "-n", "true"], timeout=5)
     if not ok:
         fail("重启需要免密 sudo（admin 用户在服务器上运行即可）。"

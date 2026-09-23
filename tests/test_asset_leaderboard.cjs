@@ -1,11 +1,10 @@
 // Real DOM/CSS with mocked WebSocket; use an existing static server via RATING_TEST_URL.
 const { chromium } = require('playwright');
 const assert = require('node:assert/strict');
-const { existsSync } = require('node:fs');
 
 (async () => {
   const browser = await chromium.launch({headless: true, args: ['--no-sandbox'],
-    executablePath: process.env.CHROME_PATH || ['/usr/bin/google-chrome', '/opt/google/chrome/chrome'].find(existsSync)});
+    executablePath: process.env.CHROME_PATH || chromium.executablePath()});
   try {
     const page = await browser.newPage({viewport: {width: 1440, height: 900}});
     const errors = [];

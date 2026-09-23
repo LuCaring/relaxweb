@@ -76,14 +76,14 @@ init_db(app.database)
 新增玩法仍走 `games.base` 注册表，无需在每个协议中增加玩法分支。
 
 ```bash
-python3 tests/test_server_app.py
-python3 tests/test_server_modules.py
-python3 tests/test_holdem_stats.py
-python3 tests/test_holdem_rewards.py
-python3 tests/test_rewards_protocol.py
-python3 tests/test_spectator.py
-python3 tests/test_table_leave_protocol.py
-python3 tests/test_uno_challenge_protocol.py
+uv run --locked python tests/test_server_app.py
+uv run --locked python tests/test_server_modules.py
+uv run --locked python tests/test_holdem_stats.py
+uv run --locked python tests/test_holdem_rewards.py
+uv run --locked python tests/test_rewards_protocol.py
+uv run --locked python tests/test_spectator.py
+uv run --locked python tests/test_table_leave_protocol.py
+uv run --locked python tests/test_uno_challenge_protocol.py
 ```
 
 `test_server_app.py` 覆盖实例隔离、65 种路由、连接锁、发送失败、在线统计、

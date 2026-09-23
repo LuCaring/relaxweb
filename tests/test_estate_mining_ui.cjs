@@ -3,7 +3,7 @@ const {chromium} = require('playwright');
 
 (async()=>{
  const browser = await chromium.launch({headless:true,
-  executablePath:process.env.CHROME_PATH || '/usr/bin/google-chrome',args:['--no-sandbox']});
+  executablePath:process.env.CHROME_PATH || chromium.executablePath(),args:['--no-sandbox']});
  try {
   const page = await browser.newPage({viewport:{width:1024,height:768},reducedMotion:'reduce'});
   await page.addInitScript(()=>{window.WebSocket=class{static OPEN=1;constructor(){this.readyState=1;}send(){}addEventListener(){}};});

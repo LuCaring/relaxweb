@@ -2,6 +2,7 @@
 import json
 import os
 from pathlib import Path
+import psutil
 import re
 import selectors
 import shutil
@@ -17,7 +18,6 @@ import threading
 ROOT = Path(__file__).resolve().parents[1]
 
 
-@unittest.skipUnless(sys.platform.startswith('linux'), 'process discovery uses /proc')
 class PreviewStartup(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
@@ -72,8 +72,9 @@ class PreviewStartup(unittest.TestCase):
         old.wait(timeout=3)
         self.assertIn('已停止旧预览进程', output)
         self.assertIn('size=390x844', url)
-        self.assertTrue(any(line.split()[1] == f'00000000:{port:04X}' and line.split()[3] == '0A'
-                            for line in Path('/proc/net/tcp').read_text().splitlines()[1:]),
+        self.assertTrue(any(connection.status == psutil.CONN_LISTEN and
+                            connection.laddr.ip == '0.0.0.0' and connection.laddr.port == port
+                            for connection in psutil.Process(new.pid).net_connections(kind='tcp')),
                         '--lan listens on all IPv4 interfaces')
         with urllib.request.urlopen(f'http://127.0.0.1:{port}/__preview/fixtures') as response:
             self.assertEqual(set(json.load(response)), {'mahjong', 'guandan', 'holdem', 'uno'})

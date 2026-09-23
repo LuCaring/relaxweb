@@ -1,16 +1,15 @@
 #!/usr/bin/env python3
-"""admin.py 用户命令回归：删除清理、开放竞猜保护、字段编辑与改名迁移。
-
-status / restart 依赖 systemd 与 sudo，不在单元测试覆盖内。
-"""
+"""admin.py 用户命令回归：删除清理、开放竞猜保护、字段编辑与改名迁移。"""
 import contextlib
 import io
+import os
 from pathlib import Path
 import sqlite3
 import sys
 import tempfile
 import unittest
-from unittest.mock import patch
+from types import SimpleNamespace
+from unittest.mock import Mock, patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 import admin
@@ -227,6 +226,18 @@ class AdminTests(unittest.TestCase):
         self.assertIn("进行中竞猜", text)
         self.assertIn("alice", text)
         self.assertIn("用户 2 名", text)
+
+    def test_local_service_status_recognizes_project_process(self):
+        process = Mock(pid=1234)
+        process.uids.return_value = SimpleNamespace(real=os.getuid())
+        process.exe.return_value = sys.executable
+        process.cmdline.return_value = [sys.executable, "chat_server.py"]
+        process.cwd.return_value = str(Path(admin.__file__).resolve().parent)
+        with patch.object(admin.Path, "exists", return_value=False), \
+             patch.object(admin.psutil, "process_iter", return_value=[process]):
+            lines = admin.service_lines()
+        self.assertIn("PID 1234", lines[0])
+        self.assertIn("本地未启动", lines[1])
 
 
 if __name__ == "__main__":

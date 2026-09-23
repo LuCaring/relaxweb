@@ -8,7 +8,7 @@ const ROOT = path.resolve(__dirname, '..');
 (async () => {
   const browser = await chromium.launch({
     headless: true,
-    executablePath: process.env.CHROME_PATH || '/usr/bin/google-chrome',
+    executablePath: process.env.CHROME_PATH || chromium.executablePath(),
     args: ['--no-sandbox'],
   });
   try {

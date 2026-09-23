@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Local, database-free UI snapshots: python3 scripts/preview_ui.py."""
+"""Local, database-free UI snapshots: uv run python scripts/preview_ui.py."""
 import argparse
 import asyncio
 import copy
@@ -7,9 +7,8 @@ import hashlib
 import json
 import mimetypes
 import os
+import psutil
 import random
-import select
-import signal
 import socket
 import sys
 import threading
@@ -30,79 +29,63 @@ SCENES = ("normal", "dense", "waiting", "paused")
 PLAYERS = ("p0", "p1", "p2", "p3")
 
 
-def is_previous_preview(pid):
+def is_previous_preview(process):
     """Match the actual Python script and repository, never just a port or name."""
-    if pid == os.getpid():
+    if process.pid == os.getpid():
         return False
-    process = Path('/proc') / str(pid)
     try:
-        if process.stat().st_uid != os.getuid():
+        if process.uids().real != os.getuid():
             return False
-        if not process.joinpath('exe').resolve().name.startswith('python'):
+        if not Path(process.exe()).name.lower().startswith('python'):
             return False
-        args = process.joinpath('cmdline').read_bytes().decode().strip('\0').split('\0')
+        args = process.cmdline()
         # -c/-m are not script invocations; arguments to another script must not match.
         for arg in args[1:]:
             if arg in ('-c', '-m', '-W', '-X'):
                 return False
             if arg.startswith('-'):
                 continue
-            script = (process.joinpath('cwd').resolve() / arg).resolve()
+            script = (Path(process.cwd()) / arg).resolve()
             return script == Path(__file__).resolve()
-    except (OSError, UnicodeError):
+    except (psutil.Error, OSError, UnicodeError):
         pass
     return False
 
 
 def stop_previous_previews():
-    """Linux process discovery also recognises previews started before this feature."""
-    if not Path('/proc').is_dir():
-        raise RuntimeError('自动替换进程需要 Linux /proc；其他系统请使用 --no-replace 并手动停止旧预览。')
-    def started(pid):
-        return int(Path(f'/proc/{pid}/stat').read_text().rsplit(')', 1)[1].split()[19]), pid
-    current_start = started(os.getpid())
-    for process in Path('/proc').iterdir():
-        if not process.name.isdigit() or not is_previous_preview(int(process.name)):
-            continue
-        pid = int(process.name)
-        # A pidfd keeps the signal attached to this process even if its PID is reused.
-        fd = None
-        try:
-            if started(pid) >= current_start:
-                continue  # A concurrent newer launch should replace us, not vice versa.
-            if hasattr(os, 'pidfd_open') and hasattr(signal, 'pidfd_send_signal'):
-                fd = os.pidfd_open(pid)
-            if not is_previous_preview(pid):
-                continue
-            def terminate(sig):
-                if fd is not None:
-                    signal.pidfd_send_signal(fd, sig)
-                elif is_previous_preview(pid):
-                    os.kill(pid, sig)
-            def exited():
-                if fd is not None:
-                    return bool(select.select([fd], [], [], 0)[0])
-                try:
-                    return process.joinpath('stat').read_text().rsplit(')', 1)[1].split()[0] in ('Z', 'X')
-                except FileNotFoundError:
+    """Replace older previews of this script on Linux and macOS."""
+    def stopped(process, timeout):
+        deadline = time.monotonic() + timeout
+        while time.monotonic() < deadline:
+            try:
+                if not process.is_running() or process.status() == psutil.STATUS_ZOMBIE:
                     return True
-            terminate(signal.SIGTERM)
-            deadline = time.monotonic() + 3
-            while not exited() and time.monotonic() < deadline:
-                time.sleep(.05)
-            if not exited():
-                terminate(signal.SIGKILL)
-                deadline = time.monotonic() + 1
-                while not exited() and time.monotonic() < deadline:
-                    time.sleep(.05)
-                if not exited():
-                    raise RuntimeError(f'旧预览进程 {pid} 未退出')
-            print(f'已停止旧预览进程：{pid}', flush=True)
-        except (ProcessLookupError, FileNotFoundError):
+            except psutil.NoSuchProcess:
+                return True
+            time.sleep(.05)
+        return False
+
+    current_start = psutil.Process().create_time()
+    for process in psutil.process_iter():
+        if not is_previous_preview(process):
+            continue
+        try:
+            if process.create_time() >= current_start:
+                continue  # A concurrent newer launch should replace us, not vice versa.
+            if not is_previous_preview(process):
+                continue
+            process.terminate()
+            if not stopped(process, 3):
+                if not is_previous_preview(process):
+                    continue
+                process.kill()
+                if not stopped(process, 1):
+                    raise RuntimeError(f'旧预览进程 {process.pid} 未退出')
+            print(f'已停止旧预览进程：{process.pid}', flush=True)
+        except (psutil.NoSuchProcess, psutil.ZombieProcess):
             pass
-        finally:
-            if fd is not None:
-                os.close(fd)
+        except psutil.Error as error:
+            raise RuntimeError(f'无法停止旧预览进程 {process.pid}：{error}') from error
 
 
 def lan_addresses():
@@ -276,7 +259,7 @@ class PreviewHandler(BaseHTTPRequestHandler):
 
 
 def main():
-    parser = argparse.ArgumentParser(description="一行命令启动本地游戏 UI 预览，无需登录、数据库或额外依赖。")
+    parser = argparse.ArgumentParser(description="一行命令启动本地游戏 UI 预览，无需登录或数据库。")
     parser.add_argument("--game", choices=GAMES, default="guandan")
     parser.add_argument("--scene", choices=SCENES, default="normal")
     parser.add_argument("--spectator", action="store_true", help="以观战视角启动，可在牌桌内更换玩家")

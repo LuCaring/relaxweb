@@ -1,4 +1,4 @@
-// NODE_PATH=<playwright node_modules> node tests/test_ui_preview.cjs
+// Run: npm run test:browser -- tests/test_ui_preview.cjs
 // Starts its own loopback server on a free port; never uses production services.
 const assert = require('node:assert/strict');
 const {spawn, spawnSync} = require('node:child_process');
@@ -6,9 +6,10 @@ const fs = require('node:fs');
 const path = require('node:path');
 const {chromium} = require('playwright');
 const root = path.resolve(__dirname, '..');
+const python = process.env.PYTHON || path.join(root, '.venv', 'bin', 'python');
 
 (async () => {
-  const server = spawn(process.env.PYTHON || 'python3',
+  const server = spawn(python,
     ['scripts/preview_ui.py', '--no-open', '--no-replace', '--mobile', '--spectator', '--watch', 'p2', '--port', '0'], {cwd: root, stdio: ['ignore', 'pipe', 'pipe']});
   let browser;
   const marker = path.join(root, 'scripts/ui_preview', `.reload-test-${process.pid}`);
@@ -26,7 +27,7 @@ const root = path.resolve(__dirname, '..');
       });
     });
     const origin = new URL(url).origin;
-    const invalid = spawnSync(process.env.PYTHON || 'python3',
+    const invalid = spawnSync(python,
       ['scripts/preview_ui.py', '--spectator', '--scene', 'waiting', '--no-open', '--no-replace'],
       {cwd:root, encoding:'utf8', timeout:5000});
     assert.equal(invalid.status,2,'the CLI rejects spectating a game that has not started');
@@ -35,7 +36,7 @@ const root = path.resolve(__dirname, '..');
       assert.equal((await fetch(origin + file)).status, 404, `${file} is not served`);
     }
     browser = await chromium.launch({headless: true,
-      executablePath: process.env.CHROME_PATH || '/usr/bin/google-chrome', args: ['--no-sandbox']});
+      executablePath: process.env.CHROME_PATH || chromium.executablePath(), args: ['--no-sandbox']});
     const page = await browser.newPage({viewport: {width: 1500, height: 1050}});
     const errors = [], sockets = [], external = [];
     page.on('pageerror', error => errors.push(error.message));

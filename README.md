@@ -37,17 +37,17 @@ RelaxWeb 是一个可自托管的直播间与游戏厅。它提供 WebRTC 直播
 
 ```bash
 sudo apt update
-sudo apt install -y git python3 python3-pip python3-venv python3-websockets nginx sqlite3 ffmpeg
+sudo apt install -y git python3 python3-pip python3-venv python3-websockets python3-psutil nginx sqlite3 ffmpeg
 sudo git clone <本仓库地址> /opt/relaxweb
 sudo chown -R <运行用户>:<运行用户> /opt/relaxweb
 cd /opt/relaxweb
 ```
 
-如果发行版没有 `python3-websockets`，可创建虚拟环境并安装依赖，同时把三个 systemd 模板中的 `/usr/bin/python3` 改为虚拟环境里的 Python：
+如果发行版没有 `python3-websockets` 或 `python3-psutil`，可创建虚拟环境并安装依赖，同时把三个 systemd 模板中的 `/usr/bin/python3` 改为虚拟环境里的 Python：
 
 ```bash
 python3 -m venv .venv
-.venv/bin/pip install websockets
+.venv/bin/pip install websockets psutil
 ```
 
 ### 2. 配置站点
@@ -291,8 +291,8 @@ sudo systemctl start live-chat
 所有命令都应在应用目录中、以能够读写数据库的运行用户执行：
 
 ```bash
-python3 admin.py status                         # 服务、系统、数据库、在线与近期错误
-python3 admin.py restart -y                     # 重启三个项目服务，需要免密 sudo
+python3 admin.py status                         # 服务、系统、数据库、在线与近期错误；本地开发也可用
+python3 admin.py restart -y                     # systemd 服务器上重启三个项目服务，需要免密 sudo
 python3 admin.py list                           # 所有用户和金币概览
 python3 admin.py list <用户名>                  # 用户余额及最近流水
 python3 admin.py set <用户名> <数量>             # 设置金币
@@ -317,22 +317,44 @@ python3 manage_invite.py list                   # 查看邀请码及使用状态
 详见[自定义珍藏奖励](docs/estate-skins.md#自定义珍藏奖励)。
 从旧版本升级已有存档时，先按[目录标识迁移](docs/estate-id-migration.md)生成迁移副本。
 
-不配置 MediaMTX 也可以开发聊天和游戏功能：
+不配置 MediaMTX 也可以开发聊天和游戏功能。macOS 首次使用先运行 `brew install uv node`；其他系统参见 [uv 安装说明](https://docs.astral.sh/uv/getting-started/installation/)，浏览器测试需要 Node.js 20 或更新版本：
 
 ```bash
-python3 -m pip install websockets
+uv sync --locked                      # 按 uv.lock 安装 Python 与依赖到 .venv
 cp config.example.json config.json
-python3 manage_invite.py gen 3
-python3 chat_server.py
+uv run --locked python manage_invite.py gen 3
+uv run --locked python chat_server.py
 # 另一个终端
-python3 deploy/serve.py
+uv run --locked python deploy/serve.py
 ```
+
+项目使用 `.python-version` 选择本地 Python 3.11，`pyproject.toml` 声明依赖，`uv.lock` 固定版本。`uv` 会管理 `.venv`，无需手动激活。新增运行依赖使用 `uv add <包名>`；重新同步使用 `uv sync --locked`。
+
+角色素材生成工具额外需要 Pillow，可运行 `uv sync --locked --extra assets` 后执行 `uv run --locked --extra assets python tools/build_estate_characters.py`。
 
 打开 `http://127.0.0.1:8000/`。只预览游戏 UI 时可运行：
 
 ```bash
-python3 scripts/preview_ui.py
+uv run --locked python scripts/preview_ui.py
 ```
+
+再次启动会自动停止同一项目的旧预览进程。需要同时运行多个预览时加 `--no-replace`。本地服务在上述终端按 Ctrl+C 停止后重新启动；`uv run --locked python admin.py status` 可查看本地服务状态，`admin.py restart` 仅用于 systemd 部署。
+
+运行全部 Python 测试（包括独立游戏测试脚本）：
+
+```bash
+uv run --locked python scripts/run_python_tests.py
+```
+
+浏览器测试使用 npm 安装 Playwright，并使用与其版本匹配的 Chromium：
+
+```bash
+PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 npm ci
+npx playwright install chromium
+npm run test:browser
+```
+
+`test:browser` 会临时启动 8000 端口的静态网页服务，自动使用 `.venv` 中的 Python 和 Playwright Chromium；可在命令末尾指定单个测试文件。测试其他 Chrome 版本时可设置 `CHROME_PATH`。
 
 systemd 模板位于 [deploy/systemd/](deploy/systemd/)，测试代码与覆盖范围见 [tests/](tests/)。
 

@@ -2,12 +2,9 @@
 // RATING_TEST_URL defaults to http://localhost:8000; CHROME_PATH optionally selects a browser.
 const { chromium } = require('playwright');
 const assert = require('node:assert/strict');
-const { existsSync } = require('node:fs');
 
 const baseURL = process.env.RATING_TEST_URL || 'http://localhost:8000';
-const executablePath = process.env.CHROME_PATH || [
-  '/usr/bin/google-chrome', '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
-].find(path => existsSync(path));
+const executablePath = process.env.CHROME_PATH || chromium.executablePath();
 
 function stats(overrides = {}) {
   const raw = {hands: 200, wins: 80, folds: 50, manual_folds: 30, timeout_folds: 10, leave_folds: 10,
