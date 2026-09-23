@@ -21,6 +21,7 @@ from server.rooms.settlement import Settlement
 from server.routing import merge_handlers
 from server.schema import init_db
 from server.transport import ConnectionHub, connection_client, rate_limited
+from server.voice_livekit import VoiceService
 from server.wallet import WalletProtocol
 
 logger = logging.getLogger("live-chat")
@@ -36,9 +37,10 @@ class Application:
         self.ranking = Ranking(database, self.hub)
         self.rewards = RewardsProtocol(database, self.hub)
         self.settlement = Settlement(database)
+        self.voice = VoiceService(self.hub)
         self.rooms = RoomHost(database, self.hub, self.accounts, self.settlement,
                               self.ranking, self.rewards, self.wallet,
-                              disconnect_grace=disconnect_grace)
+                              disconnect_grace=disconnect_grace, voice=self.voice)
         self.room_protocol = RoomProtocol(database, self.hub, self.rooms,
                                           self.accounts, self.settlement)
         self.betting = Betting(
@@ -71,6 +73,7 @@ class Application:
             await asyncio.gather(self._watcher, return_exceptions=True)
             self._watcher = None
         await self.rooms.aclose()
+        await self.voice.aclose()
 
     async def run(self, host, port):
         init_db(self.database)

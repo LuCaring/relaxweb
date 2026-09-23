@@ -33,6 +33,13 @@ DEFAULTS = {
     "database": {
         "file": "users.db",
     },
+    "voice": {
+        "enabled": False,
+        "url": "ws://127.0.0.1:7880",
+        "api_key": "devkey",
+        "api_secret": "",
+        "token_ttl": 600,
+    },
     "economy": {
         "new_user_coins": 1000,
     },
@@ -106,4 +113,8 @@ def client_config():
             "path": get("stream.path", env="STREAM_PATH", default="live"),
         },
         "chat_port": get_int("servers.chat_port", env="LIVE_CHAT_PORT", default=8765),
+        "voice": {
+            "enabled": bool(get("voice.enabled", env="VOICE_ENABLED", default=False)),
+            "url": str(get("voice.url", env="VOICE_URL", default="")),
+        },
     }

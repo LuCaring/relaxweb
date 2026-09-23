@@ -200,8 +200,8 @@ class WerewolfRoom(BaseRoom):
                 "match_no": g["match_no"],
                 "day_no": g["day_no"],
                 "phase": g["phase"],
-                "night_role": NIGHT_ROLE_NAMES.get(g.get("night_role") or "")
-                or None,
+                "night_role": role_name(g["night_role"])
+                if g.get("night_role") else None,
                 "last_words_current": g["last_words"]["current"],
                 "turn_left": round(max(0.0, g["deadline"] - time.time()), 1)
                 if g["deadline"] else 0,
@@ -349,6 +349,14 @@ class WerewolfRoom(BaseRoom):
                 "submitted": username in night["witch"],
             }
         return None
+
+    def voice_plan(self, username):
+        """把 voice 视图的频道翻译成 LiveKit 房间（server/voice_livekit 消费）。"""
+        view = self.voice_view(username)
+        channel = view["channel"]
+        if not channel:
+            return {}
+        return {f"ww{self.id}-{channel}": bool(view["can_speak"])}
 
     def spectator_view(self, username):
         """观战视角：只给公开视图，不跟随被观战者（否则会泄露其角色与夜间信息）。"""

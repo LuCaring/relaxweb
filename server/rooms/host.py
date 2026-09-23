@@ -8,7 +8,7 @@ logger = logging.getLogger("live-chat")
 class RoomHost:
     """管理房间生命周期，并把连接、结算和通知能力注入玩法引擎。"""
 
-    def __init__(self, database, hub, accounts, settlement, ranking, rewards, wallet, disconnect_grace=30.0):
+    def __init__(self, database, hub, accounts, settlement, ranking, rewards, wallet, disconnect_grace=30.0, voice=None):
         self.database = database
         self.hub = hub
         self.accounts = accounts
@@ -16,6 +16,7 @@ class RoomHost:
         self.ranking = ranking
         self.rewards = rewards
         self.wallet = wallet
+        self.voice = voice
         self.game_rooms = {}
         self.room_seq = 0
         self.leave_timers = {}
@@ -57,6 +58,12 @@ class RoomHost:
                 elif room.has_spectator(username):
                     targets.append((socket, room.spectator_view(username)))
             await asyncio.gather(*(self.hub.send_json(socket, view) for socket, view in targets))
+            # 语音授权跟随视图：阶段/生死变化在这里差分签发 LiveKit token
+            if self.voice is not None:
+                try:
+                    await self.voice.sync_room(room)
+                except Exception:
+                    logger.warning("voice sync failed for room %s", room.id, exc_info=True)
 
         async def on_rooms_changed():
             await self.broadcast_room_list()
@@ -166,6 +173,11 @@ class RoomHost:
             conn.execute("DELETE FROM game_escrows WHERE room_id = ?", (room.id,))
         logger.info("game room %s dissolved: %s", room.id, reason)
         await room.broadcast_payload({"type": "room_closed", "reason": reason})
+        if self.voice is not None:
+            try:
+                await self.voice.close_room(room.id)
+            except Exception:
+                logger.warning("voice close failed for room %s", room.id, exc_info=True)
         await self.broadcast_room_list()
 
     async def dissolve_empty_room(self, room):
@@ -173,6 +185,11 @@ class RoomHost:
         room.close()
         self.game_rooms.pop(room.id, None)
         await room.broadcast_payload({"type": "room_closed", "reason": "对局已结束"})
+        if self.voice is not None:
+            try:
+                await self.voice.close_room(room.id)
+            except Exception:
+                logger.warning("voice close failed for room %s", room.id, exc_info=True)
         await self.broadcast_room_list()
 
     async def leave_room_internal(self, room, username):

@@ -368,3 +368,31 @@
     .ww-table { transition: none; }
     .ww-seat, .ww-target { transition: none; }
 }
+
+/* 语音条与说话高亮：由 room-voice.js 的 voicestate/voicespeakers 事件驱动。 */
+.ww-voice {
+    flex: none;
+    min-height: 32px;
+    padding: 5px 11px;
+    border: 0;
+    border-radius: 7px;
+    background: #ded9f0;
+    color: #4a3f70;
+    font: inherit;
+    font-size: 11px;
+    font-weight: 800;
+    cursor: pointer;
+    white-space: nowrap;
+}
+.ww-voice:hover { filter: brightness(1.06); }
+.ww-voice.connected { box-shadow: inset 0 0 0 2px #86e3b1aa; }
+.ww-voice.on { background: #1d6b4c; color: #d9ffe9; }
+.ww-voice:focus-visible { outline: 3px solid #b491ff; outline-offset: 2px; }
+.ww-seat.speaking { border-color: #5fd39a; box-shadow: 0 0 0 2px #5fd39a66; animation: ww-pulse 1.1s ease-in-out infinite; }
+@keyframes ww-pulse {
+    0%, 100% { box-shadow: 0 0 0 2px #5fd39a44; }
+    50% { box-shadow: 0 0 0 4px #5fd39a88; }
+}
+@media (prefers-reduced-motion: reduce) {
+    .ww-seat.speaking { animation: none; }
+}

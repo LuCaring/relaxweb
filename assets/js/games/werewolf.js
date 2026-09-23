@@ -9,6 +9,7 @@ import {
 } from "../core.js";
 import { registerGame } from "../registry.js";
 import { openChatOverlay, reapplySeatBubbles } from "../room-chat.js";
+import { toggleMic, voiceConnected, voiceMicWanted } from "../room-voice.js";
 
 const ROLE_META = {
   狼人: { icon: "🐺", cls: "wolf" },
@@ -24,8 +25,21 @@ let actionLock = false;
 let lastRoomView = null;
 let phaseDeadline = 0;
 let pick = null;          // 女巫/投票的本地选择 {save:null,poison:null} 或 {vote:null}
+let speakingSet = new Set();   // 正在说话的用户名（voicespeakers 事件驱动）
 
+const VOICE_ENABLED = Boolean(window.LIVE_CONFIG?.voice?.enabled);
 const desktopLayout = window.matchMedia("(min-width: 1024px)");
+
+document.addEventListener("voicespeakers", (event) => {
+  if (state.myRoom?.game_type !== "werewolf") return;
+  speakingSet = new Set(event.detail || []);
+  document.querySelectorAll("#gameMain .ww-seat").forEach((seat) => {
+    seat.classList.toggle("speaking", speakingSet.has(seat.dataset.username));
+  });
+});
+document.addEventListener("voicestate", () => {
+  if (state.myRoom?.game_type === "werewolf") renderGameView();
+});
 desktopLayout.addEventListener("change", () => {
   if (state.myRoom?.game_type === "werewolf") renderGameView();
 });
@@ -137,6 +151,7 @@ function seatNode(p, index) {
   seat.dataset.username = p.username;
   if (!p.alive) seat.classList.add("dead");
   if (isMe(p.username)) seat.classList.add("me");
+  if (speakingSet.has(p.username)) seat.classList.add("speaking");
   const myRole = room.your_role;
   if (myRole?.faction === "wolf"
     && myRole.teammates.some((t) => t.username === p.username)) {
@@ -469,6 +484,17 @@ function actionAreaNode(room) {
   return area;
 }
 
+function voiceButtonNode() {
+  const on = voiceMicWanted();
+  const button = el("button", `ww-voice${on ? " on" : ""}${voiceConnected() ? " connected" : ""}`);
+  button.type = "button";
+  button.textContent = on ? "🎙 闭麦" : "🎙 上麦";
+  button.title = voiceConnected() ? "语音已连接，点击切换麦克风"
+    : "语音未连接：进入对局后由服务器授权自动接入";
+  button.addEventListener("click", () => { toggleMic(); });
+  return button;
+}
+
 function dockNode() {
   const room = state.myRoom;
   const dock = el("section", "ww-dock");
@@ -481,6 +507,7 @@ function dockNode() {
   head.append(el("div", "ww-dock-title", phaseHintText(room)));
   const right = el("div", "ww-dock-side");
   if (amOut) right.append(el("span", "ww-out-badge", "☠️ 已出局"));
+  if (VOICE_ENABLED && !room.spectator) right.append(voiceButtonNode());
   const chatToggle = el("button", "dock-chat-toggle");
   chatToggle.type = "button";
   chatToggle.textContent = room.phase === "night" && room.your_role?.faction === "wolf"

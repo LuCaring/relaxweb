@@ -68,7 +68,47 @@ ffmpeg -re -i 你的视频源 -c:v libx264 -c:a aac \
   -f rtsp 'rtsp://<推流用户名>:<推流口令>@127.0.0.1:8554/<流路径>'
 ```
 
-## 5. 数据库初始化
+## 5. 语音（LiveKit，可选）
+
+狼人杀等房间的实时语音走自托管 [LiveKit](https://github.com/livekit/livekit)（Apache-2.0）。
+语音关闭时整条链路为空操作，不影响其他功能。
+
+1. 安装 LiveKit 并用 systemd 常驻，最小 `livekit.yaml`：
+
+   ```yaml
+   port: 7880
+   rtc:
+     tcp_port: 7881
+     port_range_start: 50000
+     port_range_end: 50100
+     use_external_ip: true
+   keys:
+     <API_KEY>: <API_SECRET>
+   ```
+
+2. 防火墙/安全组放行：TCP 7880（信令，HTTPS 后经 nginx 反代）、UDP 50000-50100（媒体）。
+3. `config.json` 增加：
+
+   ```json
+   "voice": {
+     "enabled": true,
+     "url": "ws://127.0.0.1:7880",
+     "api_key": "<API_KEY>",
+     "api_secret": "<API_SECRET>",
+     "token_ttl": 600
+   }
+   ```
+
+   环境变量 `VOICE_ENABLED` / `VOICE_URL` / `VOICE_API_KEY` / `VOICE_API_SECRET` 可覆盖。
+   `url` 是浏览器实际连接的地址；生产必须走 HTTPS 站点的 `wss://`（麦克风只在
+   安全上下文可用），本地测试用 `ws://127.0.0.1:7880` 即可。
+
+4. 权限模型：语音房间按局拆分（`ww{房间ID}-day` 公开频道、`ww{房间ID}-wolf` 狼队
+   频道），用户能否加入只由游戏进程签发的短时 JWT 决定；入夜/天亮/死亡等阶段变化
+   自动换发，出局者由服务端踢出。前端 `assets/js/room-voice.js` + 自托管的
+   `assets/vendor/livekit-client.umd.min.js` 完成连接、上麦与说话指示。
+
+## 6. 数据库初始化
 
 首次启动 `live-chat` 时会自动建表（`server.schema.init_db()`）。注册需要邀请码，
 用 `manage_invite.py` 生成：
@@ -90,7 +130,7 @@ python3 admin.py restart -y           # 一键重启 live-chat / live-web / live
 
 默认金币数量在 `config.json` 的 `economy.new_user_coins`。
 
-## 6. 更新部署
+## 7. 更新部署
 
 两种方式，按网络情况选：
 

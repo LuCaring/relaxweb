@@ -262,6 +262,14 @@ class BaseRoom:
         """历史消息按查看者过滤（含定向频道的消息）。"""
         return list(self.chat)
 
+    def voice_plan(self, username):
+        """LiveKit 语音计划：{LiveKit房间名: 是否可发言}；空 = 无语音。
+
+        由 server/voice_livekit.VoiceService 在广播视图后消费；默认无语音，
+        子类按自己的阶段语义翻译（如狼人杀的白天/狼队频道）。
+        """
+        return {}
+
     # ---- 视图 ----
     def summary(self):
         """房间列表条目（公开信息）。"""
