@@ -4,7 +4,7 @@
 
 依据：地下城战斗系统策划案 V1.1，2026-09-23 修订版
 
-状态：开发规格。`dev/dungeon-core` 分支已完成版本化目录、属性来源汇总、快照合同、存档表、`get_dungeon` 基础读入口，以及可离线复现的单敌人战斗内核。服务端起局、装备操作、奖励及界面仍按下文里程碑实施。下文的模块清单保留为目标结构，具体进度以本段和代码为准。
+状态：开发规格。`dev/dungeon-core` 分支已完成 M0～M2：版本化目录、属性来源汇总、战斗快照与可复现内核、存档表、装备穿戴/卸下/锁定/出售/待领取、属性对比、请求回执和同账号状态同步。M3 的服务端起局、补算、奖励与结算，以及界面和内容仍按下文里程碑实施。下文的模块清单保留为目标结构，具体进度以本段和代码为准。
 
 先交付可保存、可恢复、可验收的单人自动战斗闭环，再增加构筑。v0.1 只实现六项属性、单敌人普通攻击、暴击、简化首领阶段、基础装备和胜利结算；v0.1.1 补齐累计五次通关扫荡；v0.2 分批实现技能、状态、随机词缀与打造。本规划面向程序、界面和数值配置开发，按模块输入输出、事务边界和验收用例安排工作。
 
@@ -352,7 +352,7 @@ request_id 由客户端生成，长度 1～96，限制为字母、数字、下�
 
 ## 8 WebSocket 协议
 
-新增 DungeonProtocol 只从连接登录态取得 username。以下协议为待实现合同，所有响应携带 request_id，写入成功携带新 `profile_version` 和当前挑战 revision。
+新增 DungeonProtocol 只从连接登录态取得 username。`get_dungeon` 与 M2 装备操作已经实现；挑战、控制和结算协议在 M3 实现。所有响应携带 request_id，写入成功携带新 `profile_version`；挑战控制另携带当前 revision。
 
 | 请求类型 | 主要字段 | 服务端行为 |
 | --- | --- | --- |
@@ -361,6 +361,7 @@ request_id 由客户端生成，长度 1～96，限制为字母、数字、下�
 | `dungeon_sync` | request_id、battle_id、after_sequence | 补算到服务器当前时间，必要时结算，返回状态和事件页 |
 | `dungeon_control` | request_id、battle_id、command、expected_revision | command 为 pause/resume/set_rate/abandon；set_rate 另带 rate |
 | `dungeon_equip` | request_id、slot、item_id 或 null、expected_version | 校验物品与活动限制，原子替换槽位 |
+| `dungeon_compare_item` | request_id、item_id | 使用服务端属性解析器返回当前、替换后及差值；不修改存档 |
 | `dungeon_lock_item` | request_id、item_id、locked、expected_version | 设置明确布尔值，不使用切换动作 |
 | `dungeon_sell_item` | request_id、item_id、expected_version | 原子消耗物品并通过钱包增加金币 |
 | `dungeon_claim_items` | request_id、item_ids、expected_version | 将指定 pending 实例移入背包，无新增奖励 |
@@ -439,8 +440,8 @@ request_id 由客户端生成，长度 1～96，限制为字母、数字、下�
 | --- | --- | --- |
 | M0 规则与配置合同 | catalog、属性单位、快照 schema、首套装备、普通敌人、配置校验器 | JSON 往返一致；非法配置被拒；样例属性汇总正确 |
 | M1 纯战斗内核 | 时间轴、确定性随机、伤害、死亡、超时、首领阶段、JSON 模拟命令 | B01～B11、B15 通过；可从检查点恢复出同一事件序列 |
-| M2 装备与存档 | 表迁移、一次性新手装备、穿戴/锁定/出售、活动互斥、请求回执 | 旧库升级、并发起局、所有权和重复出售测试通过 |
-| M3 服务端闭环 | WS 路由、暂停倍速、补算、奖励事务、通关进度、pending | 重启与故障注入不丢奖、不重复入账；失败不发奖 |
+| M2 装备与存档 | 表迁移、一次性新手装备、穿戴/锁定/出售、活动互斥、请求回执 | 旧库升级、并发首次开档、所有权和重复出售测试通过 |
+| M3 服务端闭环 | 挑战 WS 路由、暂停倍速、补算、奖励事务、通关进度、pending | 并发起局只有一个成功；重启与故障注入不丢奖、不重复入账；失败不发奖 |
 | M4 可玩界面 | 准备/装备/战斗/结算、事件播放器、移动端与断线恢复 | 实际浏览器从庄园入口完成一场战斗和一次换装 |
 | M5 内容与灰度 | 五个遭遇、装备池、奖励报告、监控、灰度开关 | 功能与经济门槛通过，v0.1 可以独立上线 |
 | M6 扫荡 | v0.1.1 表迁移、资格、计时、领取、共享活动锁 | 第五次解锁、离线到期、重复领取和满包均通过 |
@@ -482,18 +483,16 @@ M1 的 JSON 模拟工具输出 battle_id、snapshot_hash、seed、各伤害与�
 - 新库和旧庄园库迁移均可重复执行；旧金币、农作物、工具和进行中的庄园活动数据保持正确；删除账号清理从属数据。
 - 手机上血条、暴击文字、阶段与日志可读；暂停和变速不依赖帧率；打开装备详情无需悬停。
 
-### 11.3 待新增测试文件与运行方式
+### 11.3 测试文件与运行方式
 
-新增 `tests/test_dungeon_combat.py`、`test_dungeon_schema.py`、`test_dungeon_service.py`、`test_dungeon_protocol.py`、`test_dungeon_economy.py`、`test_dungeon_ui.cjs`；扫荡独立增加 `test_dungeon_sweep.py`。每个 Python 测试使用临时库与注入时钟，协议测试使用独立应用和随机端口；浏览器测试接入现有 runner。
+现有 `tests/test_dungeon_foundation.py`、`tests/test_dungeon_combat.py`、`tests/test_dungeon_equipment.py` 覆盖 M0～M2。M3 增加挑战服务端及经济故障注入测试，M4 增加浏览器测试，扫荡独立增加测试。Python 测试使用临时库与注入时钟；浏览器测试接入现有 runner。
 
-以下命令是开发完成后的验收入口，本次文档修订没有创建或执行这些新增测试：
+以下命令是各阶段的验收入口；M0～M2 的现有测试已覆盖目录、战斗、装备服务与协议，后续阶段继续补齐对应测试：
 
 ```bash
 uv run --locked python tests/test_dungeon_combat.py
-uv run --locked python tests/test_dungeon_schema.py
-uv run --locked python tests/test_dungeon_service.py
-uv run --locked python tests/test_dungeon_protocol.py
-uv run --locked python tests/test_dungeon_economy.py
+uv run --locked python tests/test_dungeon_foundation.py
+uv run --locked python tests/test_dungeon_equipment.py
 uv run --locked python scripts/run_python_tests.py
 npm run test:browser
 ```

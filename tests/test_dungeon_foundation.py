@@ -47,7 +47,7 @@ class DungeonFoundationTests(unittest.TestCase):
             conn.execute("BEGIN IMMEDIATE")
             again = dungeon_state(conn, "alice", 200)
         self.assertEqual(first, again)
-        self.assertEqual(first["phase"], "foundation")
+        self.assertEqual(first["phase"], "equipment")
         self.assertEqual(len(first["items"]), 6)
         self.assertEqual(len(first["loadout"]), 6)
         self.assertEqual(first["stats"]["values"],
@@ -56,7 +56,7 @@ class DungeonFoundationTests(unittest.TestCase):
         self.assertEqual(first["progress"], [{"challenge_id": "ruins_slime_01",
                                                "difficulty_id": "normal", "clear_count": 0,
                                                "unlocked": True}])
-        self.assertEqual(first["available_actions"], [])
+        self.assertIn("dungeon_equip", first["available_actions"])
         with self.database() as conn:
             self.assertEqual(conn.execute("SELECT COUNT(*) FROM dungeon_items").fetchone()[0], 6)
             self.assertEqual(conn.execute("SELECT COUNT(*) FROM dungeon_progress").fetchone()[0], 1)
