@@ -1,4 +1,4 @@
-"""战斗快照合同。时间轴与结算器在下一阶段基于该只读快照实现。"""
+"""可复现的战斗快照、时间轴和结算结果。"""
 
 from copy import deepcopy
 from dataclasses import dataclass
@@ -52,6 +52,17 @@ def make_battle_snapshot(challenge_id, difficulty_id, player_stats, equipment,
         raise ValueError("挑战不存在")
     enemy = next(row for row in catalog["enemies"]
                  if row["enemy_id"] == challenge["enemy_id"])
+    reward = next(row for row in catalog["reward_tables"]
+                  if row["reward_table_id"] == challenge["reward_table_id"])
+    templates = {row["template_id"]: row for row in catalog["items"]}
+    reward_table = {"reward_table_id": reward["reward_table_id"],
+                    "coins": reward["coins"], "rolls": reward["rolls"],
+                    "entries": [{"weight": entry["weight"],
+                                 "item": templates[entry["template_id"]]}
+                                for entry in reward["entries"]]}
+    unlock_rules = [{"challenge_id": row["challenge_id"],
+                     "difficulty_id": row["difficulty_id"],
+                     "requires": row["requires"]} for row in catalog["challenges"]]
     # Canonical JSON creates a value snapshot. Mutating later item/catalog objects
     # cannot affect a live run or its hash.
     payload = {"battle_id": battle_id, "config_version": catalog["config_version"],
@@ -60,7 +71,8 @@ def make_battle_snapshot(challenge_id, difficulty_id, player_stats, equipment,
                "challenge_id": challenge_id, "difficulty_id": difficulty_id,
                "player_stats": player_stats, "equipment": equipment,
                "effect_sources": effect_sources, "enemy": enemy,
-               "combat": catalog["combat"], "reward_table": None}
+               "combat": catalog["combat"], "reward_table": reward_table,
+               "unlock_rules": unlock_rules}
     if set(player_stats) != set(STAT_FIELDS):
         raise ValueError("玩家属性字段不完整")
     raw = json.dumps(payload, ensure_ascii=False, sort_keys=True,

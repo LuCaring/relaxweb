@@ -4,7 +4,7 @@
 
 依据：地下城战斗系统策划案 V1.1，2026-09-23 修订版
 
-状态：开发规格。`dev/dungeon-core` 分支已完成 M0～M2：版本化目录、属性来源汇总、战斗快照与可复现内核、存档表、装备穿戴/卸下/锁定/出售/待领取、属性对比、请求回执和同账号状态同步。M3 的服务端起局、补算、奖励与结算，以及界面和内容仍按下文里程碑实施。下文的模块清单保留为目标结构，具体进度以本段和代码为准。
+状态：开发规格。`dev/dungeon-core` 分支已完成 M0～M3：版本化目录、属性与战斗内核、装备存档、服务端起局、暂停/恢复/倍速、按服务器时间补算、胜负结算、奖励事务、待领取和断线查询。现有联调目录只有一个普通遭遇及一套固定奖励；M4 的可玩界面与 M5 的完整内容仍待实施。下文的模块清单保留为目标结构，具体进度以本段和代码为准。
 
 先交付可保存、可恢复、可验收的单人自动战斗闭环，再增加构筑。v0.1 只实现六项属性、单敌人普通攻击、暴击、简化首领阶段、基础装备和胜利结算；v0.1.1 补齐累计五次通关扫荡；v0.2 分批实现技能、状态、随机词缀与打造。本规划面向程序、界面和数值配置开发，按模块输入输出、事务边界和验收用例安排工作。
 
@@ -352,7 +352,7 @@ request_id 由客户端生成，长度 1～96，限制为字母、数字、下�
 
 ## 8 WebSocket 协议
 
-新增 DungeonProtocol 只从连接登录态取得 username。`get_dungeon` 与 M2 装备操作已经实现；挑战、控制和结算协议在 M3 实现。所有响应携带 request_id，写入成功携带新 `profile_version`；挑战控制另携带当前 revision。
+DungeonProtocol 只从连接登录态取得 username。`get_dungeon`、装备操作及 M3 挑战/控制/结算协议已经实现。所有响应携带 request_id，写入成功携带新 `profile_version`；挑战控制另携带当前 revision。
 
 | 请求类型 | 主要字段 | 服务端行为 |
 | --- | --- | --- |
@@ -485,7 +485,7 @@ M1 的 JSON 模拟工具输出 battle_id、snapshot_hash、seed、各伤害与�
 
 ### 11.3 测试文件与运行方式
 
-现有 `tests/test_dungeon_foundation.py`、`tests/test_dungeon_combat.py`、`tests/test_dungeon_equipment.py` 覆盖 M0～M2。M3 增加挑战服务端及经济故障注入测试，M4 增加浏览器测试，扫荡独立增加测试。Python 测试使用临时库与注入时钟；浏览器测试接入现有 runner。
+现有 `tests/test_dungeon_foundation.py`、`tests/test_dungeon_combat.py`、`tests/test_dungeon_equipment.py`、`tests/test_dungeon_runs.py`、`tests/test_dungeon_protocol.py` 覆盖 M0～M3，包括并发起局、重复补算、控制、奖励故障回滚和断线查询。M4 增加浏览器测试，扫荡独立增加测试。Python 测试使用临时库与注入时钟；浏览器测试接入现有 runner。
 
 以下命令是各阶段的验收入口；M0～M2 的现有测试已覆盖目录、战斗、装备服务与协议，后续阶段继续补齐对应测试：
 
@@ -493,6 +493,8 @@ M1 的 JSON 模拟工具输出 battle_id、snapshot_hash、seed、各伤害与�
 uv run --locked python tests/test_dungeon_combat.py
 uv run --locked python tests/test_dungeon_foundation.py
 uv run --locked python tests/test_dungeon_equipment.py
+uv run --locked python tests/test_dungeon_runs.py
+uv run --locked python tests/test_dungeon_protocol.py
 uv run --locked python scripts/run_python_tests.py
 npm run test:browser
 ```

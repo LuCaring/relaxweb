@@ -33,6 +33,9 @@ CATALOG = {
          "quality": "normal", "stats": {"defense": 8}, "tags": [], "effects": []},
         {"template_id": "starter_charm", "name": "练习护符", "slot": "accessory",
          "quality": "normal", "stats": {"max_hp": 30}, "tags": [], "effects": []},
+        {"template_id": "ruins_blade", "name": "遗迹短刃", "slot": "weapon",
+         "quality": "excellent", "stats": {"atk": 38}, "tags": ["blade"],
+         "effects": [], "sell_coins": 12},
     ],
     "enemies": [
         {"enemy_id": "ruins_slime", "name": "遗迹软泥", "type": "normal",
@@ -41,7 +44,11 @@ CATALOG = {
     ],
     "challenges": [
         {"challenge_id": "ruins_slime_01", "difficulty_id": "normal",
-         "enemy_id": "ruins_slime", "requires": [], "reward_table_id": None},
+         "enemy_id": "ruins_slime", "requires": [], "reward_table_id": "slime_clear"},
+    ],
+    "reward_tables": [
+        {"reward_table_id": "slime_clear", "coins": 20, "rolls": 1,
+         "entries": [{"template_id": "ruins_blade", "weight": 1}]},
     ],
 }
 
@@ -100,6 +107,10 @@ def validate_catalog(catalog):
                 raise DungeonConfigError("装备标签无效")
             for effect in item.get("effects", ()):
                 validate_effect(effect)
+            sell_coins = item.get("sell_coins", 0)
+            if (isinstance(sell_coins, bool) or not isinstance(sell_coins, int)
+                    or not 0 <= sell_coins <= 1_000_000):
+                raise DungeonConfigError("装备售价无效")
         starters = [item for item in catalog["items"] if item["template_id"].startswith("starter_")]
         if len(starters) != len(SLOTS) or {item["slot"] for item in starters} != set(SLOTS):
             raise DungeonConfigError("新手装备必须覆盖六个部位")
@@ -135,13 +146,32 @@ def validate_catalog(catalog):
                 previous = phase["threshold_bp"]
         if not catalog["challenges"]:
             raise DungeonConfigError("至少配置一个挑战")
+        reward_ids = _unique(catalog["reward_tables"], "reward_table_id")
+        for table in catalog["reward_tables"]:
+            if set(table) != {"reward_table_id", "coins", "rolls", "entries"}:
+                raise DungeonConfigError("奖励表字段无效")
+            if (isinstance(table["coins"], bool) or not isinstance(table["coins"], int)
+                    or table["coins"] < 0 or table["coins"] > 1_000_000):
+                raise DungeonConfigError("奖励金币无效")
+            if (isinstance(table["rolls"], bool) or not isinstance(table["rolls"], int)
+                    or not 0 <= table["rolls"] <= 20):
+                raise DungeonConfigError("奖励数量无效")
+            entries = table["entries"]
+            if not isinstance(entries, list) or (table["rolls"] > 0 and not entries):
+                raise DungeonConfigError("奖励池为空")
+            for entry in entries:
+                if (not isinstance(entry, dict) or set(entry) != {"template_id", "weight"}
+                        or entry["template_id"] not in item_ids
+                        or isinstance(entry["weight"], bool)
+                        or not isinstance(entry["weight"], int) or entry["weight"] <= 0):
+                    raise DungeonConfigError("奖励池条目无效")
         for challenge in catalog["challenges"]:
             if challenge.get("enemy_id") not in enemy_ids:
                 raise DungeonConfigError("挑战引用不存在的敌人")
             if challenge.get("difficulty_id") not in ("normal", "hard", "expert"):
                 raise DungeonConfigError("挑战难度无效")
-            if challenge.get("reward_table_id") is not None:
-                raise DungeonConfigError("当前阶段尚未开放奖励表")
+            if challenge.get("reward_table_id") not in reward_ids:
+                raise DungeonConfigError("挑战奖励表不存在")
             if not isinstance(challenge.get("requires"), list) or any(
                 required not in challenge_ids for required in challenge["requires"]
             ):
@@ -172,12 +202,19 @@ def validate_catalog(catalog):
 def public_catalog(catalog=CATALOG):
     """返回可给客户端的副本；以后随机权重、种子和未解锁内容留在服务端。"""
     enemies = {enemy["enemy_id"]: enemy for enemy in catalog["enemies"]}
+    reward_tables = {table["reward_table_id"]: table for table in catalog["reward_tables"]}
     return {"config_version": catalog["config_version"],
             "simulation_version": catalog["simulation_version"],
             "slots": list(SLOTS), "qualities": list(QUALITIES),
             "challenges": [{"challenge_id": row["challenge_id"],
                             "difficulty_id": row["difficulty_id"],
                             "requires": list(row["requires"]),
+                            "reward_preview": {
+                                "coins": reward_tables[row["reward_table_id"]]["coins"],
+                                "rolls": reward_tables[row["reward_table_id"]]["rolls"],
+                                "possible_items": [entry["template_id"] for entry in
+                                                   reward_tables[row["reward_table_id"]]["entries"]],
+                            },
                             "enemy": {"enemy_id": row["enemy_id"],
                                       "name": enemies[row["enemy_id"]]["name"],
                                       "type": enemies[row["enemy_id"]]["type"],

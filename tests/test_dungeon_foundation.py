@@ -103,6 +103,20 @@ class DungeonFoundationTests(unittest.TestCase):
         public["challenges"][0]["enemy"]["stats"]["max_hp"] = 1
         self.assertEqual(CATALOG["enemies"][0]["stats"]["max_hp"], 100)
 
+    def test_reward_catalog_rejects_missing_refs_and_oversized_drops(self):
+        broken = deepcopy(CATALOG)
+        broken["challenges"][0]["reward_table_id"] = "missing"
+        with self.assertRaises(DungeonConfigError):
+            validate_catalog(broken)
+        broken = deepcopy(CATALOG)
+        broken["reward_tables"][0]["rolls"] = 21
+        with self.assertRaises(DungeonConfigError):
+            validate_catalog(broken)
+        broken = deepcopy(CATALOG)
+        broken["reward_tables"][0]["entries"][0]["weight"] = 0
+        with self.assertRaises(DungeonConfigError):
+            validate_catalog(broken)
+
     def test_equipment_roguelike_and_environment_share_stat_resolution(self):
         active = [
             {"source_kind": "roguelike", "source_id": "choice-1", "effect":

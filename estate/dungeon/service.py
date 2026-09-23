@@ -85,14 +85,16 @@ def dungeon_state(conn, username, now, catalog=CATALOG):
     active = conn.execute("SELECT job_kind,job_id FROM dungeon_active_jobs WHERE username=?",
                           (username,)).fetchone()
     coins = conn.execute("SELECT coins FROM users WHERE username=?", (username,)).fetchone()[0]
-    return {"phase": "equipment", "profile_version": profile[1],
+    return {"phase": "battle" if active else "equipment", "profile_version": profile[1],
             "bag_capacity": profile[0], "catalog": public_catalog(catalog),
             "items": items, "loadout": loadout, "stats": panel,
             "progress": progress, "pending_count": sum(item["location"] == "pending" for item in items),
             "active_job": {"kind": active[0], "id": active[1]} if active else None,
             "coins": round(coins or 0, 2),
             "available_actions": ["dungeon_equip", "dungeon_lock_item", "dungeon_sell_item",
-                                  "dungeon_claim_items", "dungeon_compare_item"]}
+                                  "dungeon_claim_items", "dungeon_compare_item",
+                                  "dungeon_start", "dungeon_sync", "dungeon_control",
+                                  "dungeon_get_result"]}
 
 
 def compare_item(conn, username, item_id, now, catalog=CATALOG):

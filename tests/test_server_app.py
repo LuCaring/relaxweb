@@ -121,9 +121,10 @@ class ApplicationTests(unittest.IsolatedAsyncioTestCase):
             estate_finish_mining estate_list_visits estate_enter_visit estate_leave_visit
             estate_visit_move estate_steal_crop estate_get_notifications estate_mark_notifications_read
             get_dungeon dungeon_compare_item dungeon_equip dungeon_lock_item
-            dungeon_sell_item dungeon_claim_items"""
+            dungeon_sell_item dungeon_claim_items dungeon_start dungeon_sync
+            dungeon_control dungeon_get_result"""
         self.assertEqual(set(self.app.handlers), set(expected.split()))
-        self.assertEqual(len(self.app.handlers), 71)
+        self.assertEqual(len(self.app.handlers), 75)
 
     async def test_two_apps_isolate_accounts_rooms_history_and_protocol_state(self):
         second = self.make_app("second")
