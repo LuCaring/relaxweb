@@ -163,6 +163,7 @@ class RoomProtocol:
                     "messages": list(room.chat),
                 },
             )
+            await self.rooms.broadcast_spectator_notice(room, username, joined=True)
             return
         if room.status != "waiting":
             await self.hub.send_json(websocket, {"type": "game_error", "message": "游戏已开始，请以观战身份进入"})

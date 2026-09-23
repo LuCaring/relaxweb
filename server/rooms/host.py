@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import time
 
 logger = logging.getLogger("live-chat")
 
@@ -125,6 +126,19 @@ class RoomHost:
             {"type": "room_list", "rooms": [room.summary() for room in self.game_rooms.values()]}
         )
 
+    async def broadcast_spectator_notice(self, room, username, joined):
+        """将观战进出写入房间聊天，并通知仍在房间的所有连接。"""
+        name = self.accounts.display_name(username)
+        message = {
+            "type": "room_chat",
+            "room_id": room.id,
+            "system": True,
+            "text": f"{name}进入房间开始观战" if joined else f"{name}离开房间结束观战",
+            "time": time.strftime("%m/%d %H:%M"),
+        }
+        room.chat.append(message)
+        await room.broadcast_payload(message)
+
     async def dissolve_room(self, room, reason):
         await room.finish_pending_settlement()
         room.close()
@@ -153,6 +167,7 @@ class RoomHost:
         if room.has_spectator(username):
             room.remove_spectator(username)
             logger.info("%s stopped watching game room %s", username, room.id)
+            await self.broadcast_spectator_notice(room, username, joined=False)
             await self.hub.send_to_user(username, {"type": "room_closed", "reason": "已退出观战"})
             if not room.members:
                 await self.dissolve_empty_room(room)
@@ -206,6 +221,7 @@ class RoomHost:
         if room.has_spectator(username):
             # 观战者断线不牵动对局，直接移除记录即可
             room.remove_spectator(username)
+            await self.broadcast_spectator_notice(room, username, joined=False)
             return
         if room.owner == username:
             await self.dissolve_room(room, "房主离开游戏厅较久")

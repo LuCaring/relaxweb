@@ -85,6 +85,10 @@ async def main():
                 assert joined['your_hand'] == own_views[names[0]]['your_hand'], joined
                 assert 'your_options' not in joined, joined
                 assert coins()[spec] == 1000, 'spectator must not pay a buy-in'
+                notice = lambda m: m.get('system') and m.get('text') == 'watcher进入房间开始观战'
+                for ws in [spect, *player]:
+                    assert (await receive(ws, 'room_chat', notice))['room_id'] == room_id
+                assert list(server.rooms.game_rooms[room_id].chat)[-1]['text'] == 'watcher进入房间开始观战'
 
                 # 开局后普通加入被拒绝；满员房间仍可以观战进入
                 await send(late, type='join_room', room_id=room_id)
@@ -95,6 +99,9 @@ async def main():
                 late_view = (await receive(late, 'game_joined'))['room']
                 assert late_view['spectator'] is True and late_view['watching'] == names[0], late_view
                 assert coins()[joiner] == 1000, 'spectator must not pay a buy-in'
+                late_notice = lambda m: m.get('system') and m.get('text') == 'latecomer进入房间开始观战'
+                for ws in [late, spect, *player]:
+                    await receive(ws, 'room_chat', late_notice)
 
                 # 观战者的对局动作与续手确认一律无效
                 snapshot = json.dumps(server.rooms.game_rooms[room_id].game, default=list, sort_keys=True)
@@ -133,10 +140,16 @@ async def main():
                 await send(spect, type='leave_room')
                 closed = await receive(spect, 'room_closed')
                 assert closed['reason'] == '已退出观战', closed
+                leave_notice = lambda m: m.get('system') and m.get('text') == 'watcher离开房间结束观战'
+                for ws in [late, *player]:
+                    await receive(ws, 'room_chat', leave_notice)
                 assert room_id in server.rooms.game_rooms
                 await asyncio.sleep(1.1)
                 await send(spect, type='join_room', room_id=room_id, spectate=True)
                 await receive(spect, 'game_joined')
+                history = await receive(spect, 'room_chat_history')
+                assert [m['text'] for m in history['messages'] if m.get('system')][-2:] == [
+                    'latecomer进入房间开始观战', 'watcher离开房间结束观战']
                 await send(spect, type='get_room')
                 view = await receive(spect, 'game_update', lambda m: m.get('spectator'))
                 assert view['watching'] in names, view
