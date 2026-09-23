@@ -232,6 +232,32 @@ def test_night_kill_and_poison():
           str(stock))
 
 
+def test_single_actor_submit_locks():
+    async def run():
+        # 双预言家自定义板：第一名提交后本夜不能再改验
+        rules = {"board": ["werewolf", "seer", "seer",
+                           "villager", "villager", "villager"]}
+        room = make_room(rules)
+        await room.start()
+        g = room.game
+        await room.perform_action("a", "night", {"target": ""})   # 唯一狼空刀
+        seers = [n for n in g["alive"] if g["roles"][n] == "seer"]
+        at_seer = g["night_role"] == "seer" and sorted(g["pending"]) == sorted(seers)
+        await room.perform_action(seers[0], "night", {"target": "a"})
+        first = g["night"]["checks"][seers[0]]
+        await room.perform_action(seers[0], "night", {"target": "b"})
+        locked = g["night"]["checks"][seers[0]] == first \
+            and len(room.view_for(seers[0])["check_log"]) == 1
+        await room.perform_action(seers[1], "night", {"target": "a"})
+        both_done = g["phase"] == "day" and g["night"]["kill"] is None
+        return at_seer, locked, both_done
+
+    at_seer, locked, both_done = run_identity_shuffle(run)
+    check("双预言家同时待决断", at_seer)
+    check("单角色提交后锁定不可改验", locked)
+    check("全员提交后进入白天且空刀", both_done)
+
+
 def test_witch_rules_and_guard():
     async def run():
         # 5 人自定义板：a 守卫 b 狼 c 女巫 d 预言家 e 平民
@@ -720,6 +746,7 @@ def main():
     test_assignment_and_views()
     test_night_save_and_check()
     test_night_kill_and_poison()
+    test_single_actor_submit_locks()
     test_witch_rules_and_guard()
     test_witch_always_self_save()
     test_hunter_shot_on_exile()
