@@ -135,8 +135,10 @@ export function createEstateUI(root, activities = {}) {
     const level = Number(snapshot.profile.pet_level || 0);
     const rules = snapshot.catalog.pet_levels;
     if (!level) {
-      sheetBody.append(note("豆豆会跟随主人。有人来偷菜时，它有 15% 概率阻止偷窃，并让对方掉落金币。"));
-      sheetBody.append(itemCard({ icon: "🐕", title: "豆豆", meta: "宠物 · Lv.1 · 防守概率 15%",
+      const starter = catalogEntry(rules, 1);
+      const defendChance = Math.round(starter.defend_chance * 100);
+      sheetBody.append(note(`豆豆会跟随主人。有人来偷菜时，它有 ${defendChance}% 概率阻止偷窃，并让对方掉落金币。`));
+      sheetBody.append(itemCard({ icon: "🐕", title: "豆豆", meta: `宠物 · Lv.1 · 防守概率 ${defendChance}%`,
         controls: [button(`${formatCoinsWhole(10000)} 金币 · 带豆豆回家`,
           () => estateCommand("estate_pet"), { className: "estate-button estate-button-gold" })] }));
       return;

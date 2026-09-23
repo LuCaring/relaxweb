@@ -249,10 +249,10 @@ MINING_LEVELS = {
 }
 
 PET_LEVELS = {
-    1: {"name": "豆豆", "buy_price": 10000.0, "defend_chance": .15, "upgrade_price": 10000.0},
-    2: {"name": "豆豆", "defend_chance": .20, "upgrade_price": 20000.0},
-    3: {"name": "豆豆", "defend_chance": .30, "upgrade_price": 50000.0},
-    4: {"name": "豆豆", "defend_chance": .40, "upgrade_price": None},
+    1: {"name": "豆豆", "buy_price": 10000.0, "defend_chance": .20, "upgrade_price": 10000.0},
+    2: {"name": "豆豆", "defend_chance": .30, "upgrade_price": 20000.0},
+    3: {"name": "豆豆", "defend_chance": .40, "upgrade_price": 50000.0},
+    4: {"name": "豆豆", "defend_chance": .50, "upgrade_price": None},
 }
 
 
