@@ -18,6 +18,8 @@ logs/
 # 本地配置（含推流口令等）：仓库里只保留 config.example.json
 config.json
 config.*.local.json
+# ZCode 工作区配置（含部署服务器 MCP 的 SSH 信息）
+.zcode/
 assets/estate/characters/local_*/
 .env
 .env.*
