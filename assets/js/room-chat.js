@@ -27,6 +27,13 @@ desktopRoom.addEventListener("change", () => {
 function roomChatRowNode(m) {
   const row = document.createElement("div");
   row.className = "rc-message";
+  if (m.system) {
+    row.classList.add("rc-system");
+    const text = document.createElement("span");
+    text.textContent = m.text;
+    row.append(text);
+    return row;
+  }
   const name = document.createElement("span");
   name.className = "rc-name";
   // 观战者发言：灰色 id 并以（观战）注明身份。
@@ -255,5 +262,5 @@ onMessage("room_chat", (data) => {
   }
   appendRoomChatRow(data);
   // 观战者不坐席位：发言不弹座位气泡。
-  if (!data.spectator) showSeatBubble(data.username, data.text);
+  if (!data.spectator && !data.system) showSeatBubble(data.username, data.text);
 });

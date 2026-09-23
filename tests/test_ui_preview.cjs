@@ -226,6 +226,14 @@ const python = process.env.PYTHON || path.join(root, '.venv', 'bin', 'python');
     await frame.locator('.rc-message').filter({hasText:'观战测试发言'}).waitFor();
     assert.match(await frame.locator('.rc-spectator').last().innerText(),/本地观众（观战）/);
     assert.equal(await frame.locator('.seat-bubble').count(),0);
+    await frame.locator('body').evaluate(async () => {
+      const core = await import('/assets/js/core.js');
+      core.handleServerMessage({type:'room_chat', room_id:core.state.myRoom.room_id,
+        system:true, text:'本地观众进入房间开始观战', time:'09/23 19:00'});
+    });
+    assert.equal(await frame.locator('.rc-system').last().innerText(),'本地观众进入房间开始观战');
+    assert.equal(await frame.locator('.rc-system .rc-name').count(),0);
+    assert.equal(await frame.locator('.seat-bubble').count(),0);
     await page.locator('#bubbles').click();
     await frame.locator('.seat-bubble').first().waitFor();
     assert.equal(await frame.locator('.seat-bubble').count(),4,'player bubbles still work in spectator mode');

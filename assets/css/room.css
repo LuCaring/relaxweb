@@ -457,6 +457,13 @@
     font-size: 12.5px;
 }
 
+.rc-message.rc-system {
+    color: #737b86;
+    text-align: center;
+    line-height: 1.5;
+    word-break: break-word;
+}
+
 .rc-name {
     margin-right: 6px;
 
