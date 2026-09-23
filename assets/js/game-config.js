@@ -57,6 +57,14 @@ export const GAME_TYPES = [
     minStartPlayers: 2,
     desc: "暗打出牌声称是桌面牌，质疑翻牌定真假：说谎者或误质疑者对自己开枪，最后独存者收走赔付。弹巢、手牌与小丑规则可在开房时自定义。",
   },
+  {
+    id: "werewolf",
+    name: "狼人杀 · 月夜对峙",
+    icon: "🐺",
+    seats: 12,
+    minStartPlayers: 4,
+    desc: "夜晚狼人刀人，女巫救毒、预言家查验、守卫守护；白天讨论并投票放逐。屠边/屠城、女巫自救与自定义板子可在开房时配置。",
+  },
 ];
 
 export const ROOM_GAME_TYPES = GAME_TYPES.filter((game) => game.mode !== "solo");

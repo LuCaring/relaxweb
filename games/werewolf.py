@@ -202,6 +202,7 @@ class WerewolfRoom(BaseRoom):
                 "phase": g["phase"],
                 "night_role": NIGHT_ROLE_NAMES.get(g.get("night_role") or "")
                 or None,
+                "last_words_current": g["last_words"]["current"],
                 "turn_left": round(max(0.0, g["deadline"] - time.time()), 1)
                 if g["deadline"] else 0,
                 "vote": dict(g["vote"]) if g["phase"] == "vote" else {},
@@ -610,6 +611,8 @@ class WerewolfRoom(BaseRoom):
             night["kill"] = target or None       # 多狼以最后一次提交为准，显式留白=空刀
             night["kill_votes"][username] = target or None
         elif ability == "check":
+            if username in night["checks"]:      # 单角色提交即锁定，防重复改验人
+                return
             if target:
                 if target not in g["alive"] or target == username:
                     return
@@ -623,6 +626,8 @@ class WerewolfRoom(BaseRoom):
             else:
                 night["checks"][username] = None    # 显式不验
         elif ability == "protect":
+            if username in night["protect"]:     # 守卫同样一锤定音
+                return
             if target:
                 if target not in g["alive"] or target == username:
                     return

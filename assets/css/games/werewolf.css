@@ -1,0 +1,370 @@
+/* 狼人杀专属布局：夜晚深空、白天暖金的氛围随阶段切换；
+   座位是状态板（生死/角色/得票/狼队），身份卡与对局记录在侧栏，
+   决策区与骗子酒馆同样使用亮色坞保证可读性。 */
+.ww-page {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    min-width: 0;
+    padding: 12px;
+    background: #101219;
+}
+.ww-table {
+    position: relative;
+    min-width: 0;
+    padding: 18px;
+    border: 1px solid #3d3f63;
+    border-radius: 18px;
+    background: radial-gradient(ellipse at 78% -10%, #4a4470, #262a45 48%, #171a2e 78%, #12142296);
+    box-shadow: 0 12px 30px #0b0d18cc, inset 0 0 0 2px #ffffff0b;
+    color: #eef0fb;
+    transition: background .5s ease;
+}
+.ww-table.is-night {
+    background: radial-gradient(ellipse at 78% -10%, #3f3f77, #232648 46%, #141730 76%, #10122796);
+}
+.ww-table.is-day {
+    background: radial-gradient(ellipse at 78% -10%, #6b5a3d, #33374d 48%, #1b1e33 78%, #12142296);
+}
+.ww-topbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 14px;
+    min-width: 0;
+    margin-bottom: 12px;
+}
+.ww-topbar-title { flex: none; color: #d9d4ff; font-size: 15px; font-weight: 800; }
+.ww-topbar-rules {
+    min-width: 0;
+    overflow: hidden;
+    color: #9fa3c8;
+    font-size: 11px;
+    text-align: right;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+/* 阶段横幅：夜晚靛蓝、白天暖金、投票紫红，一眼读出当前节奏。 */
+.ww-phase {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 14px;
+    padding: 10px 14px;
+    border: 1px solid #ffffff21;
+    border-radius: 10px;
+    background: #ffffff0d;
+    font-size: 15px;
+    font-weight: 800;
+}
+.ww-phase-icon { font-size: 20px; }
+.ww-phase-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ww-phase-alive {
+    flex: none;
+    margin-left: auto;
+    padding: 3px 9px;
+    border-radius: 7px;
+    background: #ffffff14;
+    color: #cdd2f5;
+    font-size: 11px;
+    font-variant-numeric: tabular-nums;
+}
+.ww-phase.is-night { border-color: #7c7ff05c; background: #7c7ff01f; color: #cfd2ff; }
+.ww-phase.is-day { border-color: #e8b46557; background: #e8b46517; color: #ffe3ac; }
+.ww-phase.is-vote { border-color: #c07adf57; background: #c07adf17; color: #ecc7ff; }
+.ww-phase.is-shot { border-color: #e0717157; background: #e071711f; color: #ffc4c4; }
+.ww-phase.is-last_words { border-color: #9fb3e057; background: #9fb3e017; color: #d6e2ff; }
+.ww-phase.is-showdown { border-color: #7fd6a857; background: #7fd6a817; color: #c4f2d8; }
+
+/* 主区：左座位网格 + 右身份/记录侧栏。 */
+.ww-arena {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) clamp(250px, 30%, 330px);
+    gap: 14px;
+    min-width: 0;
+}
+.ww-seats {
+    min-width: 0;
+    padding: 12px;
+    border: 1px solid #ffffff22;
+    border-radius: 14px;
+    background: #0e1020a6;
+}
+.ww-seats-head { margin: 0 2px 10px; color: #b9bde4; font-size: 12px; font-weight: 750; }
+.ww-seat-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(168px, 1fr));
+    gap: 8px;
+}
+.ww-seat {
+    position: relative;
+    display: grid;
+    grid-template-columns: 38px minmax(0, 1fr);
+    grid-template-rows: auto auto;
+    column-gap: 9px;
+    min-width: 0;
+    padding: 9px 10px;
+    border: 1px solid #ffffff1c;
+    border-radius: 11px;
+    background: #ffffff0a;
+    transition: border-color .2s, background .2s, filter .3s;
+}
+.ww-seat.me { border-color: #86e3b165; background: #86e3b10f; box-shadow: inset 0 0 0 1px #86e3b133; }
+.ww-seat.mate { border-color: #e06b7480; background: #e06b7412; }
+.ww-seat.voted-target { border-color: #c07adf80; box-shadow: 0 0 0 1px #c07adf66; }
+.ww-seat.dead { filter: grayscale(.9); opacity: .55; }
+.ww-seat .ww-avatar {
+    grid-row: 1 / 3;
+    display: grid;
+    place-items: center;
+    width: 38px;
+    height: 38px;
+    overflow: hidden;
+    border-radius: 50%;
+    background: #41446b;
+    color: #fff;
+    font-size: 15px;
+    font-weight: 800;
+}
+.ww-avatar img { display: block; width: 100%; height: 100%; object-fit: cover; }
+.ww-seat-identity { display: flex; align-items: center; justify-content: space-between; gap: 6px; min-width: 0; }
+.ww-seat-name { overflow: hidden; font-size: 12px; font-weight: 800; text-overflow: ellipsis; white-space: nowrap; }
+.ww-seat-status { flex: none; color: #9fe6bd; font-size: 10px; }
+.ww-seat-status.out { color: #f19ca6; }
+.ww-seat-foot {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 5px;
+    min-width: 0;
+    margin-top: 3px;
+}
+.ww-role-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    flex: none;
+    padding: 2px 7px;
+    border-radius: 6px;
+    font-size: 10px;
+    font-weight: 800;
+}
+.ww-role-chip.r-wolf { background: #a03046; color: #ffd9de; }
+.ww-role-chip.r-god { background: #8a6b25; color: #ffe9b8; }
+.ww-role-chip.r-civil { background: #3c6152; color: #c8f2de; }
+.ww-seat-unknown { color: #8a8fb5; font-size: 10px; }
+.ww-mate-note { color: #ff9daa; font-size: 9px; font-weight: 750; }
+.ww-seat-stack { margin-left: auto; color: #e3c68f; font-size: 10px; font-variant-numeric: tabular-nums; }
+.ww-vote-badge {
+    position: absolute;
+    top: -7px;
+    right: -5px;
+    padding: 2px 8px;
+    border-radius: 8px;
+    background: #a45bd6;
+    color: #fff;
+    font-size: 10px;
+    font-weight: 850;
+    box-shadow: 0 3px 8px #0007;
+}
+
+/* 侧栏身份卡：阵营配色 + 角色私有信息（狼队/查验/药水/守护）。 */
+.ww-side { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+.ww-role-card {
+    display: flex;
+    flex-direction: column;
+    gap: 9px;
+    padding: 13px;
+    border: 1px solid #ffffff24;
+    border-radius: 14px;
+    background: #151737;
+}
+.ww-role-card.f-wolf { border-color: #a0304680; background: linear-gradient(160deg, #3a1e2b, #211627); }
+.ww-role-card.f-god { border-color: #b98a2e80; background: linear-gradient(160deg, #332a18, #1e1b22); }
+.ww-role-card.f-civil { border-color: #3f7a6280; background: linear-gradient(160deg, #1a2f2a, #171c2b); }
+.ww-role-head { display: flex; align-items: center; gap: 12px; }
+.ww-role-icon { font-size: 34px; }
+.ww-role-name { font-size: 19px; font-weight: 850; }
+.ww-role-faction { color: #b9bde4; font-size: 11px; font-weight: 700; }
+.ww-role-extra { display: flex; flex-direction: column; gap: 4px; }
+.ww-role-extra-label { color: #9fa3c8; font-size: 10px; font-weight: 750; letter-spacing: .05em; }
+.ww-mate-row { color: #ffc9d1; font-size: 12px; font-weight: 700; }
+.ww-check-row { color: #dfe3ff; font-size: 12px; font-variant-numeric: tabular-nums; }
+.ww-potions { display: flex; flex-wrap: wrap; gap: 6px; }
+.ww-potion { padding: 3px 8px; border-radius: 7px; background: #ffffff14; color: #dfe3ff; font-size: 11px; font-weight: 750; }
+.ww-potion.used { opacity: .45; text-decoration: line-through; }
+.ww-log-empty { color: #8a8fb5; font-size: 11px; }
+.ww-role-spectator { color: #b9bde4; font-size: 12px; font-weight: 700; }
+.ww-role-out-note { color: #f19ca6; font-size: 10px; line-height: 1.5; }
+
+.ww-history {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    min-width: 0;
+    padding: 12px;
+    border: 1px solid #ffffff22;
+    border-radius: 14px;
+    background: #0e1020a6;
+}
+.ww-history-head { color: #b9bde4; font-size: 12px; font-weight: 750; }
+.ww-history-list { display: flex; flex-direction: column; gap: 4px; max-height: 250px; overflow-y: auto; }
+.ww-history-row { display: flex; gap: 7px; min-width: 0; font-size: 11px; line-height: 1.45; }
+.ww-history-day { flex: none; width: 24px; color: #8a8fb5; font-variant-numeric: tabular-nums; }
+.ww-history-text { min-width: 0; color: #d6d9f2; overflow-wrap: anywhere; }
+.ww-history-row.k-dawn .ww-history-text,
+.ww-history-row.k-exile .ww-history-text,
+.ww-history-row.k-shot .ww-history-text { color: #ffc4c4; }
+.ww-history-row.k-result .ww-history-text { color: #c4f2d8; font-weight: 750; }
+
+/* 决策坞：与骗子酒馆一致的亮色分区。 */
+.ww-dock {
+    display: grid;
+    gap: 9px;
+    min-width: 0;
+    padding: 13px 16px;
+    border: 1px solid #d9d3c8;
+    border-radius: 16px;
+    background: #fffaf2;
+    box-shadow: 0 8px 22px #10121e1a;
+    color: #2c2a3d;
+}
+.ww-dock.is-my-turn { border-color: #b491ff; box-shadow: 0 0 0 2px #b491ff33, 0 8px 22px #10121e1a; }
+.ww-dock-head { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.ww-dock-title { min-width: 0; overflow: hidden; font-size: 14px; font-weight: 800; text-overflow: ellipsis; white-space: nowrap; }
+.ww-dock-side { display: flex; flex: none; align-items: center; gap: 8px; margin-left: auto; }
+.ww-out-badge { padding: 4px 8px; border-radius: 7px; background: #f6e0e0; color: #96414b; font-size: 11px; font-weight: 800; white-space: nowrap; }
+.ww-dock .dock-chat-toggle { background: #e9e4f5; color: #4a3f70; }
+.ww-dock-body { display: grid; gap: 8px; }
+.ww-dock-note { color: #6d6a80; font-size: 12px; line-height: 1.5; }
+.ww-dock .countdown { height: 4px; overflow: hidden; border-radius: 2px; background: #2c2a3d22; }
+.ww-dock .countdown-fill { background: #7a5bd6; }
+
+.ww-action-area { display: flex; flex-direction: column; gap: 8px; }
+.ww-action-block { display: flex; flex-direction: column; gap: 8px; padding: 10px; border: 1px solid #e4ddce; border-radius: 11px; background: #f7f1e6; }
+.ww-action-title { font-size: 13px; font-weight: 800; color: #4a3f70; }
+.ww-action-note { color: #857f70; font-size: 10px; line-height: 1.45; }
+.ww-targets { display: flex; flex-wrap: wrap; gap: 6px; }
+.ww-target {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 10px 4px 4px;
+    border: 1px solid #cfc6b3;
+    border-radius: 999px;
+    background: #fffdf8;
+    color: #3c3550;
+    font: inherit;
+    font-size: 12px;
+    font-weight: 750;
+    cursor: pointer;
+    transition: border-color .15s, box-shadow .15s, transform .15s;
+}
+.ww-target:hover:not(:disabled) { border-color: #b491ff; transform: translateY(-1px); }
+.ww-target.selected { border-color: #7a5bd6; background: #efe9ff; box-shadow: 0 0 0 2px #b491ff55; }
+.ww-target:disabled { opacity: .55; cursor: default; }
+.ww-target-avatar {
+    display: grid;
+    place-items: center;
+    width: 22px;
+    height: 22px;
+    overflow: hidden;
+    border-radius: 50%;
+    background: #565a86;
+    color: #fff;
+    font-size: 10px;
+    font-weight: 800;
+}
+.ww-target-avatar img { display: block; width: 100%; height: 100%; object-fit: cover; }
+.ww-target-name { max-width: 110px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ww-potion-row { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.ww-potion-row-label { flex: none; min-width: 130px; font-size: 12px; font-weight: 750; color: #4a3f70; }
+.ww-action {
+    min-height: 38px;
+    padding: 7px 12px;
+    border: 0;
+    border-radius: 8px;
+    color: #fff;
+    font: inherit;
+    font-size: 12px;
+    font-weight: 800;
+    cursor: pointer;
+}
+.ww-action.primary { background: #7a5bd6; }
+.ww-action.danger { background: #c34757; }
+.ww-action.secondary { background: #d9d2c2; color: #55503f; }
+.ww-action.small { flex: none; min-height: 32px; padding: 5px 10px; font-size: 11px; }
+.ww-action:hover:not(:disabled) { filter: brightness(1.08); }
+.ww-action:disabled { opacity: .5; cursor: default; }
+.ww-action:focus-visible { outline: 3px solid #b491ff; outline-offset: 2px; }
+
+/* 结算：胜利横幅 + 全员翻牌与净收益。 */
+.ww-result { display: flex; flex-direction: column; gap: 8px; margin-top: 12px; }
+.ww-result-banner { padding: 11px 14px; border-radius: 10px; font-size: 15px; font-weight: 850; }
+.ww-result.wolf-win .ww-result-banner { background: #a03046; color: #ffe2e7; }
+.ww-result.good-win .ww-result-banner { background: #1d6b4c; color: #d9ffe9; }
+.ww-payout-note { color: #9fa3c8; font-size: 11px; }
+.ww-result-list { display: grid; gap: 5px; }
+.ww-result-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto auto;
+    align-items: center;
+    gap: 8px;
+    padding: 7px 10px;
+    border-radius: 8px;
+    background: #ffffff0f;
+    font-size: 12px;
+}
+.ww-result-row.was-wolf .ww-result-name { color: #ffb3bd; }
+.ww-result-name { min-width: 0; overflow: hidden; font-weight: 750; text-overflow: ellipsis; white-space: nowrap; }
+.ww-result-net { font-weight: 800; font-variant-numeric: tabular-nums; }
+.ww-result-net.win { color: #8ee6b4; }
+.ww-result-net.lose { color: #ff9daa; }
+.ww-result-net.flat { color: #9fa3c8; }
+.ww-table .paused-overlay { position: absolute; z-index: 10; inset: 0; display: grid; place-items: center; border-radius: 18px; background: #101227d9; color: #e8e6ff; font-size: 20px; font-weight: 800; }
+
+@media (max-width: 1170px) {
+    .ww-arena { grid-template-columns: minmax(0, 1fr) 230px; }
+    .ww-seat-grid { grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); }
+    .ww-seat-stack { display: none; }
+}
+@media (min-width: 1024px) and (max-height: 800px) {
+    .ww-table { padding: 12px; }
+    .ww-phase { margin-bottom: 10px; padding: 7px 12px; font-size: 13px; }
+    .ww-seats { padding: 8px; }
+    .ww-seat-grid { gap: 6px; }
+    .ww-seat { padding: 6px 8px; grid-template-columns: 30px minmax(0, 1fr); }
+    .ww-seat .ww-avatar { width: 30px; height: 30px; }
+    .ww-history-list { max-height: 160px; }
+    .ww-dock { padding: 10px 12px; gap: 6px; }
+}
+@media (max-width: 1023px) {
+    .ww-arena { grid-template-columns: minmax(0, 1fr); }
+    .ww-side { flex-direction: row; }
+    .ww-role-card { flex: 1; }
+    .ww-history { flex: 1; }
+}
+@media (max-width: 680px) {
+    .ww-page { gap: 8px; padding: 8px; }
+    .ww-table { padding: 12px; }
+    .ww-topbar { flex-wrap: wrap; gap: 4px; }
+    .ww-topbar-title { font-size: 13px; }
+    .ww-topbar-rules { flex-basis: 100%; text-align: left; }
+    .ww-phase { margin-bottom: 8px; font-size: 12px; }
+    .ww-arena { gap: 8px; }
+    .ww-seats { padding: 8px; }
+    .ww-seat-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; }
+    .ww-seat { padding: 6px; }
+    .ww-seat-stack { display: none; }
+    .ww-side { flex-direction: column; }
+    .ww-history-list { max-height: 140px; }
+    .ww-dock { padding: 10px; }
+    .ww-dock.is-my-turn { order: -1; }
+    .ww-dock-head { flex-wrap: wrap; }
+    .ww-potion-row-label { min-width: 0; flex-basis: 100%; }
+}
+@media (prefers-reduced-motion: reduce) {
+    .ww-table { transition: none; }
+    .ww-seat, .ww-target { transition: none; }
+}

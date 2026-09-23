@@ -18,6 +18,8 @@ function draftFor(gameId) {
         wild: 1, bomb: 8, ace: 1, min_fan: 8, flowers: 1, chow: 1, dianpao: 1,
         launch: 6, extra_roll: 1, jump4: 1, fly12: 1, payout: "champion",
         chambers: 6, cards: 5, max_play: 3, jokers: "wild", respin: 0,
+        win_mode: "bian", witch_self_save: "first", last_words: "first",
+        tie: "revote", reveal_role: 1, guard_continuous: 0, board_text: "",
       },
     });
   }
@@ -65,6 +67,39 @@ function labeledSelect(label, ariaLabel, choices, value, onChange) {
   return field(label, select);
 }
 
+function labeledText(label, ariaLabel, value, placeholder, onChange) {
+  const input = document.createElement("input");
+  input.className = "login-input";
+  input.type = "text";
+  input.setAttribute("aria-label", ariaLabel);
+  input.value = value || "";
+  input.placeholder = placeholder;
+  input.addEventListener("input", () => onChange(input.value));
+  return field(label, input);
+}
+
+/* 自定义板子文本 → 角色键数组；留空返回 null（按人数自动配板）。 */
+const WEREWOLF_ROLE_ALIASES = {
+  "狼": "werewolf", "狼人": "werewolf",
+  "民": "villager", "平民": "villager",
+  "预": "seer", "预言家": "seer",
+  "女": "witch", "女巫": "witch",
+  "猎": "hunter", "猎人": "hunter",
+  "守": "guard", "守卫": "guard",
+};
+
+function parseWerewolfBoard(text) {
+  const parts = String(text || "").split(/[，,、\s]+/).map((p) => p.trim()).filter(Boolean);
+  if (!parts.length) return null;
+  const board = [];
+  for (const part of parts) {
+    const key = WEREWOLF_ROLE_ALIASES[part];
+    if (!key) return null;
+    board.push(key);
+  }
+  return board;
+}
+
 function createRules(game, draft, details) {
   const rules = document.createElement("div");
   rules.className = "create-rules-grid";
@@ -102,6 +137,18 @@ function createRules(game, draft, details) {
       labeledSelect("小丑牌", "小丑牌", [["wild", "加入 2 张小丑（百搭，翻牌永远算真话）"], ["none", "不加小丑（纯 K/Q/A）"]], draft.rules.jokers, save("jokers", false)),
       labeledSelect("金币结算", "金币结算", [["champion", "冠军通吃（每家付一份底注）"], ["rank", "按出局顺序递增（越早出局付越多）"]], draft.rules.payout, save("payout", false)),
     );
+  } else if (game.id === "werewolf") {
+    rules.append(
+      labeledSelect("胜负规则", "胜负规则", [["bian", "屠边局（神职或平民全灭即狼胜，经典）"], ["cheng", "屠城局（好人全灭才狼胜）"]], draft.rules.win_mode, save("win_mode", false)),
+      labeledSelect("女巫自救", "女巫自救", [["first", "仅首夜可自救（经典）"], ["always", "始终可自救"], ["never", "不可自救"]], draft.rules.witch_self_save, save("witch_self_save", false)),
+      labeledSelect("遗言规则", "遗言规则", [["first", "首夜死者与被放逐者有遗言"], ["all", "所有死者都有遗言"], ["none", "无遗言"]], draft.rules.last_words, save("last_words", false)),
+      labeledSelect("平票处理", "平票处理", [["revote", "平票后在候选人中重投一轮"], ["no_exile", "平票直接无人出局"]], draft.rules.tie, save("tie", false)),
+      labeledSelect("出局翻牌", "出局翻牌", [[1, "公示出局者身份（休闲）"], [0, "不公示，猜到终局（竞技）"]], draft.rules.reveal_role, save("reveal_role")),
+      labeledSelect("守卫连守", "守卫连守", [[0, "不能连守同一人（经典）"], [1, "可以连守同一人"]], draft.rules.guard_continuous, save("guard_continuous")),
+      labeledText("自定义板子", "自定义板子", draft.rules.board_text,
+        "留空按人数自动；如：狼,狼,预言家,女巫,猎人,民,民,民",
+        (value) => save("board_text", false)(value)),
+    );
   } else {
     const text = document.createElement("p");
     text.className = "create-rules-note";
@@ -115,6 +162,7 @@ function createRules(game, draft, details) {
 
 function createDescription(game) {
   if (game.id === "mahjong") return "国标麻将需 4 人开局。自摸三家各付一份，点炮按所选计法赔付；花牌每张 1 分计入总番。荒庄不计分且庄家连庄。";
+  if (game.id === "werewolf") return "狼人杀 4–12 人开局，6/8/9/10/12 人自动配板。夜晚按守卫→狼人→女巫→预言家行动，白天讨论后投票放逐；输方各付一份底注，胜方全体均分。";
   if (game.id === "guandan") return "掼蛋需 4 人开局，隔位玩家自动组队。各自从 2 打到 A，头游方获胜升级；线上暂不支持进贡还贡。";
   if (game.id === "uno") return "UNO 至少 2 人开局。一手结束后，赢家按各家剩余牌数乘以底注收注，离桌时按筹码自动结算。";
   if (game.id === "ludo") return "飞行棋 2–4 人开局，按加入顺序执红黄蓝绿。先送 4 架飞机到家者夺冠，其余按到达进度排名；超终点的点数从终点反弹，落点敌机全部撞回机场。";
@@ -140,7 +188,9 @@ function updateCreateSummary() {
         ? `掷${draft.rules.launch === 5 ? "5或6" : "6"}起飞 · ${draft.rules.extra_roll ? "掷6连投" : "不连投"} · 跳格${draft.rules.jump4 ? "开" : "关"} · 飞行${draft.rules.fly12 ? "开" : "关"} · ${draft.rules.payout === "rank" ? "按名次结算" : "冠军通吃"}`
         : game.id === "liarsbar"
           ? `${draft.rules.chambers} 弹巢${draft.rules.respin ? "重转" : "递增"} · ${draft.rules.cards} 张手牌 · 至多出 ${draft.rules.max_play} 张 · ${draft.rules.jokers === "wild" ? "小丑百搭" : "无小丑"} · ${draft.rules.payout === "rank" ? "按出局结算" : "冠军通吃"}`
-          : game.id === "holdem" ? "无限注德州扑克" : "UNO 经典规则";
+          : game.id === "werewolf"
+            ? `${draft.rules.win_mode === "cheng" ? "屠城局" : "屠边局"} · 女巫${draft.rules.witch_self_save === "always" ? "始终可自救" : draft.rules.witch_self_save === "never" ? "不可自救" : "仅首夜可自救"} · ${draft.rules.last_words === "none" ? "无遗言" : draft.rules.last_words === "all" ? "全遗言" : "首夜遗言"} · ${draft.rules.tie === "no_exile" ? "平票流局" : "平票重投"} · ${Number(draft.rules.reveal_role) ? "出局翻牌" : "身份隐藏"}${draft.rules.board_text.trim() ? " · 自定义板子" : " · 自动配板"}`
+            : game.id === "holdem" ? "无限注德州扑克" : "UNO 经典规则";
   summary.querySelector(".create-summary-rules").textContent = ruleSummary;
   buyin.min = String(min);
   const amount = Number(buyin.value);
@@ -298,6 +348,23 @@ function renderCreate() {
       respin: Boolean(Number(draft.rules.respin)),
       payout: draft.rules.payout === "rank" ? "rank" : "champion",
     };
+    if (game.id === "werewolf") {
+      payload.rules = {
+        win_mode: draft.rules.win_mode === "cheng" ? "cheng" : "bian",
+        witch_self_save: ["always", "never"].includes(draft.rules.witch_self_save)
+          ? draft.rules.witch_self_save : "first",
+        last_words: ["all", "none"].includes(draft.rules.last_words)
+          ? draft.rules.last_words : "first",
+        tie: draft.rules.tie === "no_exile" ? "no_exile" : "revote",
+        reveal_role: Boolean(Number(draft.rules.reveal_role)),
+        guard_continuous: Boolean(Number(draft.rules.guard_continuous)),
+      };
+      const board = parseWerewolfBoard(draft.rules.board_text);
+      if (board) payload.rules.board = board;
+      else if (draft.rules.board_text.trim()) {
+        createError = "自定义板子无法识别，可用角色：狼/狼人、民/平民、预/预言家、女/女巫、猎/猎人、守/守卫。";
+      }
+    }
     createError = "";
     if (send(payload)) {
       createPending = true;
