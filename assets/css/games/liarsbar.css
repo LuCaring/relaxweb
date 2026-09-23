@@ -1,341 +1,347 @@
-/* =========================================================
-   骗子酒馆牌桌：复用德扑的 .poker-table/.seat/.action-bar 骨架，
-   这里只补骗子酒馆自己的卡牌、桌面牌、决斗展示与枪械标记。
-========================================================= */
-
-/* ---- 骗子酒馆卡牌：只分 K/Q/A/小丑，无花色 ---- */
-
-.liar-card {
-    display: inline-flex;
-
+/* 骗子酒馆专属布局：桌面宣称与暗牌在主舞台，玩家枪械和存活状态在侧列。 */
+.liar-page {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    min-width: 0;
+    padding: 12px;
+    background: #f4f0ed;
+}
+.liar-table {
+    position: relative;
+    min-width: 0;
+    padding: 18px;
+    border: 1px solid #62413d;
+    border-radius: 18px;
+    background: radial-gradient(ellipse at 42% 20%, #50302f, #2c1e27 65%, #211924);
+    box-shadow: 0 12px 30px #291a242b, inset 0 0 0 2px #ffffff0b;
+    color: #f8eee8;
+}
+.liar-topbar {
+    display: flex;
     align-items: center;
-    justify-content: center;
-
-    width: 44px;
-    height: 60px;
-
-    border-radius: 8px;
-
-    background: linear-gradient(160deg, #23262e, #15171c);
-
-    box-shadow: 0 3px 9px rgba(0, 0, 0, .35);
-
-    color: #f5f5f7;
-    font-size: 22px;
-    font-weight: 800;
-
-    animation: deal-in .28s ease both;
-
-    user-select: none;
+    justify-content: space-between;
+    gap: 14px;
+    min-width: 0;
+    margin-bottom: 12px;
 }
-
-.liar-card.c-K {
-    color: #ffd60a;
+.liar-topbar-title { flex: none; color: #f7e5bf; font-size: 15px; font-weight: 800; }
+.liar-topbar-rules {
+    min-width: 0;
+    overflow: hidden;
+    color: #ccb9b1;
+    font-size: 11px;
+    text-align: right;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
-
-.liar-card.c-Q {
-    color: #ff9f0a;
+.liar-phase {
+    margin-bottom: 14px;
+    padding: 9px 12px;
+    border: 1px solid #e5b7665c;
+    border-left: 4px solid #e5b766;
+    border-radius: 9px;
+    background: #e5b76615;
+    color: #ffe3aa;
+    font-size: 14px;
+    font-weight: 750;
 }
-
-.liar-card.c-A {
-    color: #64d2ff;
+.liar-arena {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) clamp(240px, 29%, 320px);
+    gap: 14px;
+    min-width: 0;
 }
-
-.liar-card.c-R {
-    color: #ff375f;
-    font-size: 20px;
-}
-
-.liar-card.back {
-    color: rgba(255, 255, 255, .45);
-
-    background:
-        repeating-linear-gradient(
-            45deg,
-            #2a2d35,
-            #2a2d35 5px,
-            #21242b 5px,
-            #21242b 10px
-        );
-
-    font-size: 16px;
-}
-
-.liar-card.big {
-    width: 54px;
-    height: 74px;
-
-    border-radius: 10px;
-
-    font-size: 27px;
-}
-
-/* 我的手牌：可选卡牌高亮选择态 */
-
-.liar-hand .liar-card.clickable {
-    cursor: pointer;
-
-    transition: transform .12s ease, box-shadow .12s ease;
-}
-
-.liar-hand .liar-card.clickable:hover {
-    transform: translateY(-5px);
-}
-
-.liar-hand .liar-card.selected {
-    transform: translateY(-10px);
-
-    box-shadow:
-        0 0 0 3px #ffd60a,
-        0 8px 16px rgba(0, 0, 0, .4);
-}
-
-/* ---- 中央：桌面牌宣称 ---- */
-
 .liar-center {
-    display: flex;
-    flex-direction: column;
-
-    align-items: center;
-
-    gap: 10px;
-
-    min-height: 118px;
-
-    margin: 6px 0 14px;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px;
+    min-width: 0;
+    min-height: 360px;
+    padding: 16px;
+    border: 1px solid #a885634d;
+    border-radius: 16px;
+    background: radial-gradient(ellipse at center, #31524b, #1d3836 72%, #192c30);
+    box-shadow: inset 0 0 0 4px #102a2a52, inset 0 12px 28px #071e1e55;
 }
-
-.liar-claim {
-    display: flex;
-    flex-direction: column;
-
-    align-items: center;
-
-    gap: 6px;
-}
-
-.liar-claim-label {
-    color: rgba(255, 255, 255, .8);
-
-    font-size: 12px;
-    font-weight: 700;
-}
-
-.liar-claim .liar-card.claim {
-    width: 64px;
-    height: 88px;
-
-    border-radius: 12px;
-
-    font-size: 34px;
-
-    box-shadow:
-        0 0 0 3px rgba(255, 214, 10, .8),
-        0 8px 20px rgba(0, 0, 0, .4);
-}
-
+.liar-claim,
 .liar-last {
     display: flex;
     flex-direction: column;
-
     align-items: center;
-
-    gap: 5px;
+    justify-content: center;
+    gap: 10px;
+    min-width: 0;
+    padding: 14px 10px;
+    border: 1px solid #ffffff29;
+    border-radius: 13px;
+    background: #0b292a4d;
+    text-align: center;
 }
+.liar-claim-label,
+.liar-last-label { color: #bfd4cc; font-size: 12px; font-weight: 700; letter-spacing: .08em; }
+.liar-claim strong { color: #ffdf9b; font-size: 18px; }
+.liar-claim-rule,
+.liar-last-note { max-width: 210px; color: #b8cec6; font-size: 11px; line-height: 1.5; }
+.liar-last-text { max-width: 230px; color: #f6ebe5; font-size: 13px; font-weight: 700; line-height: 1.5; }
+.liar-backs { display: flex; justify-content: center; gap: 6px; min-height: 60px; }
+.liar-backs .liar-card { width: 40px; height: 56px; font-size: 19px; }
 
-.liar-backs {
-    display: flex;
-
-    gap: 5px;
+/* 游戏只用 K/Q/A/小丑；卡牌选中态和键盘焦点保持一致。 */
+.liar-card {
+    display: inline-grid;
+    flex: none;
+    place-items: center;
+    width: 44px;
+    height: 60px;
+    border: 2px solid #dcbe86;
+    border-radius: 9px;
+    background: linear-gradient(145deg, #31303a, #171820);
+    box-shadow: 0 5px 12px #0006, inset 0 0 0 2px #ffffff13;
+    color: #f6eee5;
+    font-size: 23px;
+    font-weight: 850;
+    user-select: none;
 }
-
-.liar-backs .liar-card {
-    width: 30px;
-    height: 42px;
-
-    border-radius: 5px;
-
-    font-size: 13px;
+.liar-card.c-K { color: #ffdc7c; }
+.liar-card.c-Q { color: #ffab80; }
+.liar-card.c-A { color: #8cd6ed; }
+.liar-card.c-R { color: #ff7293; }
+.liar-card.back {
+    border-color: #a2b5a8;
+    background: repeating-linear-gradient(45deg, #263d3c, #263d3c 5px, #1a302f 5px, #1a302f 10px);
+    color: #d6e3dc;
 }
-
-.liar-last-text {
-    color: rgba(255, 255, 255, .82);
-
-    font-size: 12px;
-    font-weight: 650;
+.liar-card.big { width: 60px; height: 82px; font-size: 31px; }
+.liar-claim .liar-card.claim {
+    width: 92px;
+    height: 126px;
+    border-color: #f0c674;
+    box-shadow: 0 0 0 4px #f0c67438, 0 12px 24px #0006;
+    font-size: 48px;
 }
+.liar-hand .liar-card.clickable { cursor: pointer; transition: transform .14s, box-shadow .14s; }
+.liar-hand .liar-card.clickable:hover { transform: translateY(-5px); }
+.liar-hand .liar-card.selected,
+.liar-hand .liar-card.selected:hover { transform: translateY(-9px); box-shadow: 0 0 0 3px #cc8732, 0 10px 22px #0005; }
+.liar-hand .liar-card.clickable:focus-visible { outline: 3px solid #bb643e; outline-offset: 4px; }
 
-/* ---- 决斗展示 ---- */
-
+/* 翻牌决斗占据舞台，展示判定、实际牌和开枪结果。 */
 .liar-duel {
     display: flex;
+    grid-column: 1 / -1;
     flex-direction: column;
-
     align-items: center;
-
-    gap: 9px;
-
-    width: fit-content;
-
-    padding: 14px 22px;
-
+    justify-content: center;
+    gap: 13px;
+    min-width: 0;
+    padding: 16px;
+    border: 1px solid #d6b48775;
     border-radius: 14px;
-
-    background: rgba(0, 0, 0, .35);
-
-    box-shadow: inset 0 0 0 1.5px rgba(255, 255, 255, .16);
-
+    background: #122a2bbd;
+    text-align: center;
     animation: liar-duel-in .22s ease-out;
 }
+.liar-duel.fatal { border-color: #e06b74; background: #382b32d9; }
+@keyframes liar-duel-in { from { opacity: 0; transform: scale(.96); } to { opacity: 1; transform: none; } }
+.liar-duel-head { color: #fff4df; font-size: 20px; font-weight: 850; }
+.liar-duel-table,
+.liar-duel-odds { color: #b9d3c9; font-size: 12px; }
+.liar-duel-cards { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 8px; }
+.liar-duel-cards .liar-card { width: 52px; height: 72px; font-size: 26px; }
+.liar-verdict { padding: 8px 12px; border-radius: 8px; color: #fff; font-size: 13px; font-weight: 850; }
+.liar-verdict.truth { background: #187753; }
+.liar-verdict.lie { background: #a8314b; }
+.liar-shot { padding: 10px 16px; border-radius: 9px; font-size: 16px; font-weight: 800; }
+.liar-shot.blank { background: #1a684f; color: #dbffec; }
+.liar-shot.fatal { background: #893245; color: #fff2ef; }
 
-.liar-duel.fatal {
-    box-shadow: inset 0 0 0 1.5px rgba(255, 69, 58, .65);
-}
-
-@keyframes liar-duel-in {
-    from {
-        opacity: 0;
-
-        transform: scale(.9);
-    }
-
-    to {
-        opacity: 1;
-
-        transform: none;
-    }
-}
-
-.liar-duel-head {
-    color: #fff;
-
-    font-size: 15px;
-    font-weight: 800;
-}
-
-.liar-duel-cards {
-    display: flex;
-
-    align-items: center;
-
-    gap: 7px;
-}
-
-.liar-duel-cards .liar-card {
-    width: 40px;
-    height: 55px;
-
-    font-size: 20px;
-}
-
-.liar-verdict {
-    padding: 4px 10px;
-
-    border-radius: 999px;
-
-    font-size: 12px;
-    font-weight: 800;
-}
-
-.liar-verdict.truth {
-    background: #1a9e45;
-
-    color: #fff;
-}
-
-.liar-verdict.lie {
-    background: #c02a4a;
-
-    color: #fff;
-}
-
-.liar-duel-note {
-    color: rgba(255, 255, 255, .65);
-
-    font-size: 11.5px;
-}
-
-.liar-shot {
-    color: #ffe9a8;
-
-    font-size: 13.5px;
-    font-weight: 750;
-
-    text-align: center;
-}
-
-.liar-shot.blank {
-    color: #9be7bb;
-}
-
-.liar-shot.fatal {
-    color: #ff6482;
-}
-
-/* ---- 座位：左轮标记与出局状态 ---- */
-
-.liar-seat .liar-gun {
-    padding: 1px 7px;
-
-    border-radius: 999px;
-
-    background: #2c2f36;
-
-    color: #e5e5ea;
-
-    font-size: 10.5px;
-    font-weight: 750;
-
-    font-variant-numeric: tabular-nums;
-}
-
-.liar-seat .liar-gun.warm {
-    background: #7a4a12;
-
-    color: #ffd60a;
-}
-
-.liar-seat .liar-gun.hot {
-    background: #8e1e35;
-
-    color: #fff;
-}
-
-.liar-seat .liar-target {
-    color: #ffd60a;
-
-    font-size: 11px;
-}
-
-/* ---- 操作区 ---- */
-
-.liar-play-hint {
-    align-self: center;
-
-    color: rgba(255, 255, 255, .68);
-
-    font-size: 11.5px;
-}
-
-/* ---- 结算回顾 ---- */
-
-.liar-result {
-    margin-top: 12px;
-
+/* 右侧名单：存活、最近出牌、枪械概率一眼可见。 */
+.liar-seats {
     display: flex;
     flex-direction: column;
-
     gap: 6px;
+    min-width: 0;
+    padding: 10px;
+    border: 1px solid #ffffff25;
+    border-radius: 14px;
+    background: #120f16a1;
 }
-
-.liar-win-row {
-    font-size: 13.5px;
+.liar-seats-head { margin: 1px 4px 4px; color: #e4d3c3; font-size: 12px; font-weight: 750; }
+.liar-seat {
+    position: relative;
+    display: grid;
+    grid-template-columns: 34px minmax(0, 1fr);
+    grid-template-rows: auto auto;
+    column-gap: 8px;
+    min-width: 0;
+    padding: 7px 8px;
+    border: 1px solid #ffffff1e;
+    border-radius: 9px;
+    background: #ffffff0d;
+    color: #f8eee8;
 }
+.liar-seat.active { border-color: #e5b766; background: #e5b76629; box-shadow: inset 0 0 0 1px #e5b76666; }
+.liar-seat.target { border-color: #e0806b; }
+.liar-seat.eliminated { opacity: .55; }
+.liar-seat .liar-avatar {
+    grid-row: 1 / 3;
+    display: grid;
+    place-items: center;
+    width: 34px;
+    height: 34px;
+    overflow: hidden;
+    border-radius: 50%;
+    background: #875343;
+    color: #fff;
+    font-size: 14px;
+    font-weight: 800;
+}
+.liar-avatar img { display: block; width: 100%; height: 100%; object-fit: cover; }
+.liar-seat-identity { display: flex; align-items: center; justify-content: space-between; gap: 6px; min-width: 0; }
+.liar-seat-name { overflow: hidden; font-size: 12px; font-weight: 750; text-overflow: ellipsis; white-space: nowrap; }
+.liar-seat-status { flex: none; color: #bdd8c8; font-size: 10px; }
+.liar-seat.active .liar-seat-status { color: #ffe0a0; }
+.liar-seat.target .liar-seat-status { color: #ffb6a3; }
+.liar-seat.eliminated .liar-seat-status { color: #f1a0a0; }
+.liar-seat-detail { display: flex; flex-wrap: wrap; align-items: center; gap: 5px; min-width: 0; color: #c9bcb4; font-size: 10px; }
+.liar-gun { padding: 1px 5px; border-radius: 5px; background: #406250; color: #e8ffed; font-variant-numeric: tabular-nums; }
+.liar-gun.warm { background: #785329; color: #ffe3a5; }
+.liar-gun.hot { background: #8e3743; color: #ffe5e5; }
+.liar-seat-stack { margin-left: auto; color: #e3b97c; font-variant-numeric: tabular-nums; }
+.liar-history { display: flex; gap: 10px; min-width: 0; margin-top: 12px; padding: 8px 10px; border-radius: 8px; background: #ffffff0c; font-size: 11px; }
+.liar-history span:first-child { flex: none; color: #e3bf81; font-weight: 750; }
+.liar-history span:last-child { overflow: hidden; color: #dfd2ca; text-overflow: ellipsis; white-space: nowrap; }
+.liar-table .paused-overlay { position: absolute; z-index: 10; inset: 0; display: grid; place-items: center; border-radius: 18px; background: #17131bd9; color: #fff1d3; font-size: 20px; font-weight: 800; }
 
-.liar-payout-note {
-    color: rgba(255, 255, 255, .75);
+/* 手牌与出牌/质疑决策使用独立操作区，不再套用德扑坞的网格。 */
+.liar-dock {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    gap: 10px 16px;
+    min-width: 0;
+    padding: 14px 16px;
+    border: 1px solid #d9c8b8;
+    border-radius: 16px;
+    background: #fffaf2;
+    box-shadow: 0 8px 22px #35252114;
+    color: #3b2928;
+}
+.liar-dock.is-my-turn { border-color: #c59a53; box-shadow: 0 0 0 2px #d7aa6130, 0 8px 22px #35252114; }
+.liar-dock.is-reveal .liar-decision { grid-column: 1 / -1; }
+.liar-dock-head { display: flex; grid-column: 1 / -1; align-items: center; gap: 10px; min-width: 0; }
+.liar-dock-title { min-width: 0; overflow: hidden; font-size: 14px; font-weight: 800; text-overflow: ellipsis; white-space: nowrap; }
+.liar-my-gun { margin-left: auto; padding: 4px 8px; border-radius: 7px; background: #f2e4d2; color: #7d4336; font-size: 11px; font-weight: 750; white-space: nowrap; }
+.liar-dock .dock-chat-toggle { flex: none; background: #eee2d4; color: #5b392f; }
+.liar-hand-area { min-width: 0; padding: 10px; border: 1px solid #e5d8c9; border-radius: 11px; background: #f8f0e5; }
+.liar-hand-info { margin-bottom: 10px; color: #7b6258; font-size: 12px; font-weight: 700; }
+.liar-hand { display: flex; align-items: center; gap: 8px; min-width: 0; min-height: 92px; padding: 9px 3px 2px; overflow-x: auto; overflow-y: hidden; }
+.liar-hand-empty { color: #847169; font-size: 12px; }
+.liar-decision { display: flex; flex-direction: column; gap: 8px; min-width: 0; padding: 10px; border-radius: 11px; background: #3a2731; color: #fff2e8; }
+.liar-decision-title { font-size: 13px; font-weight: 800; }
+.liar-decision-waiting { color: #dac8ce; font-size: 12px; line-height: 1.5; }
+.liar-decision .countdown { flex: none; height: 4px; margin: 0; background: #ffffff30; }
+.liar-decision .countdown-fill { background: #e5b766; }
+.liar-actions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; min-width: 0; }
+.liar-choice { display: flex; flex-direction: column; gap: 5px; min-width: 0; padding: 8px; border: 1px solid #ffffff25; border-radius: 8px; background: #ffffff0a; }
+.liar-choice:only-child { grid-column: 1 / -1; }
+.liar-choice-label { color: #f5d9b7; font-size: 11px; font-weight: 700; }
+.liar-choice-note { color: #dac8ce; font-size: 10px; line-height: 1.35; }
+.liar-action { width: 100%; min-height: 42px; padding: 7px 9px; border: 0; border-radius: 7px; color: #fff; font: inherit; font-size: 12px; font-weight: 800; cursor: pointer; }
+.liar-action.danger { background: #b84653; }
+.liar-action.primary { background: #e5b766; color: #482d19; }
+.liar-action:hover:not(:disabled) { filter: brightness(1.1); }
+.liar-action:disabled { opacity: .52; cursor: default; }
+.liar-action:focus-visible { outline: 3px solid #ffdc8a; outline-offset: 3px; }
 
-    font-size: 11.5px;
+.liar-result { display: flex; flex-direction: column; gap: 8px; margin-top: 12px; color: #334155; }
+.liar-result-summary { display: flex; align-items: center; justify-content: space-between; gap: 12px; font-size: 13px; font-weight: 750; }
+.liar-result-summary > span:first-child { min-width: 0; overflow-wrap: anywhere; }
+.liar-result-gain { flex: none; color: #178356; font-variant-numeric: tabular-nums; }
+.liar-payout-note { color: #687785; font-size: 11px; }
+.liar-ranking { display: grid; gap: 5px; }
+.liar-ranking-row { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; align-items: center; gap: 8px; padding: 7px 9px; border-radius: 7px; background: #f2f5f6; font-size: 11px; }
+.liar-ranking-row.champion { background: #fff2d5; }
+.liar-ranking-name { min-width: 0; overflow: hidden; font-weight: 750; text-overflow: ellipsis; white-space: nowrap; }
+.liar-ranking-detail { color: #687785; white-space: nowrap; }
+.liar-ranking-net { font-weight: 750; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.liar-ranking-net.win { color: #178356; }
+.liar-ranking-net.lose { color: #c3454c; }
+.liar-ranking-net.flat { color: #687785; }
+.liar-table > .liar-result { color: #fff5ec; }
+.liar-table > .liar-result .liar-payout-note { color: #dfcfc6; }
+.liar-table > .liar-result .liar-ranking-row { background: #ffffff16; }
+.liar-table > .liar-result .liar-ranking-row.champion { background: #e5b76638; }
+.liar-table > .liar-result .liar-ranking-detail { color: #dfcfc6; }
 
-    text-align: center;
+@media (max-width: 1170px) {
+    .liar-arena { grid-template-columns: minmax(0, 1fr) 220px; }
+    .liar-seat-detail { gap: 3px; }
+    .liar-seat-stack { display: none; }
+}
+@media (min-width: 1024px) and (max-height: 800px) {
+    .liar-center { min-height: 235px; padding: 10px; }
+    .liar-claim, .liar-last { gap: 5px; padding: 8px; }
+    .liar-claim .liar-card.claim { width: 76px; height: 102px; font-size: 40px; }
+    .liar-seats { gap: 4px; padding: 7px; }
+    .liar-seats-head { margin: 0 2px; }
+    .liar-seat { padding: 5px 7px; grid-template-columns: 28px minmax(0, 1fr); }
+    .liar-seat .liar-avatar { width: 28px; height: 28px; }
+    .liar-dock { gap: 6px 10px; padding: 10px 12px; }
+    .liar-hand-area { padding: 7px; }
+    .liar-hand { min-height: 70px; padding: 3px; }
+    .liar-hand .liar-card.big { width: 50px; height: 68px; font-size: 26px; }
+    .liar-decision { gap: 5px; padding: 8px; }
+    .liar-choice { padding: 5px; }
+}
+@media (max-width: 1023px) {
+    .liar-page { padding: 10px; }
+    .liar-center { min-height: 340px; }
+    .liar-dock { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+    .liar-actions { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 680px) {
+    .liar-page { gap: 8px; padding: 8px; }
+    .liar-table { padding: 12px; }
+    .liar-topbar { flex-wrap: wrap; gap: 4px; }
+    .liar-topbar-title { font-size: 13px; }
+    .liar-topbar-rules { flex-basis: 100%; text-align: left; }
+    .liar-phase { margin-bottom: 8px; font-size: 12px; }
+    .liar-arena { grid-template-columns: minmax(0, 1fr); gap: 8px; }
+    .liar-center { min-height: 230px; padding: 8px; gap: 7px; }
+    .liar-claim, .liar-last { gap: 5px; padding: 8px 4px; }
+    .liar-claim .liar-card.claim { width: 65px; height: 88px; font-size: 36px; }
+    .liar-claim strong { font-size: 14px; }
+    .liar-claim-rule, .liar-last-note { font-size: 10px; }
+    .liar-last-text { font-size: 11px; }
+    .liar-backs .liar-card { width: 32px; height: 44px; }
+    .liar-seats { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; padding: 8px; }
+    .liar-seats-head { grid-column: 1 / -1; margin: 0; }
+    .liar-seat { padding: 6px; }
+    .liar-seat-identity { display: block; }
+    .liar-seat-status { font-size: 9px; }
+    .liar-seat-detail { font-size: 9px; }
+    .liar-seat-stack { display: none; }
+    .liar-history { margin-top: 8px; }
+    .liar-dock { grid-template-columns: minmax(0, 1fr); gap: 8px; padding: 10px; }
+    .liar-dock.is-my-turn { order: -1; }
+    .liar-dock-head { flex-wrap: wrap; }
+    .liar-hand { min-height: 75px; }
+    .liar-hand .liar-card.big { width: 48px; height: 66px; font-size: 25px; }
+    .liar-actions { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .liar-choice { padding: 6px; }
+    .liar-action { min-height: 40px; }
+    .liar-duel { padding: 12px 6px; gap: 8px; }
+    .liar-duel-head { font-size: 14px; }
+    .liar-duel-cards .liar-card { width: 38px; height: 53px; font-size: 20px; }
+    .liar-shot { font-size: 12px; }
+}
+@media (max-width: 360px) {
+    .liar-seat { grid-template-columns: 28px minmax(0, 1fr); }
+    .liar-seat .liar-avatar { width: 28px; height: 28px; }
+    .liar-gun { padding-inline: 3px; }
+    .liar-choice-note { font-size: 9px; }
+}
+@media (prefers-reduced-motion: reduce) {
+    .liar-duel, .liar-hand .liar-card.clickable { animation: none; transition: none; }
 }

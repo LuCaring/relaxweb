@@ -113,7 +113,7 @@ function applySeatBubble(username) {
   node.dataset.username = username;
   // Seat transforms create stacking contexts. Render above those contexts so
   // neighboring avatars cannot paint over a wider message.
-  const table = seat.closest(".casual-page, .uno-table, .poker-table, .waiting-table") || seat;
+  const table = seat.closest(".casual-page, .uno-table, .poker-table, .liar-table, .waiting-table") || seat;
   table.append(node);
   bubble.node = node;
   positionSeatBubble(node, seat, table);
