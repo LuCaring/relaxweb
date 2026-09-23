@@ -72,9 +72,12 @@ class PreviewStartup(unittest.TestCase):
         old.wait(timeout=3)
         self.assertIn('已停止旧预览进程', output)
         self.assertIn('size=390x844', url)
+        process = psutil.Process(new.pid)
+        connections = (process.net_connections(kind='tcp') if hasattr(process, 'net_connections')
+                       else process.connections(kind='tcp'))
         self.assertTrue(any(connection.status == psutil.CONN_LISTEN and
                             connection.laddr.ip == '0.0.0.0' and connection.laddr.port == port
-                            for connection in psutil.Process(new.pid).net_connections(kind='tcp')),
+                            for connection in connections),
                         '--lan listens on all IPv4 interfaces')
         with urllib.request.urlopen(f'http://127.0.0.1:{port}/__preview/fixtures') as response:
             self.assertEqual(set(json.load(response)),
