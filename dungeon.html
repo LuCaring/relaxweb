@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>地下城</title>
+<link rel="stylesheet" href="assets/css/dialog.css?v=30">
+<link rel="stylesheet" href="assets/css/dungeon.css?v=1">
+<!--LIVE_CONFIG-->
+</head>
+<body class="dgn-body">
+<div id="dgnApp" class="dgn-app">
+  <header class="dgn-topbar">
+    <a class="dgn-brand" href="#/prep">⛰️ 地下城</a>
+    <span id="dgnConn" class="dgn-conn dgn-conn-off">连接中…</span>
+    <span class="dgn-spacer"></span>
+    <span id="dgnCoins" class="dgn-coins" hidden>💰 <b id="dgnCoinsValue">0</b></span>
+    <span id="dgnUser" class="dgn-user" hidden></span>
+    <button id="dgnLogout" class="dgn-btn dgn-btn-ghost dgn-btn-small" hidden>退出</button>
+  </header>
+
+  <section id="dgnLogin" class="dgn-login" hidden>
+    <h1>登录地下城</h1>
+    <form id="dgnLoginForm">
+      <label>用户名
+        <input id="dgnUsername" autocomplete="username" required>
+      </label>
+      <label>密码
+        <input id="dgnPassword" type="password" autocomplete="current-password" required>
+      </label>
+      <button class="dgn-btn dgn-btn-primary" type="submit">登录</button>
+      <p id="dgnLoginError" class="dgn-error"></p>
+      <p class="dgn-hint">使用直播间账号登录；没有账号请先到首页注册。</p>
+    </form>
+  </section>
+
+  <main id="dgnView" class="dgn-view" hidden></main>
+  <div id="dgnToast" class="dgn-toast" hidden></div>
+</div>
+<script type="module" src="assets/js/dungeon/main.js?v=1"></script>
+</body>
+</html>

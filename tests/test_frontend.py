@@ -34,6 +34,7 @@ EXTERNAL_GLOBALS = {
     "setTimeout", "setInterval", "clearTimeout", "clearInterval",
     "requestAnimationFrame", "cancelAnimationFrame",
     "matchMedia", "addEventListener", "removeEventListener",
+    "dispatchEvent",
     "AudioContext", "webkitAudioContext",
 }
 

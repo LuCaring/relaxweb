@@ -1,0 +1,194 @@
+/* 地下城独立样式：统一 dgn- 前缀，不依赖庄园样式；桌面与 390px 手机两套布局。 */
+
+:root {
+  --dgn-bg: #14161c;
+  --dgn-panel: #1d2029;
+  --dgn-panel-2: #242833;
+  --dgn-line: #333949;
+  --dgn-text: #e8eaf0;
+  --dgn-dim: #9aa1b2;
+  --dgn-accent: #7c8cff;
+  --dgn-accent-strong: #5f6ffb;
+  --dgn-danger: #e5604c;
+  --dgn-warn: #e2a13c;
+  --dgn-ok: #4fc57f;
+}
+
+* { box-sizing: border-box; }
+
+body.dgn-body {
+  margin: 0;
+  background: var(--dgn-bg);
+  color: var(--dgn-text);
+  font: 15px/1.6 system-ui, "PingFang SC", "Microsoft YaHei", sans-serif;
+}
+
+.dgn-app { max-width: 860px; margin: 0 auto; padding: 0 14px 40px; }
+
+/* ---------- 顶栏 ---------- */
+.dgn-topbar {
+  display: flex; align-items: center; gap: 10px;
+  padding: 12px 0; border-bottom: 1px solid var(--dgn-line);
+}
+.dgn-brand { font-weight: 700; font-size: 17px; color: var(--dgn-text); text-decoration: none; }
+.dgn-spacer { flex: 1; }
+.dgn-conn { font-size: 12px; color: var(--dgn-ok); }
+.dgn-conn-off { color: var(--dgn-warn); }
+.dgn-coins { background: var(--dgn-panel); border: 1px solid var(--dgn-line);
+  border-radius: 999px; padding: 3px 12px; font-size: 14px; }
+.dgn-user { color: var(--dgn-dim); font-size: 13px; }
+
+/* ---------- 通用 ---------- */
+.dgn-card {
+  background: var(--dgn-panel); border: 1px solid var(--dgn-line);
+  border-radius: 12px; padding: 14px 16px; margin-top: 14px;
+}
+.dgn-card h2, .dgn-card h3 { margin: 0 0 10px; font-size: 16px; }
+.dgn-meta { margin: 4px 0; font-size: 13px; color: var(--dgn-dim); }
+.dgn-dim { color: var(--dgn-dim); }
+.dgn-loading { padding: 40px 0; text-align: center; color: var(--dgn-dim); }
+
+.dgn-btn {
+  background: var(--dgn-panel-2); color: var(--dgn-text);
+  border: 1px solid var(--dgn-line); border-radius: 8px;
+  padding: 7px 14px; font-size: 14px; cursor: pointer;
+}
+.dgn-btn:hover:not(:disabled) { border-color: var(--dgn-accent); }
+.dgn-btn:disabled { opacity: 0.45; cursor: not-allowed; }
+.dgn-btn-primary { background: var(--dgn-accent-strong); border-color: var(--dgn-accent-strong); }
+.dgn-btn-danger { background: transparent; border-color: var(--dgn-danger); color: var(--dgn-danger); }
+.dgn-btn-small { padding: 4px 10px; font-size: 12px; }
+.dgn-btn-ghost { background: transparent; }
+
+.dgn-banner {
+  display: flex; align-items: center; gap: 10px; justify-content: space-between;
+  background: var(--dgn-panel-2); border: 1px solid var(--dgn-accent);
+  border-radius: 10px; padding: 10px 14px; margin-top: 14px; font-size: 14px;
+}
+.dgn-banner-warn { border-color: var(--dgn-warn); }
+
+.dgn-tag {
+  display: inline-block; border: 1px solid var(--dgn-line); border-radius: 999px;
+  padding: 1px 10px; font-size: 12px; color: var(--dgn-dim); white-space: nowrap;
+}
+.dgn-quality-excellent { color: var(--dgn-ok); border-color: var(--dgn-ok); }
+.dgn-quality-rare { color: var(--dgn-accent); border-color: var(--dgn-accent); }
+.dgn-quality-epic { color: #c77cff; border-color: #c77cff; }
+.dgn-tag-pending { color: var(--dgn-warn); border-color: var(--dgn-warn); }
+
+/* ---------- 登录 ---------- */
+.dgn-login {
+  max-width: 340px; margin: 60px auto; background: var(--dgn-panel);
+  border: 1px solid var(--dgn-line); border-radius: 14px; padding: 24px;
+}
+.dgn-login h1 { font-size: 18px; margin: 0 0 16px; }
+.dgn-login label { display: block; font-size: 13px; color: var(--dgn-dim); margin-bottom: 12px; }
+.dgn-login input {
+  width: 100%; margin-top: 4px; padding: 9px 10px; font-size: 15px;
+  background: var(--dgn-bg); color: var(--dgn-text);
+  border: 1px solid var(--dgn-line); border-radius: 8px;
+}
+.dgn-login .dgn-btn { width: 100%; margin-top: 4px; }
+.dgn-error { color: var(--dgn-danger); font-size: 13px; min-height: 1.4em; margin: 8px 0 0; }
+.dgn-hint { color: var(--dgn-dim); font-size: 12px; }
+
+/* ---------- 准备页 ---------- */
+.dgn-stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.dgn-stat {
+  background: var(--dgn-panel-2); border-radius: 8px; padding: 8px 10px;
+  display: flex; justify-content: space-between; font-size: 13px;
+}
+.dgn-stat-label { color: var(--dgn-dim); }
+
+.dgn-challenge { display: flex; gap: 12px; align-items: center; margin-top: 10px; }
+.dgn-challenge-visual { flex: none; }
+.dgn-challenge-info { flex: 1; min-width: 0; }
+.dgn-challenge-info h3 { margin: 0; font-size: 15px; }
+.dgn-challenge-action { flex: none; }
+
+/* ---------- 装备页 ---------- */
+.dgn-loadout-layout { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+.dgn-loadout-layout .dgn-card { margin-top: 0; }
+.dgn-slot-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.dgn-slot h5 { margin: 0 0 6px; font-size: 12px; color: var(--dgn-dim); text-transform: uppercase; }
+.dgn-slot-empty {
+  border: 1px dashed var(--dgn-line); border-radius: 10px;
+  padding: 18px; text-align: center; color: var(--dgn-dim); font-size: 13px;
+}
+.dgn-slot .dgn-item { margin: 0; }
+
+.dgn-item { margin-top: 10px; }
+.dgn-item-head { display: flex; align-items: center; gap: 8px; }
+.dgn-item-name { margin: 0; font-size: 14px; flex: 1; }
+.dgn-item-visual { flex: none; display: inline-flex; }
+.dgn-item-actions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+
+.dgn-pending { background: var(--dgn-panel-2); border-radius: 10px; padding: 10px 12px; margin-bottom: 10px; }
+.dgn-bag-list { display: grid; grid-template-columns: 1fr; gap: 2px; }
+
+.dgn-compare { width: 100%; border-collapse: collapse; font-size: 13px; }
+.dgn-compare td { padding: 4px 6px; border-bottom: 1px solid var(--dgn-line); }
+.dgn-delta-up { color: var(--dgn-ok); }
+.dgn-delta-down { color: var(--dgn-danger); }
+
+/* ---------- 战斗页 ---------- */
+.dgn-battle-head { display: flex; align-items: center; gap: 10px; margin-top: 16px; }
+.dgn-battle-head h2 { margin: 0; font-size: 18px; flex: 1; }
+.dgn-battle-enemy { text-align: right; }
+.dgn-bars { display: grid; gap: 10px; margin-top: 14px; }
+.dgn-hp-head { display: flex; justify-content: space-between; font-size: 13px; margin-bottom: 4px; }
+.dgn-hp-numbers { color: var(--dgn-dim); font-variant-numeric: tabular-nums; }
+.dgn-hp-track {
+  height: 14px; background: var(--dgn-panel-2);
+  border: 1px solid var(--dgn-line); border-radius: 999px; overflow: hidden;
+}
+.dgn-hp-fill { height: 100%; width: 100%; background: var(--dgn-ok); transition: width 0.25s; }
+.dgn-hp-low .dgn-hp-fill { background: var(--dgn-danger); }
+
+.dgn-log {
+  margin-top: 14px; height: 220px; overflow-y: auto;
+  background: var(--dgn-panel); border: 1px solid var(--dgn-line); border-radius: 10px;
+  padding: 10px 12px; font-size: 13px;
+}
+.dgn-log-line { padding: 1px 0; color: var(--dgn-dim); }
+.dgn-log-start { color: var(--dgn-text); font-weight: 600; }
+.dgn-log-crit { color: var(--dgn-warn); }
+.dgn-log-death { color: var(--dgn-danger); }
+.dgn-log-phase { color: #c77cff; }
+.dgn-log-end { color: var(--dgn-text); font-weight: 600; margin-top: 4px; }
+
+.dgn-controls { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; }
+
+/* ---------- 结算页 ---------- */
+.dgn-outcome { margin: 24px 0 4px; font-size: 26px; }
+.dgn-outcome-victory { color: var(--dgn-ok); }
+.dgn-outcome-defeat, .dgn-outcome-error { color: var(--dgn-danger); }
+.dgn-result-summary { text-align: center; padding: 22px; }
+.dgn-result-coins { font-size: 22px; font-weight: 700; margin: 0 0 6px; }
+.dgn-result-items { list-style: none; margin: 0; padding: 0; }
+.dgn-result-item {
+  display: flex; align-items: center; gap: 10px;
+  padding: 8px 0; border-bottom: 1px solid var(--dgn-line);
+}
+.dgn-result-item > div { flex: 1; display: flex; flex-direction: column; }
+
+/* ---------- 轻提示 ---------- */
+.dgn-toast {
+  position: fixed; left: 50%; bottom: 32px; transform: translateX(-50%);
+  background: var(--dgn-panel-2); border: 1px solid var(--dgn-accent);
+  color: var(--dgn-text); border-radius: 10px; padding: 9px 16px;
+  font-size: 14px; z-index: 60; max-width: 90vw;
+}
+.dgn-toast-warn { border-color: var(--dgn-warn); }
+
+/* ---------- 手机 390px ---------- */
+@media (max-width: 480px) {
+  .dgn-stats { grid-template-columns: repeat(2, 1fr); }
+  .dgn-loadout-layout { grid-template-columns: 1fr; }
+  .dgn-challenge { flex-wrap: wrap; }
+  .dgn-challenge-action { width: 100%; }
+  .dgn-challenge-action .dgn-btn { width: 100%; }
+  .dgn-controls .dgn-btn { flex: 1 1 40%; }
+  .dgn-log { height: 180px; }
+  .dgn-toast { bottom: 20px; }
+}
