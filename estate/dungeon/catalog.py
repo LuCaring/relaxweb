@@ -107,6 +107,32 @@ def validate_catalog(catalog):
             if enemy.get("type") not in ("normal", "elite", "boss"):
                 raise DungeonConfigError("敌人类型无效")
             validate_base_stats(enemy["stats"])
+            phases = enemy.get("phases", [])
+            if not isinstance(phases, list):
+                raise DungeonConfigError("首领阶段必须为列表")
+            if enemy["type"] != "boss":
+                if phases:
+                    raise DungeonConfigError("普通敌人不能配置首领阶段")
+                continue
+            if not phases or any(not isinstance(phase, dict) for phase in phases) or phases[0].get("threshold_bp") != 10_000:
+                raise DungeonConfigError("首领必须以完整生命阶段开始")
+            _unique(phases, "phase_id")
+            previous = 10_001
+            for index, phase in enumerate(phases):
+                if set(phase) != {"phase_id", "threshold_bp", "atk_bp", "speed_bp", "extra_attack_bp"}:
+                    raise DungeonConfigError("首领阶段字段无效")
+                values = [phase[key] for key in ("threshold_bp", "atk_bp", "speed_bp", "extra_attack_bp")]
+                if any(isinstance(value, bool) or not isinstance(value, int) for value in values):
+                    raise DungeonConfigError("首领阶段数值无效")
+                if not 0 < phase["threshold_bp"] < previous:
+                    raise DungeonConfigError("首领阈值必须严格降序")
+                if not 0 < phase["atk_bp"] <= 100_000 or not 0 < phase["speed_bp"] <= 100_000:
+                    raise DungeonConfigError("首领属性修正无效")
+                if phase["extra_attack_bp"] < 0 or phase["extra_attack_bp"] > 100_000:
+                    raise DungeonConfigError("首领追加攻击倍率无效")
+                if index == 0 and phase["extra_attack_bp"]:
+                    raise DungeonConfigError("开场阶段不能追加攻击")
+                previous = phase["threshold_bp"]
         if not catalog["challenges"]:
             raise DungeonConfigError("至少配置一个挑战")
         for challenge in catalog["challenges"]:
