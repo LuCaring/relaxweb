@@ -117,13 +117,59 @@ const python = process.env.PYTHON || path.join(root, '.venv', 'bin', 'python');
     await page.locator('#scene').selectOption('normal');
     frame = await table('ludo');
     assert.equal(await frame.locator('.ludo-plane').count(), 16);
+    assert.equal(await frame.locator('.ludo-progress-card').count(), 4);
+    assert.equal(await frame.locator('.ludo-progress-plane').count(), 16);
+    assert.deepEqual(await frame.locator('.ludo-progress-count').allTextContents(),
+      fixtureViews.ludo.normal.players.map(player => `到达 ${player.finished}/4`));
+    assert.match(await frame.locator('.ludo-status').innerText(), /选择飞机/);
+    assert.match(await frame.locator('.ludo-last').innerText(), /掷出 6 点/);
+    assert.equal(await frame.locator('.ludo-side .ludo-btn.primary').count(), 0);
+    assert.ok(await frame.locator('.ludo-table').evaluate(table => {
+      const board = table.querySelector('.ludo-board').getBoundingClientRect();
+      const progress = table.querySelector('.ludo-progress').getBoundingClientRect();
+      const side = table.querySelector('.ludo-side').getBoundingClientRect();
+      return progress.top > board.bottom && side.left > board.right
+        && side.bottom >= progress.bottom - 1;
+    }), 'desktop layout uses the area below the board for live progress');
     await frame.locator('.ludo-plane.can-move').first().click();
     await page.locator('#feedback').filter({hasText: '"action":"move"'}).waitFor();
+    await frame.locator('body').evaluate(async () => {
+      const core = await import('/assets/js/core.js');
+      core.handleServerMessage({...core.state.myRoom, type: 'game_update',
+        awaiting_move: false, dice: null, your_options: {roll: true, plane: []}});
+    });
+    assert.match(await frame.locator('.ludo-status').innerText(), /掷骰/);
+    assert.equal(await frame.locator('.ludo-plane.can-move').count(), 0);
+    await frame.locator('.ludo-side .ludo-btn.primary').click();
+    await page.locator('#feedback').filter({hasText: '"action":"roll"'}).waitFor();
     await page.locator('#game').selectOption('liarsbar');
     frame = await table('liarsbar');
     assert.equal(await frame.locator('.liar-hand .liar-card').count(), 5);
+    assert.equal(await frame.locator('.liar-seat').count(), 4);
+    assert.equal(await frame.locator('.liar-backs .liar-card').count(), 2);
+    assert.ok(await frame.locator('.liar-page').evaluate(page => {
+      const stage = page.querySelector('.liar-center').getBoundingClientRect();
+      const players = page.querySelector('.liar-seats').getBoundingClientRect();
+      const table = page.querySelector('.liar-table').getBoundingClientRect();
+      const dock = page.querySelector('.liar-dock').getBoundingClientRect();
+      return players.left > stage.right && dock.top > table.bottom;
+    }), 'desktop liar layout separates the stage, players and decisions');
+    assert.match(await frame.locator('.liar-phase').innerText(), /轮到你/);
+    assert.match(await frame.locator('.liar-claim').innerText(), /K 国王/);
+    assert.equal(await frame.locator('.liar-action.primary').isDisabled(), true);
+    await frame.locator('.liar-hand .liar-card.clickable').first().click();
+    assert.equal(await frame.locator('.liar-hand .liar-card.selected').count(), 1);
+    assert.equal(await frame.locator('.liar-action.primary').isEnabled(), true);
+    assert.match(await frame.locator('.liar-action.primary').innerText(), /打出 1 张/);
     await frame.locator('.liar-actions .danger').click();
     await page.locator('#feedback').filter({hasText: '"action":"challenge"'}).waitFor();
+    await page.locator('#scene').selectOption('dense');
+    frame = await table('liarsbar');
+    assert.match(await frame.locator('.liar-phase').innerText(), /质疑已揭晓/);
+    assert.match(await frame.locator('.liar-duel').innerText(), /空弹/);
+    assert.equal(await frame.locator('.liar-actions').count(), 0);
+    assert.equal(await frame.locator('.liar-hand .liar-card').count(), 0);
+    assert.match(await frame.locator('.liar-dock.is-reveal').innerText(), /准备下一轮/);
     // Enabling spectating from a waiting room selects a playable sample.
     await page.locator('#game').selectOption('uno');
     await table('uno');
