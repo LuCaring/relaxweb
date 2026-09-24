@@ -9,6 +9,7 @@ export const PET_SLEEP_SPRITE = "assets/estate/pets/doudou-sleep-sheet.png";
 export const BUILDING_ASSETS = {
   shop: "assets/estate/buildings/seed-shop.png",
   generalStore: "assets/estate/buildings/store.png",
+  lotteryTent: "assets/estate/buildings/lottery-tent.png",
   warehouse: "assets/estate/buildings/warehouse.png",
   mining: "assets/estate/buildings/mine.png",
 };

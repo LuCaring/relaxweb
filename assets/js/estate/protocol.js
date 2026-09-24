@@ -19,6 +19,8 @@ const SOUND_CUES = {
   estate_mine_cell: "mine",
   estate_finish_mining: "mine",
   estate_buy: "shop",
+  estate_lottery_draw: "shop",
+  estate_use_land_upgrade_ticket: "shop",
   estate_buy_skin: "shop",
   estate_sell: "shop",
   estate_sell_all: "shop",

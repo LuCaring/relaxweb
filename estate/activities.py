@@ -12,7 +12,7 @@ from estate.catalog import (
     BAITS, FISH, FISHING_TREASURES, FISH_RARITY_WEIGHTS, MINERALS, MINING_LEVELS,
     TOOLS, CATCH_BOOST_PER_ROD_LEVEL, CATCH_RARITY_BASE, CATCH_TREASURE_BAIT_BONUS,
     CATCH_TREASURE_CHANCE, CATCH_TREASURE_RARITY_BASE, CATCH_TREASURE_ROD_BONUS,
-    FISHING_STEPS, FISHING_STEPS_PER_FRAME, FISHING_TIMEOUT_SECONDS,
+    FISHING_STEPS, FISHING_STEPS_PER_FRAME, FISHING_HOLD_STEPS, FISHING_TIMEOUT_SECONDS,
     FERTILIZER_ITEM, FERTILIZER_FISH_CHANCE, FERTILIZER_MINE_CHANCE,
     HOLD_PROGRESS_BASE, HOLD_PROGRESS_FORCE_SCALE, HOLD_PROGRESS_GAIN,
     HOLD_TENSION_FORCE_BASE, HOLD_TENSION_GAIN, MINE_BOARD_SIZE, MINE_CELLS,
@@ -180,6 +180,11 @@ def pick_fishing_catch(rng, bait, rod):
 
     公开接缝：测试替换本函数即可让鱼获确定，无需关心权重细节。
     """
+    bait_id = next((key for key, value in BAITS.items()
+                    if value["rarity_bonus"] == bait["rarity_bonus"]), "worm")
+    if rng.random() < FERTILIZER_FISH_CHANCE[bait_id]:
+        return "fertilizer", {"name": "化肥", "difficulty": 0,
+                              "rarity": 1, "xp": 0}
     rarity_cap = CATCH_RARITY_BASE + bait["rarity_bonus"] + rod["level"]
     treasures = [
         (key, value) for key, value in FISHING_TREASURES.items()
@@ -259,22 +264,11 @@ def simulate_fishing(trace, pattern, rod_level):
     if any(type(value) is not bool for value in trace):
         raise estate_error(INVALID_TRACE)
     tension, progress = TENSION_START, PROGRESS_START
-    factor = TOOLS["rod"][rod_level]["tension_factor"]
     peak = tension
     for index, held in enumerate(trace):
-        force = pattern[min(len(pattern) - 1, index // FISHING_STEPS_PER_FRAME)]
         if held:
-            tension += HOLD_TENSION_GAIN * (HOLD_TENSION_FORCE_BASE + force) * factor
-            progress += HOLD_PROGRESS_GAIN * (HOLD_PROGRESS_BASE - force * HOLD_PROGRESS_FORCE_SCALE)
-        else:
-            tension -= RELEASE_TENSION_DROP
-            progress -= RELEASE_PROGRESS_DROP * (RELEASE_PROGRESS_FORCE_BASE + force)
-        tension = max(0, tension)
-        progress = max(0, progress)
-        peak = max(peak, tension)
-        if tension >= TENSION_SNAPPED_AT:
-            return {"outcome": "snapped", "progress": progress, "peak_tension": peak}
-        if progress >= PROGRESS_CAUGHT_AT:
+            progress += (PROGRESS_CAUGHT_AT - PROGRESS_START) / FISHING_HOLD_STEPS[rod_level]
+        if progress >= PROGRESS_CAUGHT_AT - 1e-9:
             return {"outcome": "caught", "progress": 1, "peak_tension": peak}
     return {"outcome": "escaped", "progress": progress, "peak_tension": peak}
 
@@ -310,10 +304,13 @@ def finish_fishing(conn, username, request_id, session_id, trace, now):
                 payload["level"] = award_xp(conn, username, catch["xp"])
             else:
                 catch_id = row[0]
-                catch = FISH[catch_id]
-                item = fish_item(catch_id)
+                fertilizer = catch_id == "fertilizer"
+                catch = ({"name": "化肥", "rarity": 1, "difficulty": 0, "xp": 0}
+                         if fertilizer else FISH[catch_id])
+                item = FERTILIZER_ITEM if fertilizer else fish_item(catch_id)
                 daily = retain_daily_fish(conn, username, now)
-                payload.update({"catch_kind": "fish", "fish_id": catch_id,
+                payload.update({"catch_kind": "fertilizer" if fertilizer else "fish",
+                                "fish_id": catch_id,
                                 "released": not daily["retained"],
                                 "release_notice": daily["show_notice"],
                                 "daily_retained": daily["retained_count"],
@@ -326,12 +323,6 @@ def finish_fishing(conn, username, request_id, session_id, trace, now):
                             "quantity": 0 if payload.get("released") or payload.get("duplicate_collectible") else 1,
                             "xp_awarded": 0 if payload.get("released") else catch["xp"],
                             "rarity": catch["rarity"], "difficulty": catch["difficulty"]})
-            profile = load_profile(conn, username)
-            has_room = (inventory_used(conn, username) + profile["reserved_capacity"]
-                        <= capacity(profile))
-            if random.random() < FERTILIZER_FISH_CHANCE[row[6]] and has_room:
-                change_inventory(conn, username, FERTILIZER_ITEM, 1)
-                payload["fertilizer_found"] = 1
         conn.execute("UPDATE estate_profiles SET reserved_capacity=max(0,reserved_capacity-1) "
                      "WHERE username=?", (username,))
         conn.execute("UPDATE estate_fishing_sessions SET status='finished',result_json=? "
@@ -364,6 +355,10 @@ def make_board(seed, mine_level):
                             rule["bombs"])
     for index in bomb_cells:
         board[index] = "bomb"
+    if mine_level == 3:
+        for index, outcome in enumerate(board):
+            if outcome in MINERALS and rng.random() < FERTILIZER_MINE_CHANCE:
+                board[index] = "fertilizer"
     return board
 
 
@@ -462,15 +457,8 @@ def mine_cell(conn, username, request_id, run_id, cell, now):
             strikes = 0
         elif outcome == "extra":
             strikes += MINE_EXTRA_CELLS
-        elif outcome in MINERALS:
+        elif outcome in MINERALS or outcome == "fertilizer":
             loot[outcome] = loot.get(outcome, 0) + 1
-        profile = load_profile(conn, username)
-        bonus_room = (inventory_used(conn, username) + profile["reserved_capacity"]
-                      + loot.get("fertilizer", 0) + 1 <= capacity(profile))
-        fertilizer_found = (row[5] == 3 and bonus_room
-                            and random.random() < FERTILIZER_MINE_CHANCE)
-        if fertilizer_found:
-            loot["fertilizer"] = loot.get("fertilizer", 0) + 1
         conn.execute(
             "UPDATE estate_mining_runs SET revealed_json=?,loot_json=?,strikes_left=? WHERE run_id=?",
             (json.dumps(revealed), json.dumps(loot), strikes, run_id),
@@ -479,8 +467,6 @@ def mine_cell(conn, username, request_id, run_id, cell, now):
                    "outcome": outcome, "strikes_left": strikes, "loot": loot,
                    "revealed": revealed, "finished": exploded or strikes <= 0,
                    "exploded": exploded}
-        if fertilizer_found:
-            payload["fertilizer_found"] = 1
         if payload["finished"]:
             payload["result"] = _finish_run(
                 conn, username, run_id, loot, "bomb" if exploded else "exhausted")

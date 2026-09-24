@@ -3,7 +3,7 @@
 import { estateRequest } from "./protocol.js";
 import { estateStore } from "./state.js";
 import { FERTILIZER_ASSET, catchAsset, drawAsset, toolAsset } from "./assets.js";
-import { rodFactor, tensionStep } from "./rules.js";
+import { tensionStep } from "./rules.js";
 import { alertDialog } from "../dialog.js";
 
 /** 张力条转警示色的阈值：纯客户端表现，不参与结算。 */
@@ -12,15 +12,14 @@ const DANGER_TENSION = .78;
 export function openFishingGame(root, session, options = {}) {
   const catalog = estateStore.snapshot?.catalog;
   const rules = catalog?.fishing_rules;
-  const factor = rodFactor(catalog, session.rod_level);
+  const factor = session.rod_level;
   const layer = document.createElement("div");
   layer.className = "estate-minigame fishing-game";
   layer.innerHTML = `
     <canvas aria-label="静谧湖钓鱼"></canvas>
-    <div class="minigame-title"><b>静谧湖钓场</b><span>按住收线 · 松开卸力</span></div>
+    <div class="minigame-title"><b>静谧湖钓场</b><span>按住收线，松开暂停</span></div>
     <div class="fishing-meters">
       <label>捕获进度<i><span data-catch></span></i></label>
-      <label>鱼线张力<i class="tension"><span data-tension></span></i></label>
     </div>
     <button class="fishing-reel" type="button">按住<br><b>收线</b></button>
     <button class="minigame-exit" type="button">放弃本次</button>
@@ -36,7 +35,6 @@ export function openFishingGame(root, session, options = {}) {
   const ctx = canvas.getContext("2d");
   const reel = layer.querySelector(".fishing-reel");
   const catchBar = layer.querySelector("[data-catch]");
-  const tensionBar = layer.querySelector("[data-tension]");
   const trace = [];
   let held = false; let tension = rules.tension_start; let progress = rules.progress_start;
   let accumulator = 0; let last = performance.now(); let frame = 0; let finished = false;
@@ -69,8 +67,6 @@ export function openFishingGame(root, session, options = {}) {
     const next = tensionStep(rules, { tension, progress, held, force, factor });
     tension = next.tension; progress = next.progress;
     catchBar.style.width = `${Math.min(100, progress * 100)}%`;
-    tensionBar.style.width = `${Math.min(100, tension * 100)}%`;
-    tensionBar.dataset.danger = String(tension > DANGER_TENSION);
     if (next.outcome || trace.length >= session.duration_limit * rules.steps_per_frame) void finish();
   }
   function showCatch(result) {
@@ -82,28 +78,24 @@ export function openFishingGame(root, session, options = {}) {
     card.dataset.rarity = String(rarity); card.classList.toggle("is-caught", caught); card.classList.toggle("is-collectible", collectible);
     card.querySelector(".fishing-catch-rarity").textContent = caught
       ? `${"★".repeat(Math.min(5, rarity))}${rarity > 5 ? ` · 稀有度 ${rarity}` : ""}` : "再接再厉";
-    const asset = caught ? catchAsset(result.catch_kind,
-      collectible ? result.collectible_id : result.fish_id) : null;
+    const fertilizer = result.catch_kind === "fertilizer";
+    const asset = caught ? (fertilizer ? FERTILIZER_ASSET : catchAsset(result.catch_kind,
+      collectible ? result.collectible_id : result.fish_id)) : null;
     card.classList.remove("has-catch-asset"); art.removeAttribute("src");
     if (asset) {
       art.onload = () => card.classList.add("has-catch-asset");
       art.onerror = () => { art.removeAttribute("src"); };
       art.src = asset;
     }
-    card.querySelector(".fishing-catch-portrait > b").textContent = collectible ? "🎁" : caught ? "🐟" : "🌊";
+    card.querySelector(".fishing-catch-portrait > b").textContent = collectible ? "🎁" : fertilizer ? "🧪" : caught ? "🐟" : "🌊";
     card.querySelector("h2").textContent = caught ? (result.catch_name || result.fish_name) : result.outcome === "snapped" ? "鱼线断了" : "鱼儿逃走了";
     card.querySelector("p").textContent = result.released
-      ? "今日普通鱼获保留额度已用完，本次渔获已放归静谧湖。收集品获取不受影响。"
+      ? "今日渔获保留额度已用完，本次收获已放归。收集品获取不受影响。"
       : result.duplicate_collectible
       ? `重复收藏品，仓库中已保留 1 件 · 获得 ${result.xp_awarded} 经验`
       : caught
       ? `已放入仓库 · 获得 ${result.xp_awarded} 经验`
       : "鱼饵和耐久已经消耗，控制张力后再试一次。";
-    if (result.fertilizer_found) {
-      const icon = document.createElement("img");
-      icon.className = "fishing-fertilizer-icon"; icon.alt = ""; icon.src = FERTILIZER_ASSET;
-      card.querySelector("p").append(" ", icon, "额外获得化肥 ×1！");
-    }
     card.hidden = false;
   }
   async function finish() {
@@ -116,8 +108,8 @@ export function openFishingGame(root, session, options = {}) {
       showCatch(result);
       if (result.release_notice && !result.replayed && !result.session_replayed) {
         void alertDialog(
-          `依据静谧湖生态资源保护规定，每位玩家每日仅可保留前 ${result.daily_limit} 条普通鱼获。`
-          + "今日保留额度已用完，本次及今日后续钓获的普通鱼将放归湖中；收集品获取不受影响。感谢您共同维护水域生态。",
+          `依据静谧湖生态资源保护规定，每位玩家每日仅可保留前 ${result.daily_limit} 次普通渔获（含化肥）。`
+          + "今日保留额度已用完，本次及今日后续的普通渔获将放归；收集品获取不受影响。感谢您共同维护水域生态。",
           { title: "静谧湖生态保护提示" },
         );
       }

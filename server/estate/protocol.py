@@ -13,6 +13,7 @@ from estate import (
     buy_tool as estate_buy_tool,
     buy_or_upgrade_pet as estate_buy_or_upgrade_pet,
     estate_state,
+    draw_lottery as estate_draw_lottery,
     fertilize as estate_fertilize,
     finish_fishing as estate_finish_fishing,
     finish_mining as estate_finish_mining,
@@ -27,6 +28,7 @@ from estate import (
     start_fishing as estate_start_fishing,
     start_mining as estate_start_mining,
     upgrade_tool as estate_upgrade_tool,
+    use_land_upgrade_ticket as estate_use_land_upgrade_ticket,
     list_estates as estate_list_estates,
     mark_notifications_read as estate_mark_notifications_read,
     notifications as estate_notifications,
@@ -51,6 +53,8 @@ class EstateProtocol:
             "estate_set_skin": self.handle_estate_set_skin,
             "estate_buy_skin": self.handle_estate_buy_skin,
             "estate_buy": self.handle_estate_buy,
+            "estate_lottery_draw": self.handle_estate_lottery_draw,
+            "estate_use_land_upgrade_ticket": self.handle_estate_use_land_upgrade_ticket,
             "estate_plant": self.handle_estate_plant,
             "estate_harvest": self.handle_estate_harvest,
             "estate_fertilize": self.handle_estate_fertilize,
@@ -255,6 +259,11 @@ class EstateProtocol:
                         data.get("item_id"), data.get("quantity", 1), now,
                         adjust_coins,
                     )
+                elif action == "lottery_draw":
+                    result = estate_draw_lottery(conn, username, request_id, now, adjust_coins)
+                elif action == "use_land_upgrade_ticket":
+                    result = estate_use_land_upgrade_ticket(
+                        conn, username, request_id, data.get("plot_id"), now)
                 elif action == "plant":
                     result = estate_plant(
                         conn, username, request_id, data.get("plot_id"),
@@ -351,6 +360,12 @@ class EstateProtocol:
 
     async def handle_estate_buy(self, websocket, state, data):
         await self.handle_estate_action(websocket, state, data, "buy")
+
+    async def handle_estate_lottery_draw(self, websocket, state, data):
+        await self.handle_estate_action(websocket, state, data, "lottery_draw")
+
+    async def handle_estate_use_land_upgrade_ticket(self, websocket, state, data):
+        await self.handle_estate_action(websocket, state, data, "use_land_upgrade_ticket")
 
     async def handle_estate_plant(self, websocket, state, data):
         await self.handle_estate_action(websocket, state, data, "plant")

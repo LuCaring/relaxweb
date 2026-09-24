@@ -68,7 +68,6 @@ export function openMiningGame(root, run) {
         loot = result.loot || {}; revealCell(cell, result.outcome);
         layer.querySelector("[data-strikes]").textContent = result.strikes_left;
         renderLoot(lootLine, loot, "这块是空洞");
-        if (result.fertilizer_found) lootLine.append(" · 获得化肥！");
         if (result.exploded) {
           layer.classList.add("mine-explosion");
           layer.querySelector(".mine-blast").hidden = false;

@@ -1,6 +1,11 @@
 {
   "crops": [
     {
+      "id": "legendary_flower",
+      "name": "传说花",
+      "atlas_indexes": []
+    },
+    {
       "id": "wheat",
       "name": "小麦",
       "atlas_indexes": [

@@ -7,6 +7,7 @@ import { cropAsset, cropStage, inventoryAsset, toolAsset } from "./assets.js";
 import { catalogEntry, formatDuration, repairCost, reservedSlots } from "./rules.js";
 import { estateCommand, estateRequest, pendingEstateAction, requestEstateOnlineUsers } from "./protocol.js";
 import { estateNow, estateStore } from "./state.js";
+import { renderLotteryGame } from "./lottery.js";
 
 /**
  * 面板按钮。`disabled` 由内部与 pending 状态合并，调用方不必再写 `||=`。
@@ -56,6 +57,7 @@ function note(text) {
 }
 
 function inventoryFallback(item) {
+  if (item.id === "supply:land_upgrade_ticket") return "🎟️";
   return catalogEntry({ seed: "🌱", crop: "🌾", bait: "🪱", fish: "🐟",
     collectible: "🎁", mineral: "◆", supply: "🧪" }, item.kind) || "◆";
 }
@@ -70,9 +72,11 @@ export function createEstateUI(root, activities = {}) {
   const sheetBody = root.querySelector(".estate-sheet-body");
   const close = root.querySelector(".estate-sheet-close");
   let active = null;
+  let lotterySpinning = false;
   let timer = 0;
 
   function closeSheet() {
+    if (lotterySpinning) return;
     active = null; sheet.hidden = true; sheetBody.replaceChildren();
   }
   close.addEventListener("click", closeSheet);
@@ -98,7 +102,7 @@ export function createEstateUI(root, activities = {}) {
   function renderShop() {
     const snapshot = estateStore.snapshot; if (!snapshot) return;
     show("种子铺");
-    const crops = Object.values(snapshot.catalog.crops)
+    const crops = Object.values(snapshot.catalog.crops).filter((crop) => !crop.lottery_only)
       .sort((a, b) => a.unlock_level - b.unlock_level || a.name.localeCompare(b.name, "zh-CN"));
     const unlockedCount = crops.filter((crop) => snapshot.profile.level >= crop.unlock_level).length;
     sheetBody.append(note(
@@ -153,6 +157,12 @@ export function createEstateUI(root, activities = {}) {
     sheetBody.append(note("防守成功会保住作物，消耗对方一次偷菜机会，并把对方掉落的 1–1000 金币交给主人。"));
   }
 
+  function renderLottery() {
+    const snapshot = estateStore.snapshot; if (!snapshot) return;
+    show("抽奖马戏团");
+    renderLotteryGame(sheetBody, snapshot, (busy) => { lotterySpinning = busy; });
+  }
+
   function renderWarehouse() {
     const snapshot = estateStore.snapshot; if (!snapshot) return;
     show("仓库");
@@ -180,7 +190,7 @@ export function createEstateUI(root, activities = {}) {
     }
     const actions = document.createElement("div"); actions.className = "estate-sheet-actions";
     actions.append(button("一键出售全部产品", async () => {
-      if (await confirmDialog("种子和鱼饵会保留；作物、鱼、矿物及化肥会出售。", { title: "确认出售？" })) {
+      if (await confirmDialog("种子、鱼饵和化肥会保留；作物、鱼和矿物会出售。", { title: "确认出售？" })) {
         estateCommand("estate_sell_all");
       }
     }, { className: "estate-button estate-button-gold" }));
@@ -238,9 +248,9 @@ export function createEstateUI(root, activities = {}) {
     sheetBody.append(note(
       `湖中有 ${Object.keys(snapshot.catalog.fish).length} 种鱼类，`
       + `还有 ${Object.keys(snapshot.catalog.fishing_treasures || {}).length} 种神秘收藏物。`
-      + `每轮消耗1份鱼饵和1点耐久，失败也会消耗。按住收线，张力过高时松开卸力；`
-      + `钓获时蚯蚓鱼饵有5%、荧光虫饵有10%概率额外获得化肥。高级鱼竿与荧光虫饵能提高稀有鱼机会。今日已保留普通鱼获 ${daily.retained}/${daily.limit}；`
-      + `额度用完后普通鱼将自动放生，收集品获取不受影响。`));
+      + `每轮消耗1份鱼饵和1点耐久，失败也会消耗。按住收线，松开暂停；`
+      + `钓获时蚯蚓鱼饵有5%、荧光虫饵有10%概率钓到化肥，代替本次鱼获。高级鱼竿与荧光虫饵能提高稀有鱼机会。今日已保留鱼获 ${daily.retained}/${daily.limit}；`
+      + `额度用完后普通渔获（含化肥）将自动放归，收集品获取不受影响。`));
     const rod = toolPanel("rod", "🎣");
     if (snapshot.fishing_session) {
       sheetBody.append(button("继续未完成的钓鱼", () => {
@@ -284,7 +294,7 @@ export function createEstateUI(root, activities = {}) {
     show("矿洞");
     sheetBody.append(note(
       "每次下矿消耗一点矿镐耐久，空手或触雷也会消耗。越深奖励越好、炸弹越多；"
-      + "第三层每敲碎一格有1%概率额外获得化肥。触雷立即结束，已获得的矿物可以保留并结算经验。矿镐每天北京时间 0 点自动修满，"
+      + "第三层的普通矿格有1%概率变为化肥格。触雷立即结束，已获得的矿物可以保留并结算经验。矿镐每天北京时间 0 点自动修满，"
       + "每天还可主动修理一次。"));
     const pickaxe = toolPanel("pickaxe", "⛏️");
     if (snapshot.mining_run) {
@@ -406,6 +416,12 @@ export function createEstateUI(root, activities = {}) {
       sheetBody.append(card);
     });
     const landRule = catalogEntry(snapshot.catalog.land_levels, plot.land_level);
+    if (plot.land_level === 3) {
+      const tickets = snapshot.inventory.find((item) => item.id === snapshot.catalog.lottery.ticket_item)?.quantity || 0;
+      sheetBody.append(button(`使用4级农田升级券（库存${tickets}）`,
+        () => estateCommand("estate_use_land_upgrade_ticket", { plot_id: plot.index }),
+        { disabled: !tickets }));
+    }
     if (landRule?.upgrade_price != null) {
       sheetBody.append(button(`升级土地 · ${formatCoinsWhole(landRule.upgrade_price)}金币`,
         () => estateCommand("estate_buy", { kind: "land", item_id: plot.index, quantity: 1 }),
@@ -466,6 +482,7 @@ export function createEstateUI(root, activities = {}) {
   const PANELS = {
     shop: () => renderShop(),
     general_store: () => renderGeneralStore(),
+    lottery: () => renderLottery(),
     warehouse: () => renderWarehouse(),
     fishing: () => renderFishing(),
     mining: () => renderMining(),
@@ -491,7 +508,7 @@ export function createEstateUI(root, activities = {}) {
       : `${home.profile.warehouse_used}/${home.profile.warehouse_capacity}`;
     xpFill.style.width = snapshot.profile.xp_next
       ? `${Math.min(100, snapshot.profile.xp / snapshot.profile.xp_next * 100)}%` : "0%";
-    if (!sheet.hidden && active) {
+    if (!sheet.hidden && active && !(active.kind === "lottery" && lotterySpinning)) {
       PANELS[active.kind]?.(active.kind === "plot" ? activePlot() : undefined);
     }
   }

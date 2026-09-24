@@ -18,6 +18,7 @@ const BLOCKS = [
   { x: 24, y: 326, w: 230, h: 155 },
   { x: 680, y: 302, w: 280, h: 298 },
   { x: 982, y: 42, w: 266, h: 198 },
+  { x: 1020, y: 330, w: 200, h: 185 },
   { x: 0, y: 0, w: 1280, h: 18 },
 ];
 const PLOT_POSITIONS = [
@@ -31,6 +32,7 @@ const ZONES = [
   { kind: "fishing", label: "静谧湖钓场", x: 650, y: 430 },
   { kind: "mining", label: "矿洞", x: 140, y: 500 },
   { kind: "general_store", label: "商店", x: 1115, y: 266 },
+  { kind: "lottery", label: "抽奖马戏团", x: 1120, y: 540 },
 ];
 
 // 角色与交互参数：数值本身就是手感，集中命名便于调整。
@@ -93,6 +95,39 @@ function drawBuildingAsset(ctx, kind, box, label, signY, fallback) {
   ctx.restore();
 }
 
+function drawLotteryTent(ctx) {
+  ctx.save();
+  ctx.translate(1020, 330); ctx.scale(.8, 1); ctx.translate(-990, -340);
+  const x = 990; const y = 340;
+  pixelRect(ctx, x + 14, y + 168, 226, 12, "rgba(42,47,35,.28)");
+  pixelRect(ctx, x + 18, y + 84, 214, 82, "#87442e");
+  for (let stripe = 0; stripe < 7; stripe += 1) {
+    pixelRect(ctx, x + 23 + stripe * 30, y + 88, 30, 72,
+      stripe % 2 ? "#fff0c6" : "#c9473d");
+  }
+  ctx.fillStyle = "#96382f";
+  ctx.beginPath(); ctx.moveTo(x + 8, y + 93); ctx.lineTo(x + 125, y + 5);
+  ctx.lineTo(x + 242, y + 93); ctx.fill();
+  ctx.fillStyle = "#f5dba7";
+  for (const offset of [0, 2, 4]) {
+    ctx.beginPath(); ctx.moveTo(x + 9 + offset * 30, y + 93);
+    ctx.lineTo(x + 125, y + 6); ctx.lineTo(x + 39 + offset * 30, y + 93); ctx.fill();
+  }
+  pixelRect(ctx, x + 121, y - 4, 8, 20, "#e8b848");
+  pixelRect(ctx, x + 129, y - 3, 25, 14, "#e8b848");
+  pixelRect(ctx, x + 95, y + 112, 60, 52, "#4a252d");
+  pixelRect(ctx, x + 95, y + 112, 10, 52, "#cf5143");
+  pixelRect(ctx, x + 145, y + 112, 10, 52, "#cf5143");
+  for (let lamp = 0; lamp < 8; lamp += 1) {
+    pixelRect(ctx, x + 18 + lamp * 30, y + 87, 6, 6, "#ffe67d");
+  }
+  ctx.fillStyle = "#ffe7a9"; ctx.strokeStyle = "#63342d"; ctx.lineWidth = 3;
+  ctx.textAlign = "center"; ctx.font = 'bold 17px "Microsoft YaHei", sans-serif';
+  ctx.strokeText("抽奖马戏团", x + 125, y + 106);
+  ctx.fillText("抽奖马戏团", x + 125, y + 106);
+  ctx.restore();
+}
+
 function drawPathSurface(ctx, x, y, w, h, orientation) {
   pixelRect(ctx, x, y, w, h, "#b28b50");
   pixelRect(ctx, x + 3, y + 3, w - 6, h - 6, "#dbbd75");
@@ -118,6 +153,7 @@ function drawGround(ctx, tick) {
   drawPathSurface(ctx, 250, 450, 46, 92, "vertical");
   drawPathSurface(ctx, 618, 238, 500, 42, "horizontal");
   drawPathSurface(ctx, 1094, 218, 46, 62, "vertical");
+  drawPathSurface(ctx, 1094, 280, 46, 300, "vertical");
   drawWater(ctx, 690, 310, 270, 290, tick);
   for (let y = 316; y < 585; y += 30) {
     pixelRect(ctx, 678, y, 5, 17, "#5c9a49"); pixelRect(ctx, 684, y + 4, 3, 15, "#80b955");
@@ -257,6 +293,7 @@ export function createEstateMap(canvas, input, onInteract, onTarget, onMove = ()
       () => drawBuilding(ctx, 24, 326, 230, 155, "#776d66", "#4d4655", "矿洞", "#b9a7bd"));
     drawBuildingAsset(ctx, "generalStore", { x: 982, y: 42, width: 266, height: 198 }, "商店", 77,
       () => drawBuilding(ctx, 982, 42, 266, 198, "#d29b58", "#41613a", "商店"));
+    if (!drawAsset(ctx, BUILDING_ASSETS.lotteryTent, 1020, 330, 200, 185)) drawLotteryTent(ctx);
     drawFence(ctx, 302, 72, 316);
     drawFence(ctx, 302, 478, 316);
     drawEstateSign(ctx, estateStore.snapshot?.profile?.username);

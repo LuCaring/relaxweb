@@ -4,7 +4,7 @@
 每个操作经 ``store.run_action`` 保证幂等。
 """
 from estate.catalog import (
-    BAITS, CROPS, LAND_LEVELS, PLOT_UNLOCKS, WAREHOUSE_LEVELS,
+    BAITS, CROPS, FERTILIZER_ITEM, LAND_UPGRADE_TICKET, LAND_LEVELS, PLOT_UNLOCKS, WAREHOUSE_LEVELS,
     bait_item, crop_item, grow_seconds, item_info, seed_item,
 )
 from estate.store import (
@@ -53,6 +53,8 @@ def _buy_consumable(conn, username, profile, request_id, adjust_coins, kind, ite
     count = positive_int(quantity, maximum=999)
     if not entry:
         raise estate_error(spec["unknown"])
+    if entry.get("lottery_only"):
+        raise estate_error(("lottery_only", "传说花种子只能通过抽奖获得"))
     _ensure_level(profile, entry)
     require_capacity(conn, username, profile, count)
     total = round(entry[spec["price_key"]] * count, 2)
@@ -126,6 +128,28 @@ def buy(conn, username, request_id, item_kind, item_id, quantity, now, adjust_co
         raise estate_error(("unknown_purchase", "未知购买项目"))
 
     return run_action(conn, username, request_id, "buy", payload, now, mutate)
+
+
+def use_land_upgrade_ticket(conn, username, request_id, plot_id, now):
+    index = plot_index(plot_id)
+
+    def mutate():
+        profile = load_profile(conn, username)
+        if index >= profile["plot_count"]:
+            raise estate_error(PLOT_LOCKED)
+        row = _plot_row(conn, username, index)
+        if row[1] is not None:
+            raise estate_error(("plot_busy", "请在农田空置时使用升级券"))
+        if row[0] != 3:
+            raise estate_error(("ticket_level", "升级券只能用于3级农田"))
+        change_inventory(conn, username, LAND_UPGRADE_TICKET, -1)
+        conn.execute("UPDATE estate_plots SET land_level=4 WHERE username=? AND plot_index=?",
+                     (username, index))
+        return {"action": "use_land_upgrade_ticket", "plot_id": index,
+                "land_level": 4, "ticket_item": LAND_UPGRADE_TICKET}
+
+    return run_action(conn, username, request_id, "use_land_upgrade_ticket",
+                      {"plot_id": index}, now, mutate)
 
 
 def plant(conn, username, request_id, plot_id, crop_id, now):
@@ -218,7 +242,7 @@ def sell_all(conn, username, request_id, now, adjust_coins):
         total = 0.0
         for item_id, quantity in inventory_rows(conn, username):
             info = item_info(item_id)
-            if not info or not info["sellable"]:
+            if item_id == FERTILIZER_ITEM or not info or not info["sellable"]:
                 continue
             amount = round(info["sell_price"] * quantity, 2)
             sold.append({"item_id": item_id, "quantity": quantity, "earned": amount})

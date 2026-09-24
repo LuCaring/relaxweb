@@ -40,8 +40,9 @@ for _skin_id, _skin in SKINS.items():
 # 这些数值同时被服务端结算、客户端表现和经济模拟使用，集中在此命名，
 # 避免同一个数字在多个模块里各写一遍。改动需同步 docs/estate-economy.md。
 
-FISHING_STEPS = 36              # 每局收线操作数，同时是下发给客户端的操作上限
+FISHING_STEPS = 10              # 挣扎曲线采样数，每个采样点持续十次操作
 FISHING_STEPS_PER_FRAME = 10    # 每 10 次操作推进一个张力采样点
+FISHING_HOLD_STEPS = {1: 80, 2: 60, 3: 40}  # 持续按住时各级鱼竿的捕获步数
 FISHING_TIMEOUT_SECONDS = 90    # 超过该秒数未收线即判过期
 DAILY_FISH_RETAIN_LIMIT = 30   # 每日可保留并出售的普通鱼数量；收集品不计入
 TRACE_MIN_STEPS = 20            # 客户端回传操作序列的长度下限
@@ -85,6 +86,14 @@ FERTILIZER_SELL_PRICE = 100.0
 FERTILIZER_SECONDS = 60 * 60
 FERTILIZER_FISH_CHANCE = {"worm": .05, "glow_grub": .10}
 FERTILIZER_MINE_CHANCE = .01
+LAND_UPGRADE_TICKET = "supply:land_upgrade_ticket"
+LOTTERY_PRICE = 3000.0
+LOTTERY_PRIZES = ("thanks", "coins_250", "coins_1000", "coins_2000",
+                  "legendary_seed", "missing_collectible", "fertilizer_5", "grand")
+LOTTERY_GRAND_PRIZES = (
+    ("coins_100000", 10), ("reroll", 40), ("land_ticket", 10),
+    ("coins_5000", 20), ("coins_10000", 20),
+)
 
 def _crop(name, seed_price, sell_price, grow_minutes, xp, unlock_level, icon, color):
     """所有收益与成长规则集中定义，保留稳定存档 ID。"""
@@ -97,6 +106,7 @@ def _crop(name, seed_price, sell_price, grow_minutes, xp, unlock_level, icon, co
 
 
 CROPS = {
+    "legendary_flower": _crop("传说花", 0, 36888, 72 * 60, 1440, 1, "🌟", "#f4cc5b"),
     "wheat": _crop("小麦", 20, 30, 5, 5, 1, "🌾", "#e6cb63"),
     "carrot": _crop("胡萝卜", 40, 65, 15, 8, 1, "🥕", "#f28b36"),
     "rice": _crop("水稻", 28, 44, 9, 6, 1, "🌾", "#ddd477"),
@@ -122,11 +132,13 @@ CROPS = {
     "miracle_flower": _crop("奇迹花", 1800, 8820, 2160, 1080, 7, "🌸", "#f28fc2"),
     "starlight_berry": _crop("星露果", 3200, 13280, 2880, 1440, 8, "✨", "#8dd9df"),
 }
+CROPS["legendary_flower"]["lottery_only"] = True
 
 LAND_LEVELS = {
     1: {"multiplier": 1.0, "upgrade_price": 500.0, "unlock_level": 2},
     2: {"multiplier": 0.85, "upgrade_price": 1500.0, "unlock_level": 4},
     3: {"multiplier": 0.65, "upgrade_price": None, "unlock_level": 6},
+    4: {"multiplier": 0.45, "upgrade_price": None, "unlock_level": 6},
 }
 
 PLOT_UNLOCKS = {
@@ -303,6 +315,9 @@ def grow_seconds(crop_id, land_level):
 
 
 def item_info(item_id):
+    if item_id == LAND_UPGRADE_TICKET:
+        return {"id": item_id, "kind": "supply", "name": "4级农田升级券",
+                "sellable": False, "sell_price": None}
     if item_id == FERTILIZER_ITEM:
         return {"id": item_id, "kind": "supply", "name": "化肥",
                 "sellable": True, "sell_price": FERTILIZER_SELL_PRICE}
@@ -346,6 +361,9 @@ def public_catalog():
             for crop_id, crop in CROPS.items()
         },
         "land_levels": LAND_LEVELS,
+        "lottery": {"price": LOTTERY_PRICE, "prizes": LOTTERY_PRIZES,
+                    "grand_prizes": LOTTERY_GRAND_PRIZES,
+                    "ticket_item": LAND_UPGRADE_TICKET},
         "plot_unlocks": PLOT_UNLOCKS,
         "warehouse_levels": WAREHOUSE_LEVELS,
         "tools": TOOLS,
@@ -365,6 +383,7 @@ def public_catalog():
         "fishing_rules": {
             "steps": FISHING_STEPS,
             "steps_per_frame": FISHING_STEPS_PER_FRAME,
+            "hold_steps": FISHING_HOLD_STEPS,
             "tension_start": TENSION_START,
             "progress_start": PROGRESS_START,
             "hold_tension_gain": HOLD_TENSION_GAIN,

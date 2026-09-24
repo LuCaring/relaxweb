@@ -32,21 +32,13 @@ export function rodFactor(catalog, rodLevel) {
  * 推进一次张力采样，返回下一步状态与结局。
  *
  * `rules` 是服务端下发的 `catalog.fishing_rules`；`force` 是该帧的挣扎强度，
- * `factor` 是鱼竿系数。`outcome` 为 `null` 表示继续，否则是 `snapped` /
- * `caught`。判定顺序与服务端一致：先断线，再入护。
+ * `factor` 是鱼竿等级。持续按住时按等级规定的步数完成捕获。
  */
 export function tensionStep(rules, { tension, progress, held, force, factor }) {
   if (held) {
-    tension += rules.hold_tension_gain * (rules.hold_tension_force_base + force) * factor;
-    progress += rules.hold_progress_gain * (rules.hold_progress_base - force * rules.hold_progress_force_scale);
-  } else {
-    tension -= rules.release_tension_drop;
-    progress -= rules.release_progress_drop * (rules.release_progress_force_base + force);
+    progress += (rules.caught_at - rules.progress_start) / rules.hold_steps[String(factor)];
   }
-  tension = Math.max(0, tension);
-  progress = Math.max(0, progress);
-  const outcome = tension >= rules.snapped_at ? "snapped"
-    : progress >= rules.caught_at ? "caught" : null;
+  const outcome = progress >= rules.caught_at - 1e-9 ? "caught" : null;
   return { tension, progress, outcome };
 }
 
