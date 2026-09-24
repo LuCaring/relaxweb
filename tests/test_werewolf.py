@@ -104,7 +104,7 @@ def test_sanitize_and_board():
     board = ["werewolf", "seer", "witch", "villager", "villager"]
     room = make_room({"board": board, "win_mode": "cheng",
                       "witch_self_save": "always", "guard_continuous": True,
-                      "hunter_shot_on_poison": True, "reveal_role": False,
+                      "hunter_shot_on_poison": True,
                       "last_words": "none", "tie": "no_exile",
                       "speak_seconds": 45})
     check("合法自定义规则保留", room.rules["board"] == board
@@ -112,7 +112,6 @@ def test_sanitize_and_board():
           and room.rules["witch_self_save"] == "always"
           and room.rules["guard_continuous"] is True
           and room.rules["hunter_shot_on_poison"] is True
-          and room.rules["reveal_role"] is False
           and room.rules["last_words"] == "none"
           and room.rules["tie"] == "no_exile"
           and room.rules["speak_seconds"] == 45)
@@ -217,18 +216,28 @@ def test_night_kill_and_poison():
         deaths_ok = g["last_night"] == {"e": "poison"} \
             and sorted(g["alive"]) == ["a", "b", "c", "d", "f"]
         view = room.view_for("a")
-        revealed = {p["username"]: p["role"] for p in view["players"]}
-        reveal_ok = revealed["e"] == "平民" and revealed["c"] is None  # 存活者不翻牌
+        hidden = {p["username"]: p["role"] for p in view["players"]}
+        hidden_ok = hidden["e"] is None and hidden["c"] is None  # 出局不翻牌
+        god = room.view_for("e")            # 出局者获得上帝视角
+        god_view_ok = god["god_view"] is True \
+            and {p["username"]: p["role"] for p in god["players"]}["c"] == "预言家" \
+            and {p["username"]: p["role"] for p in god["players"]}["e"] == "平民"
+        history_ok = all("（" not in e["text"] or e["kind"] != "dawn"
+                         for e in g["history"])   # 死讯不再公布角色
         last_words_ok = g["phase"] == "last_words" \
             and g["last_words"]["current"] == "e"
         await room._advance_last_words()
         day_ok = g["phase"] == "day" and g["last_words"]["current"] is None
         stock = room.view_for("d")["witch_stock"]
-        return deaths_ok, reveal_ok, last_words_ok, day_ok, stock
+        return deaths_ok, hidden_ok, god_view_ok, history_ok, last_words_ok, \
+            day_ok, stock
 
-    deaths_ok, reveal_ok, last_words_ok, day_ok, stock = run_identity_shuffle(run)
+    deaths_ok, hidden_ok, god_view_ok, history_ok, last_words_ok, day_ok, \
+        stock = run_identity_shuffle(run)
     check("空刀加毒药生效", deaths_ok, str(deaths_ok))
-    check("死亡翻牌而存活者隐藏", reveal_ok, str(reveal_ok))
+    check("出局不翻牌而存活者隐藏", hidden_ok, str(hidden_ok))
+    check("出局者进入上帝视角可见全场身份", god_view_ok)
+    check("死讯不公布角色", history_ok)
     check("首夜死者进入遗言队列", last_words_ok)
     check("遗言耗尽进入白天", day_ok)
     check("女巫药水库存扣除", stock == {"save": True, "poison": False},
@@ -849,7 +858,7 @@ def test_full_random_match():
         ("5 人自定义板", {"board": ["guard", "werewolf", "witch", "seer",
                                 "villager"],
                        "witch_self_save": "always", "guard_continuous": True,
-                       "hunter_shot_on_poison": True, "reveal_role": False,
+                       "hunter_shot_on_poison": True,
                        "last_words": "all", "tie": "no_exile",
                        "win_mode": "cheng"},
          ("a", "b", "c", "d", "e")),

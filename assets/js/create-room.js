@@ -19,7 +19,7 @@ function draftFor(gameId) {
         launch: 6, extra_roll: 1, jump4: 1, fly12: 1, payout: "champion",
         chambers: 6, cards: 5, max_play: 3, jokers: "wild", respin: 0,
         win_mode: "bian", witch_self_save: "first", last_words: "first",
-        tie: "revote", reveal_role: 1, guard_continuous: 0, board_text: "",
+        tie: "revote", guard_continuous: 0, board_text: "",
         speak_seconds: 30,
       },
     });
@@ -148,7 +148,6 @@ function createRules(game, draft, details) {
         [[15, "15 秒"], [20, "20 秒"], [30, "30 秒（默认）"], [45, "45 秒"],
          [60, "60 秒"], [90, "90 秒"], [120, "120 秒"]],
         draft.rules.speak_seconds, save("speak_seconds")),
-      labeledSelect("出局翻牌", "出局翻牌", [[1, "公示出局者身份（休闲）"], [0, "不公示，猜到终局（竞技）"]], draft.rules.reveal_role, save("reveal_role")),
       labeledSelect("守卫连守", "守卫连守", [[0, "不能连守同一人（经典）"], [1, "可以连守同一人"]], draft.rules.guard_continuous, save("guard_continuous")),
       labeledText("自定义板子", "自定义板子", draft.rules.board_text,
         "留空按人数自动；如：狼,狼,预言家,女巫,猎人,民,民,民",
@@ -194,7 +193,7 @@ function updateCreateSummary() {
         : game.id === "liarsbar"
           ? `${draft.rules.chambers} 弹巢${draft.rules.respin ? "重转" : "递增"} · ${draft.rules.cards} 张手牌 · 至多出 ${draft.rules.max_play} 张 · ${draft.rules.jokers === "wild" ? "小丑百搭" : "无小丑"} · ${draft.rules.payout === "rank" ? "按出局结算" : "冠军通吃"}`
           : game.id === "werewolf"
-            ? `${draft.rules.win_mode === "cheng" ? "屠城局" : "屠边局"} · 女巫${draft.rules.witch_self_save === "always" ? "始终可自救" : draft.rules.witch_self_save === "never" ? "不可自救" : "仅首夜可自救"} · ${draft.rules.last_words === "none" ? "无遗言" : draft.rules.last_words === "all" ? "全遗言" : "首夜遗言"} · ${draft.rules.tie === "no_exile" ? "平票流局" : "平票重投"} · 每人发言 ${draft.rules.speak_seconds} 秒 · ${Number(draft.rules.reveal_role) ? "出局翻牌" : "身份隐藏"}${draft.rules.board_text.trim() ? " · 自定义板子" : " · 自动配板"}`
+            ? `${draft.rules.win_mode === "cheng" ? "屠城局" : "屠边局"} · 女巫${draft.rules.witch_self_save === "always" ? "始终可自救" : draft.rules.witch_self_save === "never" ? "不可自救" : "仅首夜可自救"} · ${draft.rules.last_words === "none" ? "无遗言" : draft.rules.last_words === "all" ? "全遗言" : "首夜遗言"} · ${draft.rules.tie === "no_exile" ? "平票流局" : "平票重投"} · 每人发言 ${draft.rules.speak_seconds} 秒 · 身份隐藏至终局${draft.rules.board_text.trim() ? " · 自定义板子" : " · 自动配板"}`
             : game.id === "holdem" ? "无限注德州扑克" : "UNO 经典规则";
   summary.querySelector(".create-summary-rules").textContent = ruleSummary;
   buyin.min = String(min);
@@ -362,7 +361,6 @@ function renderCreate() {
           ? draft.rules.last_words : "first",
         tie: draft.rules.tie === "no_exile" ? "no_exile" : "revote",
         speak_seconds: Number(draft.rules.speak_seconds) || 30,
-        reveal_role: Boolean(Number(draft.rules.reveal_role)),
         guard_continuous: Boolean(Number(draft.rules.guard_continuous)),
       };
       const board = parseWerewolfBoard(draft.rules.board_text);

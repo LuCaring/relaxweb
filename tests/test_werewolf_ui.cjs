@@ -12,16 +12,16 @@ function baseView(overrides = {}) {
     room_id: 9, name: '月夜桌', game_type: 'werewolf', status: 'playing',
     owner: 'alice', owner_name: '爱丽丝', buy_in: 100, blind: 5, paused: false,
     rules: { board: null, win_mode: 'bian', witch_self_save: 'first',
-      guard_continuous: false, hunter_shot_on_poison: false, reveal_role: true,
-      last_words: 'first', tie: 'revote', day_seconds: 120, vote_seconds: 30,
-      night_seconds: 25 },
+      guard_continuous: false, hunter_shot_on_poison: false,
+      last_words: 'first', tie: 'revote', speak_seconds: 30,
+      vote_seconds: 30, night_seconds: 25 },
     turn_seq: 1,
     players: [
       { username: 'alice', nickname: '爱丽丝', stack: 100, alive: true, role: null },
       { username: 'bob', nickname: '鲍勃', stack: 100, alive: true, role: null },
       { username: 'carol', nickname: '卡萝', stack: 100, alive: true, role: null },
       { username: 'dave', nickname: '大卫', stack: 100, alive: true, role: null },
-      { username: 'eve', nickname: '伊芙', stack: 100, alive: false, role: '平民' },
+      { username: 'eve', nickname: '伊芙', stack: 100, alive: false, role: null },
       { username: 'frank', nickname: '弗兰克', stack: 100, alive: true, role: null },
     ],
     match_no: 1, day_no: 1, phase: 'night', night_role: '狼人',
@@ -101,7 +101,28 @@ function baseView(overrides = {}) {
     assert.match(await page.locator('.ww-role-card').innerText(), /鲍勃/);
     assert.equal(await page.locator('.ww-seat.mate[data-username="bob"]').count(), 1);
     assert.equal(await page.locator('.ww-seat.dead').count(), 1);
+    assert.match(await page.locator('.ww-seat.dead .ww-seat-unknown').innerText(), /未翻牌/);
+    assert.equal(await page.locator('.ww-seat.dead .ww-role-chip').count(), 0);
+    // 上帝视角：出局者可见全场身份
+    await show(baseView({
+      god_view: true,
+      players: baseView().players.map(p => p.username === 'eve'
+        ? { ...p, role: '平民' }
+        : p.username === 'carol' ? { ...p, role: '预言家' } : p),
+    }));
+    assert.match(await page.locator('.ww-seats-head').innerText(), /上帝视角/);
     assert.match(await page.locator('.ww-seat.dead .ww-role-chip').innerText(), /平民/);
+    assert.equal(await page.locator('.ww-seat[data-username="carol"] .ww-role-chip').count(), 1);
+    // 恢复夜晚狼人行动视图
+    await show(baseView({
+      turn_left: 25,
+      your_options: { kind: 'night', role: '狼人', allow_skip: true, current: null,
+        submitted: false,
+        targets: [
+          { username: 'carol', nickname: '卡萝' }, { username: 'dave', nickname: '大卫' },
+          { username: 'frank', nickname: '弗兰克' }],
+      },
+    }));
     await page.locator('.ww-target[data-username="carol"]').click();
     assert.deepEqual(await sent(), { type: 'poker_action', action: 'night', target: 'carol' });
     // 服务器回显新视图（actionLock 解除，刀口已定），狼人可改为空刀
