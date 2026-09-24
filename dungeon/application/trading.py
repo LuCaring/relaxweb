@@ -277,6 +277,7 @@ class TradeService:
                     "result": {"offer_id": offer["offer_id"],
                                "offer_version": offer["offer_version"] + 1,
                                "status": "accepted", "item_id": offer["item_id"],
+                               "seller_id": offer["seller_user_id"],
                                "item_version": offer["item_version"] + 1, "location": location,
                                "price_minor": offer["price_minor"],
                                "fee_minor": offer["fee_minor"],

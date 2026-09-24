@@ -1,0 +1,78 @@
+{
+  "scenario": "directed trade: seller creates, buyer accepts or seller cancels; price 500 minor with 250bp fee",
+  "notes": "Buyer pays price_minor, seller nets price_minor - fee_minor, the fee is burned; figures match beta-core trade_policy. The accept replay returns the committed receipt unchanged.",
+  "requests": {
+    "create_offer_request": {
+      "type": "dungeon_beta_create_offer",
+      "protocol_version": 1,
+      "request_id": "of_create_0001",
+      "item_id": "item_example_01",
+      "expected_item_version": 2,
+      "buyer_id": 42,
+      "price_minor": 500,
+      "expected_trade_policy_version": 1,
+      "expected_fee_minor": 12
+    },
+    "accept_offer_request": {
+      "type": "dungeon_beta_accept_offer",
+      "protocol_version": 1,
+      "request_id": "of_accept_0001",
+      "offer_id": "offer_hex_example",
+      "expected_offer_version": 1
+    },
+    "cancel_offer_request": {
+      "type": "dungeon_beta_cancel_offer",
+      "protocol_version": 1,
+      "request_id": "of_cancel_0001",
+      "offer_id": "offer_hex_example",
+      "expected_offer_version": 1
+    },
+    "list_offers_request": {
+      "type": "dungeon_beta_list_offers",
+      "protocol_version": 1,
+      "request_id": "of_list_0001"
+    }
+  },
+  "results": {
+    "result_envelope": {
+      "type": "dungeon_beta_result",
+      "protocol_version": 1,
+      "request_id": "of_accept_0001",
+      "result_kind": "accept_offer",
+      "replayed": false,
+      "asset_revision": 3,
+      "result": {
+        "offer_id": "offer_hex_example",
+        "offer_version": 2,
+        "status": "accepted",
+        "item_id": "item_example_01",
+        "seller_id": 7,
+        "item_version": 3,
+        "location": "bag",
+        "price_minor": 500,
+        "fee_minor": 12,
+        "seller_net_minor": 488,
+        "settlement_ref": "dungeon:beta:trade:offer_hex_example",
+        "wallet_at_commit": {"coin_minor": 9500}
+      }
+    }
+  },
+  "errors": {
+    "error_envelope": {
+      "type": "dungeon_beta_error",
+      "protocol_version": 1,
+      "request_id": "of_accept_0002",
+      "code": "insufficient_funds",
+      "message": "金币不足",
+      "retryable": false,
+      "details": {"offer_id": "offer_hex_example", "price_minor": 500}
+    }
+  },
+  "pushes": {
+    "invalidate_push": {
+      "type": "dungeon_beta_invalidate",
+      "protocol_version": 1,
+      "asset_revision": null
+    }
+  }
+}

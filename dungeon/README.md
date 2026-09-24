@@ -4,7 +4,7 @@
 
 | 开发线 | 入口 | 边界 |
 | --- | --- | --- |
-| A：框架、资产和交易 | `dungeon/contracts/`、`domain/`、`application/`、`storage/`、`content/`、`plugins/`；传输适配在 `server/dungeon/` | `dungeon.contracts.simulator.Simulator` 是动作模拟合同；`dungeon.content.load_ruleset` 加载发布规则；`dungeon.plugins.registry.default_registry` 提供受信任机制注册。`AssetService` 已支持升级报价、事务扣费和成功回执重放；`TradeService`（`dungeon/application/trading.py`）已支持定向报价、预留、撤销/过期与原子成交，参数来自`economy.json`的`trade_policy`。旧入口已接装备预留门禁；尚无对外 Beta 协议注册。 |
+| A：框架、资产和交易 | `dungeon/contracts/`、`domain/`、`application/`、`storage/`、`content/`、`plugins/`；传输适配在 `server/dungeon/` | `dungeon.contracts.simulator.Simulator` 是动作模拟合同；`dungeon.content.load_ruleset` 加载发布规则；`dungeon.plugins.registry.default_registry` 提供受信任机制注册。`AssetService` 已支持升级报价、事务扣费和成功回执重放；`TradeService`（`dungeon/application/trading.py`）已支持定向报价、预留、撤销/过期与原子成交，参数来自`economy.json`的`trade_policy`。两者已由 `server/dungeon/beta_protocol.py` 注册为鉴权WebSocket的`dungeon_beta_*`消息（schema/fixture见`contracts/dungeon/`）；`python -m dungeon.tools init-test-db`可建联调账号。旧入口已接装备预留门禁；run/输入类消息随R4宿主接入。 |
 | B：战斗和客户端 | 服务端动作实现在 `dungeon/simulation/`，遵循 `Simulator` 合同；客户端在 `assets/js/dungeon/`，页面在 `dungeon.html` | 模拟器只消费冻结规则和有序输入，不能写金币、永久装备或数据库；客户端只提交输入，正式奖励由服务端确认。 |
 | C：内容和经济 | `content/dungeon/packs/`、`content/dungeon/release.json`；schema 在 `contracts/dungeon/schemas/` | 内容包使用已注册机制并经 `load_ruleset` 校验；新机制需先与 A/B 约定，不在内容里放可执行脚本。 |
 
