@@ -169,14 +169,17 @@ print(json.dumps({n: accounts.create_session(n) for n in names}))
       });
       await page.addInitScript((token) => {
         localStorage.setItem('liveAuthToken', token);
-        // 测试环境的假麦克风：WebAudio 振荡器顶替硬件采集，
-        // 上麦（LiveKit setMicrophoneEnabled 的 getUserMedia）拿到的是合成音轨
+        // 测试环境的假麦克风：WebAudio 振荡器顶替硬件采集（带增益节点，
+        // 测试可随时把源调成真静音来驱动噪声门的关门路径），
+        // 上麦（getUserMedia）拿到的是这条合成音轨
         const ctx = new AudioContext();
         const osc = ctx.createOscillator();
         osc.frequency.value = 440;
+        const gain = ctx.createGain();
         const dst = ctx.createMediaStreamDestination();
-        osc.connect(dst);
+        osc.connect(gain).connect(dst);
         osc.start();
+        window.__voiceSynthGain = gain;
         const synth = dst.stream;
         navigator.mediaDevices.getUserMedia = async (constraints) => {
           if (constraints && constraints.audio && !constraints.video) {
@@ -187,13 +190,14 @@ print(json.dumps({n: accounts.create_session(n) for n in names}))
       }, tokens[name]);
       await page.goto(`http://127.0.0.1:${webPort}/game.html`);
       try {
-        await page.evaluate(async () => {
-          const main = [...document.scripts].find((script) => script.type === 'module'
-            && script.src.includes('/assets/js/main.js'));
-          await import(main.src);
-          window.core = await import('/assets/js/core.js');
-          window.voice = await import('/assets/js/room-voice.js');
-        });
+      await page.evaluate(async () => {
+        const main = [...document.scripts].find((script) => script.type === 'module'
+          && script.src.includes('/assets/js/main.js'));
+        await import(main.src);
+        window.core = await import('/assets/js/core.js');
+        window.voice = await import('/assets/js/room-voice.js');
+        window.voiceMic = await import('/assets/js/voice-mic.js');
+      });
       } catch (error) {
         console.error('module errors:', consoleErrors[name], errors[name]);
         console.error('web 404:', processErrors.filter((line) => line.includes(' 404 ')).slice(-10));
@@ -276,11 +280,51 @@ print(json.dumps({n: accounts.create_session(n) for n in names}))
       await import(main.src);
       window.core = await import('/assets/js/core.js');
       window.voice = await import('/assets/js/room-voice.js');
+      window.voiceMic = await import('/assets/js/voice-mic.js');
     });
     await players.va.page.waitForFunction(
       () => core.state.currentUser?.username && voice.voiceDebug().room?.endsWith('-lobby'),
       null, { timeout: 15000, polling: 100 });
     console.log('PASS mixer: per-peer sliders render, persist and survive reload');
+
+    // 本地电平表与阈值门控：刷新后重新上麦（假麦为 440Hz 振荡器，电平稳非零）
+    for (const name of ['va', 'vb']) {
+      await players[name].page.evaluate(async () => {
+        if (!voice.voiceMicWanted()) await voice.toggleMic();
+      });
+      await players[name].page.waitForFunction(() => voice.voiceDebug().micPublished,
+        null, { timeout: 10000, polling: 100 });
+      const state = await players[name].page.evaluate(() => voice.voiceDebug());
+      assert.equal(state.micProcessing, true, `${name} publishes through the local pipeline`);
+      await players[name].page.waitForFunction(() => voice.voiceDebug().micLevel > 0.3,
+        null, { timeout: 8000, polling: 100 });
+      assert.equal(await players[name].page.locator('.waiting-voice-meter').isVisible(), true);
+      const width = await players[name].page.locator('.voice-meter-fill')
+        .evaluate((node) => parseFloat(node.style.width) || 0);
+      assert.ok(width >= 60, `${name} meter shows level, got ${width}%`);
+    }
+    console.log('PASS meter: pipeline publishes and the level meter reads the synthetic mic');
+
+    // 噪声门：高于阈值继续放行；源静默后门关闭但仍发布（发送静音不摘轨）
+    await players.va.page.evaluate(() => voiceMic.setMicGateSettings({ gateEnabled: true, gateThreshold: 8 }));
+    await players.va.page.waitForFunction(() => voice.voiceDebug().micGateOpen === true,
+      null, { timeout: 8000, polling: 100 });
+    assert.match(await players.va.page.evaluate(() => localStorage.getItem('voiceMicSettings')),
+      /"gateEnabled":true/, 'gate setting persists');
+    await players.va.page.evaluate(() => { window.__voiceSynthGain.gain.value = 0; });
+    await players.va.page.waitForFunction(() => voice.voiceDebug().micLevel < 0.001,
+      null, { timeout: 8000, polling: 100 });
+    await players.va.page.waitForFunction(() => voice.voiceDebug().micGateOpen === false,
+      null, { timeout: 8000, polling: 100 });
+    assert.equal((await players.va.page.evaluate(() => voice.voiceDebug())).micPublished, true,
+      'gated mic stays published sending silence');
+    assert.ok((await players.vb.page.evaluate(() => voice.voiceDebug())).remoteAudio >= 1,
+      'receiver still holds the gated silent track');
+    await players.va.page.evaluate(() => { window.__voiceSynthGain.gain.value = 1; });
+    await players.va.page.waitForFunction(() => voice.voiceDebug().micGateOpen === true,
+      null, { timeout: 8000, polling: 100 });
+    await players.va.page.evaluate(() => voiceMic.setMicGateSettings({ gateEnabled: false }));
+    console.log('PASS gate: opens above threshold, closes on silence while staying published');
 
     // 开局 → 第一夜
     await players.va.page.evaluate(() => core.send({ type: 'start_game' }));

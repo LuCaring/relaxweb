@@ -7,7 +7,8 @@
     "node": ">=20"
   },
   "scripts": {
-    "test:browser": "node scripts/run_browser_tests.cjs"
+    "test:browser": "node scripts/run_browser_tests.cjs",
+    "test:voice-mic": "node tests/test_voice_mic.cjs"
   },
   "devDependencies": {
     "playwright": "^1.63.0",

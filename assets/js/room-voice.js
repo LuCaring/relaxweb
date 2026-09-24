@@ -7,9 +7,10 @@
    牌桌据此高亮座位；连接状态变化广播 voicestate 事件。 */
 
 import { onMessage } from "./registry.js";
-import { getPeerVolume } from "./voice-mic.js";
+import { getPeerVolume, micGateOpen, micGateTrack, micLevel, micPipelineActive,
+  startMicPipeline, stopMicPipeline } from "./voice-mic.js";
 
-const mic = { wanted: false, primed: false };
+const mic = { wanted: false, primed: false, processing: false };
 let current = null;        // 当前 LiveKit Room
 let currentKey = "";       // url|room|发布权限，防止重复连接
 let canPublish = false;
@@ -72,6 +73,9 @@ export function voiceDebug() {
         .filter((pub) => pub.kind === "audio" && pub.isSubscribed
           && !pub.isMuted).length, 0),
     micPublished: Boolean(micPub) && !micPub.isMuted,
+    micProcessing: Boolean(mic.processing && micPipelineActive()),
+    micLevel: micLevel(),
+    micGateOpen: micGateOpen(),
   };
 }
 
@@ -82,12 +86,21 @@ export async function toggleMic() {
   mic.wanted = !mic.wanted;
   micError = "";
   if (mic.wanted && !mic.primed) {
-    // 首次上麦在点击手势里预热权限，后续自动恢复发布不再需要手势
+    // 首次上麦在点击手势里预热权限；采集流同时交给本地管线供电平表与
+    // 噪声门使用，管线建不起来时退回 LiveKit 直接采集。
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
         audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
       });
-      stream.getTracks().forEach((track) => track.stop());
+      let processed = false;
+      try {
+        await startMicPipeline(stream);
+        processed = true;
+      } catch (error) {
+        console.warn("voice mic pipeline unavailable", error);
+        stream.getTracks().forEach((track) => track.stop());
+      }
+      mic.processing = processed;
       mic.primed = true;
     } catch (error) {
       mic.wanted = false;
@@ -104,13 +117,31 @@ export async function toggleMic() {
 async function applyMic() {
   if (!current || !canPublish) return;
   try {
-    await current.localParticipant.setMicrophoneEnabled(mic.wanted);
+    if (mic.wanted && mic.processing && micPipelineActive()) {
+      await publishProcessedMic();
+    } else {
+      if (mic.processing && !micPipelineActive()) mic.processing = false;
+      await current.localParticipant.setMicrophoneEnabled(mic.wanted);
+    }
   } catch (error) {
     console.warn("voice mic toggle failed", error);
     mic.wanted = false;
     micError = microphoneError(error);
     announceState();
   }
+}
+
+/** 发布经过本地管线（电平表/噪声门）的音轨，代替 LiveKit 自行采集。 */
+async function publishProcessedMic() {
+  const LK = window.LivekitClient;
+  const existing = current.localParticipant.getTrackPublication(LK.Track.Source.Microphone);
+  if (existing) {
+    await current.localParticipant.setMicrophoneEnabled(true);
+    return;
+  }
+  const track = micGateTrack();
+  if (!track) throw new Error("processed mic track unavailable");
+  await current.localParticipant.publishTrack(track, { source: LK.Track.Source.Microphone });
 }
 
 function announceState() {
@@ -221,9 +252,21 @@ async function disconnect(reason) {
 
 export async function leaveVoice() {
   mic.wanted = false;
+  mic.primed = false;
+  mic.processing = false;
   micError = "";
+  stopMicPipeline();
   await disconnect("left game room");
 }
+
+// 采集轨意外中断（拔设备、系统回收权限）时复位麦克风状态，等待重新开启
+document.addEventListener("voicemicstreamended", () => {
+  mic.wanted = false;
+  mic.primed = false;
+  mic.processing = false;
+  micError = "麦克风连接中断，请重新开启";
+  announceState();
+});
 
 onMessage("voice_update", (msg) => {
   updateQueue = updateQueue.then(() => applyUpdate(msg)).catch((error) => {
