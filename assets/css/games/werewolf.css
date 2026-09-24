@@ -60,6 +60,7 @@
 }
 .ww-phase-icon { font-size: 20px; }
 .ww-phase-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ww-phase-timer { flex: none; margin-left: auto; color: #fff; font-size: 12px; font-variant-numeric: tabular-nums; }
 .ww-phase-alive {
     flex: none;
     margin-left: auto;
@@ -70,6 +71,7 @@
     font-size: 11px;
     font-variant-numeric: tabular-nums;
 }
+.ww-phase-timer + .ww-phase-alive { margin-left: 0; }
 .ww-phase.is-night { border-color: #7c7ff05c; background: #7c7ff01f; color: #cfd2ff; }
 .ww-phase.is-day { border-color: #e8b46557; background: #e8b46517; color: #ffe3ac; }
 .ww-phase.is-vote { border-color: #c07adf57; background: #c07adf17; color: #ecc7ff; }
@@ -385,6 +387,7 @@
     white-space: nowrap;
 }
 .ww-voice:hover { filter: brightness(1.06); }
+.ww-voice:disabled { opacity: .6; cursor: default; }
 .ww-voice.connected { box-shadow: inset 0 0 0 2px #86e3b1aa; }
 .ww-voice.on { background: #1d6b4c; color: #d9ffe9; }
 .ww-voice:focus-visible { outline: 3px solid #b491ff; outline-offset: 2px; }

@@ -59,6 +59,7 @@ function baseView(overrides = {}) {
       } catch { await route.fulfill({ status: 404 }); }
     });
     await page.addInitScript(() => {
+      window.LIVE_CONFIG = { voice: { enabled: true } };
       window.sent = [];
       window.WebSocket = class {
         static OPEN = 1;
@@ -83,6 +84,7 @@ function baseView(overrides = {}) {
 
     // —— 夜晚·狼人行动：横幅、身份卡、狼队标记、刀口提交与空刀 ——
     await show(baseView({
+      turn_left: 25,
       your_options: { kind: 'night', role: '狼人', allow_skip: true, current: null,
         submitted: false,
         targets: [
@@ -91,6 +93,8 @@ function baseView(overrides = {}) {
       },
     }));
     assert.match(await page.locator('.ww-phase').innerText(), /🌙.*第 1 夜 · 狼人请行动/s);
+    assert.match(await page.locator('.ww-phase-timer').innerText(), /\d+ 秒/);
+    assert.equal(await page.locator('.ww-voice').isDisabled(), true);
     assert.ok(await page.locator('.ww-role-card.f-wolf').isVisible());
     assert.match(await page.locator('.ww-role-card').innerText(), /狼人阵营/);
     assert.match(await page.locator('.ww-role-card').innerText(), /鲍勃/);
@@ -109,6 +113,7 @@ function baseView(overrides = {}) {
       },
     }));
     assert.equal(await page.locator('.ww-target.selected[data-username="carol"]').count(), 1);
+    assert.equal(await page.locator('.ww-target.selected[data-username="carol"]').getAttribute('aria-pressed'), 'true');
     await page.locator('button:has-text("改为空刀")').click();
     assert.deepEqual(await sent(), { type: 'poker_action', action: 'night', target: '' });
 
@@ -162,6 +167,12 @@ function baseView(overrides = {}) {
     assert.match(await page.locator('.ww-phase').innerText(), /猎人开枪/s);
     await page.locator('button:has-text("放弃开枪")').click();
     assert.deepEqual(await sent(), { type: 'poker_action', action: 'shoot', target: '' });
+
+    // 观战者可读公开聊天，但输入框不得暗示可向死者频道发言。
+    await show(baseView({ phase: 'day', night_role: null, spectator: true,
+      your_role: null, your_options: null }));
+    assert.equal(await page.locator('#roomChatInput').isDisabled(), true);
+    assert.match(await page.locator('#roomChatInput').getAttribute('placeholder'), /仅可阅读/);
 
     // —— 结算：胜利横幅、全员翻牌与净收益 ——
     await show(baseView({

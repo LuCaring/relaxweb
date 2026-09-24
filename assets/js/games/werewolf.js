@@ -9,7 +9,7 @@ import {
 } from "../core.js";
 import { registerGame } from "../registry.js";
 import { openChatOverlay, reapplySeatBubbles } from "../room-chat.js";
-import { toggleMic, voiceConnected, voiceMicWanted } from "../room-voice.js";
+import { enableVoiceAudio, toggleMic, voiceMicWanted, voiceStatus } from "../room-voice.js";
 
 const ROLE_META = {
   狼人: { icon: "🐺", cls: "wolf" },
@@ -29,6 +29,12 @@ let speakingSet = new Set();   // 正在说话的用户名（voicespeakers 事�
 
 const VOICE_ENABLED = Boolean(window.LIVE_CONFIG?.voice?.enabled);
 const desktopLayout = window.matchMedia("(min-width: 1024px)");
+
+function refreshPhaseClock() {
+  const timer = document.querySelector("#gameMain .ww-phase-timer");
+  if (timer) timer.textContent = `${Math.ceil(Math.max(0, phaseDeadline - Date.now()) / 1000)} 秒`;
+}
+window.setInterval(refreshPhaseClock, 1000);
 
 document.addEventListener("voicespeakers", (event) => {
   if (state.myRoom?.game_type !== "werewolf") return;
@@ -109,7 +115,12 @@ function phaseBanner(room) {
   }
   const alive = el("span", "ww-phase-alive",
     `存活 ${alivePlayers(room).length}/${(room.players || []).length}`);
-  box.append(icon, label, alive);
+  box.append(icon, label);
+  if (room.turn_left > 0) {
+    box.append(el("span", "ww-phase-timer",
+      `${Math.ceil(Math.max(0, phaseDeadline - Date.now()) / 1000)} 秒`));
+  }
+  box.append(alive);
   return box;
 }
 
@@ -286,6 +297,7 @@ function targetButton(p, selected, onClick, disabled) {
   const chip = el("button", `ww-target${selected ? " selected" : ""}`);
   chip.type = "button";
   chip.disabled = Boolean(disabled);
+  chip.setAttribute("aria-pressed", String(Boolean(selected)));
   chip.dataset.username = p.username;
   const dot = playerAvatarNode(p, "ww-target-avatar");
   const label = el("span", "ww-target-name",
@@ -485,13 +497,24 @@ function actionAreaNode(room) {
 }
 
 function voiceButtonNode() {
-  const on = voiceMicWanted();
-  const button = el("button", `ww-voice${on ? " on" : ""}${voiceConnected() ? " connected" : ""}`);
+  const status = voiceStatus();
+  const on = status.canPublish && voiceMicWanted();
+  const button = el("button", `ww-voice${on ? " on" : ""}${status.connected ? " connected" : ""}`);
   button.type = "button";
-  button.textContent = on ? "🎙 闭麦" : "🎙 上麦";
-  button.title = voiceConnected() ? "语音已连接，点击切换麦克风"
-    : "语音未连接：进入对局后由服务器授权自动接入";
-  button.addEventListener("click", () => { toggleMic(); });
+  button.disabled = !status.connected;
+  button.textContent = !status.connected ? "🔇 语音未连接"
+    : status.audioBlocked ? "🔊 开启声音"
+    : !status.canPublish ? "🔊 开启收听"
+    : on ? "🎙 闭麦" : "🎙 上麦";
+  button.title = !status.connected ? "当前阶段没有语音频道，或连接尚未建立"
+    : !status.canPublish ? "当前频道只可收听；点击开启声音"
+    : "语音已连接，点击切换麦克风";
+  button.setAttribute("aria-pressed", String(on && !status.audioBlocked));
+  button.addEventListener("click", () => {
+    if (status.audioBlocked) void enableVoiceAudio();
+    else if (status.canPublish) void toggleMic();
+    else void enableVoiceAudio();
+  });
   return button;
 }
 
@@ -507,7 +530,7 @@ function dockNode() {
   head.append(el("div", "ww-dock-title", phaseHintText(room)));
   const right = el("div", "ww-dock-side");
   if (amOut) right.append(el("span", "ww-out-badge", "☠️ 已出局"));
-  if (VOICE_ENABLED && !room.spectator) right.append(voiceButtonNode());
+  if (VOICE_ENABLED) right.append(voiceButtonNode());
   const chatToggle = el("button", "dock-chat-toggle");
   chatToggle.type = "button";
   chatToggle.textContent = room.phase === "night" && room.your_role?.faction === "wolf"
@@ -525,7 +548,7 @@ function dockNode() {
   } else if (amOut) {
     info.append(el("div", "ww-dock-note", "你已出局：白天可以旁观讨论，夜晚请闭眼。遗言阶段轮到你时再开口。"));
   } else if (!room.your_role) {
-    info.append(el("div", "ww-dock-note", "观战中：夜晚与白天讨论都可见，投票由玩家完成。"));
+    info.append(el("div", "ww-dock-note", "观战中：可阅读公开讨论，语音仅可收听；私密频道不可见。"));
   } else {
     info.append(el("div", "ww-dock-note",
       room.phase === "night" ? "夜晚静默：好人无法发言，狼人可在狼队频道密谋。"

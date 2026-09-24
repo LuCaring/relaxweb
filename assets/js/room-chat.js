@@ -70,6 +70,7 @@ function appendRoomChatRow(m) {
 }
 
 function sendRoomChat() {
+  if (chatComposerState().disabled) return;
   const input = document.getElementById("roomChatInput");
   const text = (input?.value || state.roomChatDraft).trim();
   if (!text) return;
@@ -77,6 +78,40 @@ function sendRoomChat() {
     state.roomChatDraft = "";
     if (input) input.value = "";
   }
+}
+
+function chatComposerState() {
+  const room = state.myRoom;
+  if (room?.game_type !== "werewolf" || room.status !== "playing"
+      || room.phase === "showdown") {
+    return { disabled: false, placeholder: "说点什么…（对全桌可见）" };
+  }
+  const me = state.currentUser?.username;
+  if (room.spectator) return { disabled: true, placeholder: "观战者仅可阅读聊天" };
+  if (room.last_words_current === me) {
+    return { disabled: false, placeholder: "发表遗言…（对全桌可见）" };
+  }
+  const alive = room.players?.some((player) => player.username === me && player.alive);
+  if (!alive && room.your_role) {
+    return { disabled: false, placeholder: "死者频道…（仅死者可见）" };
+  }
+  if (room.phase === "night" && room.your_role?.faction === "wolf") {
+    return { disabled: false, placeholder: "狼队频道…（仅存活狼人可见）" };
+  }
+  if (room.phase === "day" || room.phase === "vote") {
+    return { disabled: false, placeholder: "讨论…（对全桌可见）" };
+  }
+  return { disabled: true, placeholder: "当前阶段不能发言" };
+}
+
+export function refreshRoomChatComposer() {
+  const input = document.getElementById("roomChatInput");
+  if (!input) return;
+  const { disabled, placeholder } = chatComposerState();
+  input.disabled = disabled;
+  input.placeholder = placeholder;
+  const sendButton = input.closest(".chat-overlay-composer")?.querySelector(".send-button");
+  if (sendButton) sendButton.disabled = disabled;
 }
 
 export function chatOpenButton() {
@@ -158,7 +193,10 @@ export function openChatOverlay() {
   const compact = usesCompactDesktopChat();
   const desktop = usesDesktopChat() || compact;
   const existing = document.getElementById("desktopRoomChat");
-  if (desktop && existing && existing.classList.contains("compact-room-chat") === compact) return;
+  if (desktop && existing && existing.classList.contains("compact-room-chat") === compact) {
+    refreshRoomChatComposer();
+    return;
+  }
   closeChatOverlay();
   const overlay = document.createElement("div");
   overlay.className = desktop
@@ -208,6 +246,7 @@ export function openChatOverlay() {
     if (event.target === overlay) closeChatOverlay();
   });
   (desktop ? document.querySelector(".game-workspace") : document.body).append(overlay);
+  refreshRoomChatComposer();
   list.scrollTop = list.scrollHeight;
   if (!desktop) input.focus({ preventScroll: true });
 }
