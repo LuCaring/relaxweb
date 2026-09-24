@@ -21,6 +21,16 @@ class RoomProtocol:
         self.accounts = accounts
         self.settlement = settlement
 
+    async def _refresh_voice(self, room, username):
+        voice = getattr(self.rooms, "voice", None)
+        if voice is None:
+            return
+        try:
+            await voice.sync_user(room, username, force=True)
+        except Exception:
+            logger.warning("voice refresh failed for room %s user %s",
+                           room.id, username, exc_info=True)
+
     def handlers(self):
         return {
             "list_rooms": self.handle_list_rooms,
@@ -64,6 +74,7 @@ class RoomProtocol:
                     "messages": room.visible_chat(user["username"]),
                 },
             )
+            await self._refresh_voice(room, user["username"])
         else:
             await self.hub.send_json(websocket, {"type": "room_closed", "reason": ""})
 
@@ -163,6 +174,7 @@ class RoomProtocol:
                     "messages": room.visible_chat(username),
                 },
             )
+            await self._refresh_voice(room, username)
             await self.rooms.broadcast_spectator_notice(room, username, joined=True)
             return
         if room.status != "waiting":

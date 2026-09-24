@@ -62,6 +62,7 @@ class FakeHub:
 
 def make_service(hub, ttl=600, enabled=True):
     conf = {"enabled": enabled, "url": "ws://lk.test:7880",
+            "api_url": "http://lk.test:7880",
             "api_key": "devkey", "api_secret": "devsecret" if enabled else "",
             "token_ttl": ttl}
     with patch("server.voice_livekit.voice_config", return_value=conf):
@@ -74,10 +75,10 @@ def make_service(hub, ttl=600, enabled=True):
     service.mint_token = fake_mint
     kicks = []
 
-    async def fake_kick(room_id, username):
-        kicks.append((room_id, username))
+    async def fake_kick(room_name, username):
+        kicks.append((room_name, username))
 
-    service._kick = fake_kick
+    service._kick_room = fake_kick
     return service, kicks
 
 
@@ -90,24 +91,35 @@ def test_voice_plan():
         day = room.voice_plan("a")
         spectator_day = room.voice_plan("watcher")
         room.game["phase"] = "night"
+        room.game["voice_epoch"] += 1
         room.game["alive"] = [n for n in room.game["alive"] if n != "e"]
         room.game["last_night"] = {"e": "kill"}
         dead = room.voice_plan("e")
         night_wolf = room.voice_plan("a")
         night_good = room.voice_plan("c")
         spectator_night = room.voice_plan("watcher")
-        return day, spectator_day, dead, night_wolf, night_good, spectator_night
+        room.game["phase"] = "last_words"
+        room.game["last_words"]["current"] = "e"
+        room.game["voice_epoch"] += 1
+        words_speaker = room.voice_plan("e")
+        words_listener = room.voice_plan("c")
+        return (day, spectator_day, dead, night_wolf, night_good,
+                spectator_night, words_speaker, words_listener)
 
-    (day, spectator_day, dead, night_wolf, night_good, spectator_night) = \
+    (day, spectator_day, dead, night_wolf, night_good, spectator_night,
+     words_speaker, words_listener) = \
         run_identity_shuffle(run)
-    check("白天存活者可进 day 频道发言", day == {"ww42-day": True}, str(day))
-    check("夜晚狼人切到 wolf 频道", night_wolf == {"ww42-wolf": True},
+    check("白天存活者可进 day 频道发言", day == {"ww42-m1-v1-day": True}, str(day))
+    check("夜晚狼人切到 wolf 频道", night_wolf == {"ww42-m1-v2-wolf": True},
           str(night_wolf))
     check("夜晚好人无频道", night_good == {}, str(night_good))
     check("死者无频道", dead == {}, str(dead))
-    check("观战者白天只听不说", spectator_day == {"ww42-day": False},
+    check("观战者白天只听不说", spectator_day == {"ww42-m1-v1-day": False},
           str(spectator_day))
     check("观战者夜晚无频道", spectator_night == {}, str(spectator_night))
+    check("遗言时仅发言者可发布，其他人可听", words_speaker
+          == {"ww42-m1-v3-day": True} and words_listener
+          == {"ww42-m1-v3-day": False})
     check("plan_key 稳定可比较", plan_key({"ww42-day": True})
           == plan_key({"ww42-day": True}) and plan_key({"a": True})
           != plan_key({"a": False}))
@@ -130,6 +142,7 @@ def test_service_diff():
         day_watch = hub.sent["watcher"][-1]
         # 入夜 + e 出局：狼人换发到 wolf，好人收到断开
         room.game["phase"] = "night"
+        room.game["voice_epoch"] += 1
         room.game["alive"] = [n for n in room.game["alive"] if n != "e"]
         await service.sync_room(room)
         night = {name: len(msgs) for name, msgs in hub.sent.items()}
@@ -141,30 +154,37 @@ def test_service_diff():
         service.issued[room.id] = {n: (k, t - 400) for n, (k, t) in state.items()}
         await service.sync_room(room)
         refreshed = all(len(msgs) >= 1 for msgs in hub.sent.values())
+        # 新页面/观战者加入时，未变的计划也可立即补发。
+        before_force = len(hub.sent["a"])
+        await service.sync_user(room, "a", force=True)
+        forced = len(hub.sent["a"]) == before_force + 1
         # 离桌：被移除的人触发踢出
         room.remove_member("f")
         room.game["alive"] = [n for n in room.game["alive"] if n != "f"]
         await service.sync_room(room)
-        return first, unchanged, night, day_wolf, day_watch, wolf_msg, good_msg, refreshed, kicks
+        return (first, unchanged, night, day_wolf, day_watch, wolf_msg,
+                good_msg, refreshed, forced, kicks)
 
     (first, unchanged, night, day_wolf, day_watch, wolf_msg, good_msg,
-     refreshed, kicks) = run_identity_shuffle(run)
+     refreshed, forced, kicks) = run_identity_shuffle(run)
     check("开局后全员+观战者各签发一次", set(first) == {"a", "b", "c", "d", "e", "f", "watcher"}
           and all(count == 1 for count in first.values()), str(first))
     check("计划未变不重复签发", unchanged == first, str(unchanged))
-    check("白天狼人也只在 day 频道", day_wolf["room"] == "ww42-day"
+    check("白天狼人也只在 day 频道", day_wolf["room"] == "ww42-m1-v1-day"
           and day_wolf["can_publish"] is True, str(day_wolf))
-    check("白天观战者只听不说", day_watch["room"] == "ww42-day"
+    check("白天观战者只听不说", day_watch["room"] == "ww42-m1-v1-day"
           and day_watch["can_publish"] is False, str(day_watch))
     check("入夜后计划变化触发换发", all(night[name] > first[name]
                                     for name in ("a", "c", "watcher")), str(night))
     check("狼人夜晚收到 wolf 房间 token",
-          wolf_msg["room"] == "ww42-wolf" and wolf_msg["can_publish"] is True
+          wolf_msg["room"] == "ww42-m1-v2-wolf" and wolf_msg["can_publish"] is True
           and wolf_msg["url"] == "ws://lk.test:7880" and wolf_msg["token"], str(wolf_msg))
     check("好人夜晚收到断开指令", good_msg["room"] is None
           and good_msg["token"] is None, str(good_msg))
     check("半衰期后未变计划也续签", refreshed)
-    check("离桌成员被踢出频道", (42, "f") in kicks, str(kicks))
+    check("重进页面可强制补发授权", forced)
+    check("阶段切换踢出旧频道", ("ww42-m1-v1-day", "a") in kicks
+          and ("ww42-m1-v1-day", "f") in kicks, str(kicks))
 
 
 def test_service_disabled():
@@ -202,11 +222,47 @@ def test_mint_token_real():
     check("空计划签发为 None（客户端断开）", empty is None)
 
 
+def test_admin_cleanup():
+    """使用真实 SDK 请求类型验证管理接口由实例调用。"""
+    async def run():
+        conf = dict(voice_config(), enabled=True, api_key="devkey",
+                    api_secret="devsecret", api_url="http://127.0.0.1:7880")
+        with patch("server.voice_livekit.voice_config", return_value=conf):
+            service = VoiceService(FakeHub())
+        removed, deleted = [], []
+
+        class FakeRoomService:
+            async def remove_participant(self, request):
+                removed.append((request.room, request.identity))
+
+            async def delete_room(self, request):
+                deleted.append(request.room)
+
+        class FakeClient:
+            room = FakeRoomService()
+
+            async def aclose(self):
+                pass
+
+        service._client = FakeClient()
+        await service._kick_room("ww42-m1-v1-day", "alice")
+        service.rooms_seen[42] = {"ww42-m1-v1-day", "ww42-m1-v2-wolf"}
+        await service.close_room(42)
+        await service.aclose()
+        return removed, deleted
+
+    removed, deleted = asyncio.run(run())
+    check("LiveKit 管理接口可踢人与删房", removed
+          == [("ww42-m1-v1-day", "alice")]
+          and set(deleted) == {"ww42-m1-v1-day", "ww42-m1-v2-wolf"})
+
+
 def main():
     test_voice_plan()
     test_service_diff()
     test_service_disabled()
     test_mint_token_real()
+    test_admin_cleanup()
     failed = [name for name, ok in results if not ok]
     print(f"\n{len(results) - len(failed)}/{len(results)} 通过")
     if failed:

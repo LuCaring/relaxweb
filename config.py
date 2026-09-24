@@ -36,6 +36,7 @@ DEFAULTS = {
     "voice": {
         "enabled": False,
         "url": "ws://127.0.0.1:7880",
+        "api_url": "http://127.0.0.1:7880",
         "api_key": "devkey",
         "api_secret": "",
         "token_ttl": 600,

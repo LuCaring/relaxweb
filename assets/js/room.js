@@ -3,10 +3,11 @@
 import { alertDialog } from "./dialog.js";
 import { renderGameView, send, setRoomMode, state, updateCoinChip } from "./core.js";
 import { gameView, onMessage, registerView } from "./registry.js";
-import { closeChatOverlay, resetRoomChat, openChatOverlay, usesCompactDesktopChat, usesDesktopChat } from "./room-chat.js";
+import { closeChatOverlay, resetRoomChat, openChatOverlay, refreshRoomChatComposer, usesCompactDesktopChat, usesDesktopChat } from "./room-chat.js";
 import { closeHandResultOverlay, renderHandResultOverlay, renderSettlementView } from "./room-settlement.js";
 import { renderRoomLobby } from "./room-waiting.js";
 import { observeGameRoom, resetGameAudioRoom } from "./game-audio.js";
+import { leaveVoice } from "./room-voice.js";
 
 export { closeChatOverlay };
 
@@ -46,6 +47,7 @@ onMessage("game_joined", (data) => {
   updateCoinChip();
   send({ type: "get_finance" });
   renderGameView();
+  refreshRoomChatComposer();
 });
 
 function reportGameError(data) {
@@ -60,12 +62,14 @@ onMessage("game_update", (data) => {
   observeGameRoom(state.myRoom, data);
   state.myRoom = data;
   renderGameView();
+  refreshRoomChatComposer();
 });
 
 onMessage("hand_result", () => {});
 onMessage("game_restart", () => {});
 
 onMessage("room_closed", (data) => {
+  void leaveVoice();
   const hadRoom = Boolean(state.myRoom);
   resetGameAudioRoom();
   state.myRoom = null;

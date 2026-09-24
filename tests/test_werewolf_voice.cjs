@@ -65,7 +65,9 @@ async function main() {
     return;
   }
 
-  const lkPort = 7880;
+  const lkPort = await freePort();
+  const lkUdpPort = await freePort();
+  const lkTcpPort = await freePort();
   const chatPort = await freePort();
   const webPort = await freePort();
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'ww-voice-'));
@@ -78,19 +80,25 @@ async function main() {
     LIVE_WEB_PORT: String(webPort),
     VOICE_ENABLED: '1',
     VOICE_URL: `ws://127.0.0.1:${lkPort}`,
+    VOICE_API_URL: `http://127.0.0.1:${lkPort}`,
     VOICE_API_KEY: 'devkey',
     VOICE_API_SECRET: 'secret',
   };
   console.log(`livekit :${lkPort} chat :${chatPort} web :${webPort}`);
 
   const procs = [];
+  const processErrors = [];
   let browser = null;
-  const livekit = spawn(lk, ['--dev', '--bind', '127.0.0.1', '--port', String(lkPort)],
-    { stdio: 'ignore' });
+  const livekit = spawn(lk, ['--dev', '--bind', '127.0.0.1', '--port', String(lkPort),
+    '--udp-port', String(lkUdpPort), '--rtc.tcp_port', String(lkTcpPort)],
+    { stdio: ['ignore', 'ignore', 'pipe'] });
+  livekit.stderr.on('data', (chunk) => processErrors.push(`livekit: ${chunk}`));
   procs.push(livekit);
-  const chat = spawn(python, ['chat_server.py'], { cwd: ROOT, env, stdio: 'ignore' });
+  const chat = spawn(python, ['chat_server.py'], { cwd: ROOT, env, stdio: ['ignore', 'ignore', 'pipe'] });
+  chat.stderr.on('data', (chunk) => processErrors.push(`chat: ${chunk}`));
   procs.push(chat);
-  const web = spawn(python, ['deploy/serve.py'], { cwd: ROOT, env, stdio: 'ignore' });
+  const web = spawn(python, ['deploy/serve.py'], { cwd: ROOT, env, stdio: ['ignore', 'ignore', 'pipe'] });
+  web.stderr.on('data', (chunk) => processErrors.push(`web: ${chunk}`));
   procs.push(web);
   try {
     await waitForPort(lkPort);
@@ -127,12 +135,38 @@ print(json.dumps({n: accounts.create_session(n) for n in names}))
     });
     const players = {};
     const errors = {};
+    const consoleErrors = {};
     for (const name of ['va', 'vb', 'vc', 'vd']) {
       const context = await browser.newContext({ viewport: { width: 1280, height: 900 } });
       const page = await context.newPage();
       page.setDefaultTimeout(15000);
       errors[name] = [];
+      consoleErrors[name] = [];
       page.on('pageerror', (e) => errors[name].push(e.message));
+      page.on('console', (message) => {
+        if (message.type() === 'error') {
+          consoleErrors[name].push(`${message.location().url}: ${message.text()}`);
+        }
+      });
+      page.on('requestfailed', (request) => {
+        errors[name].push(`${request.url()}: ${request.failure()?.errorText}`);
+      });
+      await page.route(`http://127.0.0.1:${webPort}/assets/**`, (route) => {
+        const file = path.resolve(ROOT, '.' + new URL(route.request().url()).pathname);
+        if (!file.startsWith(path.join(ROOT, 'assets') + path.sep)) {
+          return route.fulfill({ status: 403 });
+        }
+        const contentType = {
+          '.js': 'text/javascript', '.css': 'text/css', '.svg': 'image/svg+xml',
+          '.png': 'image/png', '.json': 'application/json', '.jpg': 'image/jpeg',
+          '.webp': 'image/webp',
+        }[path.extname(file)] || 'application/octet-stream';
+        try {
+          return route.fulfill({ body: fs.readFileSync(file), contentType });
+        } catch {
+          return route.fulfill({ status: 404 });
+        }
+      });
       await page.addInitScript((token) => {
         localStorage.setItem('liveAuthToken', token);
         // 测试环境的假麦克风：WebAudio 振荡器顶替硬件采集，
@@ -152,11 +186,36 @@ print(json.dumps({n: accounts.create_session(n) for n in names}))
         };
       }, tokens[name]);
       await page.goto(`http://127.0.0.1:${webPort}/game.html`);
-      await page.evaluate(async () => {
-        window.core = await import('/assets/js/core.js');
-        window.voice = await import('/assets/js/room-voice.js');
-      });
-      await page.waitForFunction(() => core.state.currentUser?.username, null, { timeout: 30000 });
+      try {
+        await page.evaluate(async () => {
+          const main = [...document.scripts].find((script) => script.type === 'module'
+            && script.src.includes('/assets/js/main.js'));
+          await import(main.src);
+          window.core = await import('/assets/js/core.js');
+          window.voice = await import('/assets/js/room-voice.js');
+        });
+      } catch (error) {
+        console.error('module errors:', consoleErrors[name], errors[name]);
+        console.error('web 404:', processErrors.filter((line) => line.includes(' 404 ')).slice(-10));
+        console.error('process state:', { livekit: livekit.exitCode, chat: chat.exitCode,
+          web: web.exitCode });
+        console.error('web logs:', processErrors.filter((line) => line.startsWith('web:')).join('').slice(-2000));
+        throw error;
+      }
+      try {
+        await page.waitForFunction(() => core.state.currentUser?.username, null, { timeout: 30000 });
+      } catch (error) {
+        console.error('page:', name, await page.evaluate(() => ({
+          socket: core.state.socket?.readyState,
+          token: Boolean(localStorage.getItem('liveAuthToken')),
+          chatPort: core.CHAT_PORT,
+          user: core.state.currentUser?.username,
+        })));
+        console.error('page errors:', errors[name]);
+        console.error('console errors:', consoleErrors[name]);
+        console.error('chat logs:', processErrors.filter((line) => line.startsWith('chat:')).join('').slice(-5000));
+        throw error;
+      }
       players[name] = { name, page };
     }
 
@@ -230,7 +289,10 @@ print(json.dumps({n: accounts.create_session(n) for n in names}))
     try {
       for (const name of [wolf, seer]) {
         await players[name].page.waitForFunction(() => voice.voiceDebug().micPublished === true
-          && voice.voiceDebug().remoteAudio >= 1, null, { timeout: 40000 });
+          && voice.voiceDebug().remoteAudio >= 1
+          && [...document.querySelectorAll('audio[data-voice-peer]')]
+            .some((element) => !element.paused && element.readyState >= 2),
+        null, { timeout: 40000 });
       }
     } catch (error) {
       for (const name of Object.keys(players)) {
@@ -256,7 +318,9 @@ print(json.dumps({n: accounts.create_session(n) for n in names}))
       }
       throw error;
     }
-    console.log(`PASS audio: ${wolf} and ${seer} published fake mic and hear each other on day channel`);
+    console.log(`PASS audio: ${wolf} and ${seer} published and played attached remote tracks`);
+    assert.equal(processErrors.some((line) => /voice kick failed|voice room delete failed/.test(line)),
+      false, 'LiveKit 管理 API should revoke old rooms without errors');
 
     for (const name of Object.keys(players)) assert.deepEqual(errors[name], [], `${name} page errors`);
     console.log('PASS: werewolf voice e2e (night wolf-only channel, day shared channel, mutual audio)');

@@ -10,7 +10,11 @@ import { onMessage } from "./registry.js";
 
 const mic = { wanted: false, primed: false };
 let current = null;        // 当前 LiveKit Room
-let currentKey = "";       // url|room，防止重复连接
+let currentKey = "";       // url|room|发布权限，防止重复连接
+let canPublish = false;
+let audioBlocked = false;
+const remoteAudio = new Map();
+let updateQueue = Promise.resolve();
 
 export function voiceMicWanted() {
   return mic.wanted;
@@ -18,6 +22,24 @@ export function voiceMicWanted() {
 
 export function voiceConnected() {
   return Boolean(current);
+}
+
+export function voiceStatus() {
+  return { connected: Boolean(current), canPublish, audioBlocked };
+}
+
+export async function enableVoiceAudio() {
+  if (!current) return false;
+  try {
+    await current.startAudio();
+    await Promise.all([...remoteAudio.values()].map((element) => element.play()));
+    audioBlocked = false;
+  } catch (error) {
+    audioBlocked = true;
+    console.warn("voice audio playback failed", error);
+  }
+  announceState();
+  return !audioBlocked;
 }
 
 /** 测试与调试用：当前连接、房间名、远端音频路数与本机麦克风发布状态。 */
@@ -42,6 +64,9 @@ export function voiceDebug() {
 }
 
 export async function toggleMic() {
+  if (!current || !canPublish) return false;
+  // 两项浏览器授权都在点击调用栈中启动，避免等待播放后丢失用户手势。
+  void enableVoiceAudio();
   mic.wanted = !mic.wanted;
   if (mic.wanted && !mic.primed) {
     // 首次上麦在点击手势里预热权限，后续自动恢复发布不再需要手势
@@ -63,7 +88,7 @@ export async function toggleMic() {
 }
 
 async function applyMic() {
-  if (!current) return;
+  if (!current || !canPublish) return;
   try {
     await current.localParticipant.setMicrophoneEnabled(mic.wanted);
   } catch (error) {
@@ -75,8 +100,23 @@ async function applyMic() {
 
 function announceState() {
   document.dispatchEvent(new CustomEvent("voicestate", {
-    detail: { connected: Boolean(current), mic: mic.wanted },
+    detail: { connected: Boolean(current), mic: mic.wanted && canPublish,
+      canPublish, audioBlocked },
   }));
+}
+
+function detachAudio(track) {
+  const element = remoteAudio.get(track);
+  if (!element) return;
+  try { track.detach(element); } catch { /* 音轨可能已经断开 */ }
+  element.remove();
+  remoteAudio.delete(track);
+  announceState();
+}
+
+function clearAudio() {
+  for (const track of [...remoteAudio.keys()]) detachAudio(track);
+  audioBlocked = false;
 }
 
 async function applyUpdate(update) {
@@ -85,7 +125,7 @@ async function applyUpdate(update) {
     await disconnect("server cleared voice");
     return;
   }
-  const key = `${update.url}|${update.room}`;
+  const key = `${update.url}|${update.room}|${Boolean(update.can_publish)}`;
   if (current && currentKey === key) {
     // 同一房间：token 换发无需重连（旧 token 仍有效到过期）
     return;
@@ -97,13 +137,30 @@ async function applyUpdate(update) {
       detail: speakers.map((s) => s.identity),
     }));
   });
-  room.on(LK.RoomEvent.TrackSubscribed, () => announceState());
+  room.on(LK.RoomEvent.TrackSubscribed, (track, _publication, participant) => {
+    if (track.kind === "audio") {
+      const element = track.attach();
+      element.autoplay = true;
+      element.playsInline = true;
+      element.dataset.voicePeer = participant.identity;
+      document.body.append(element);
+      remoteAudio.set(track, element);
+      element.play().catch(() => {
+        audioBlocked = true;
+        announceState();
+      });
+    }
+    announceState();
+  });
+  room.on(LK.RoomEvent.TrackUnsubscribed, (track) => detachAudio(track));
   room.on(LK.RoomEvent.ParticipantConnected, () => announceState());
   room.on(LK.RoomEvent.ParticipantDisconnected, () => announceState());
   room.on(LK.RoomEvent.Disconnected, () => {
     if (current === room) {
+      clearAudio();
       current = null;
       currentKey = "";
+      canPublish = false;
       announceState();
     }
   });
@@ -118,6 +175,7 @@ async function applyUpdate(update) {
   }
   current = room;
   currentKey = key;
+  canPublish = Boolean(update.can_publish);
   if (mic.wanted) await applyMic();
   announceState();
 }
@@ -126,6 +184,8 @@ async function disconnect(reason) {
   const room = current;
   current = null;
   currentKey = "";
+  canPublish = false;
+  clearAudio();
   if (room) {
     try { room.removeAllListeners(); } catch { /* 忽略 */ }
     try { await room.disconnect(); } catch { /* 已断开 */ }
@@ -134,6 +194,15 @@ async function disconnect(reason) {
   if (reason) console.info("voice:", reason);
 }
 
-onMessage("voice_update", (msg) => { applyUpdate(msg).catch((e) => console.warn(e)); });
+export async function leaveVoice() {
+  mic.wanted = false;
+  await disconnect("left game room");
+}
+
+onMessage("voice_update", (msg) => {
+  updateQueue = updateQueue.then(() => applyUpdate(msg)).catch((error) => {
+    console.warn("voice update failed", error);
+  });
+});
 
 document.addEventListener("visibilitychange", () => { /* 预留：后台节流 */ });

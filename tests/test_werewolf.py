@@ -15,6 +15,7 @@
 import asyncio
 import random
 import sys
+import time
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
@@ -327,6 +328,54 @@ def test_witch_always_self_save():
     check("always 自救规则允许女巫自救", can and saved)
 
 
+def test_guard_self_and_last_words_timer():
+    async def run():
+        room = make_room({"board": ["guard", "werewolf", "witch", "seer",
+                                    "villager", "villager"]})
+        await room.start()
+        options = room.view_for("a")["your_options"]
+        offered = "a" in [row["username"] for row in options["targets"]]
+        await room.perform_action("a", "night", {"target": "a"})
+        accepted = room.game["night"]["protect"].get("a") == "a"
+        await room.perform_action("b", "night", {"target": "f"})
+        await room.perform_action("c", "witch", {"save": False})
+        await room.perform_action("d", "night", {})
+        g = room.game
+        remaining = g["deadline"] - time.time()
+        scheduled = room.timers["phase"].when() - asyncio.get_running_loop().time()
+        result = (offered, accepted, g["phase"], remaining, scheduled,
+                  room.view_for("f")["turn_left"])
+        room.close()
+        return result
+
+    offered, accepted, phase, remaining, scheduled, visible = \
+        run_identity_shuffle(run)
+    check("守卫可守护自己", offered and accepted)
+    check("遗言有完整 20 秒", phase == "last_words"
+          and 18 < remaining <= 20 and 18 < scheduled <= 20
+          and 18 < visible <= 20)
+
+
+def test_skip_hunter_shot():
+    async def run():
+        room = make_room({"board": ["werewolf", "werewolf", "hunter", "seer",
+                                    "villager", "villager"]})
+        await room.start()
+        await skip_to_vote(room)
+        for voter in list(room.game["alive"]):
+            await room.perform_action(voter, "vote", {"target": "c"})
+        if room.game["phase"] == "last_words":
+            await room._advance_last_words()
+        was_shot = room.game["phase"] == "shot"
+        await room.perform_action("c", "shoot", {"target": ""})
+        result = (was_shot, room.game["phase"], room.game["shot_pending"])
+        room.close()
+        return result
+
+    was_shot, phase, pending = run_identity_shuffle(run)
+    check("猎人放弃开枪立即推进", was_shot and phase == "night" and pending is None)
+
+
 def test_hunter_shot_on_exile():
     async def run():
         # 猎人不是唯一神职：放逐他不会触发屠边
@@ -565,14 +614,19 @@ def test_chat_channels():
         room.chat.append({"channel": "wolf", "text": "刀e", "username": "a"})
         room.chat.append({"channel": "dead", "text": "冤枉", "username": "f"})
         room.chat.append({"text": "大家好", "username": "c"})
+        room.add_spectator("watcher", "a")
+        spectator_route = room.chat_route("watcher", {})
+        spectator_sees = [m["text"] for m in room.visible_chat("watcher")]
         wolf_sees = [m["text"] for m in room.visible_chat("a")]
         good_sees = [m["text"] for m in room.visible_chat("e")]
         dead_sees = [m["text"] for m in room.visible_chat("f")]
         return (night_wolf, night_good, day_public, dead_channel, night2_wolf,
-                audience_wolf, audience_dead, wolf_sees, good_sees, dead_sees)
+                audience_wolf, audience_dead, wolf_sees, good_sees, dead_sees,
+                spectator_route, spectator_sees)
 
     (night_wolf, night_good, day_public, dead_channel, night2_wolf,
-     audience_wolf, audience_dead, wolf_sees, good_sees, dead_sees) = \
+     audience_wolf, audience_dead, wolf_sees, good_sees, dead_sees,
+     spectator_route, spectator_sees) = \
         run_identity_shuffle(run)
     check("夜晚狼人走 wolf 频道", night_wolf == "wolf" and night2_wolf == "wolf")
     check("夜晚好人被禁言", night_good == "")
@@ -587,6 +641,9 @@ def test_chat_channels():
           and "冤枉" not in good_sees, str(good_sees))
     check("死者可见 dead 频道与公开消息", "冤枉" in dead_sees
           and "大家好" in dead_sees and "刀e" not in dead_sees, str(dead_sees))
+    check("观战者看不到死者频道且不能冒充死者发言",
+          spectator_route == "" and spectator_sees == ["大家好"],
+          str(spectator_sees))
 
 
 # ---- 结算投票 ----
@@ -749,6 +806,8 @@ def main():
     test_single_actor_submit_locks()
     test_witch_rules_and_guard()
     test_witch_always_self_save()
+    test_guard_self_and_last_words_timer()
+    test_skip_hunter_shot()
     test_hunter_shot_on_exile()
     test_hunter_poison_default_no_shot()
     test_vote_and_tie()

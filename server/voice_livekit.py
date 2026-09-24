@@ -25,6 +25,8 @@ def voice_config():
     return {
         "enabled": bool(get("voice.enabled", env="VOICE_ENABLED", default=False)),
         "url": str(get("voice.url", env="VOICE_URL", default="ws://127.0.0.1:7880")),
+        "api_url": str(get("voice.api_url", env="VOICE_API_URL",
+                           default="http://127.0.0.1:7880")),
         "api_key": str(get("voice.api_key", env="VOICE_API_KEY", default="devkey")),
         "api_secret": str(get("voice.api_secret", env="VOICE_API_SECRET", default="")),
         "token_ttl": get_int("voice.token_ttl", env="VOICE_TOKEN_TTL", default=600),
@@ -50,11 +52,14 @@ class VoiceService:
         conf = voice_config()
         self.enabled = conf["enabled"] and bool(conf["api_secret"])
         self.url = conf["url"]
+        self.api_url = conf.get("api_url", "http://127.0.0.1:7880")
         self.ttl = max(60, conf["token_ttl"])
         self.api_key = conf["api_key"]
         self.api_secret = conf["api_secret"]
         self.issued = {}          # room_id -> {username: (plan签名, 过期时刻)}
+        self.rooms_seen = {}      # room_id -> 本局曾签发的 LiveKit 房间名
         self._api = None
+        self._client = None
         if not self.enabled:
             logger.info("voice disabled (voice.enabled=false or no api_secret)")
         elif self._load_api() is None:
@@ -72,6 +77,15 @@ class VoiceService:
             return None
         self._api = api
         return self._api
+
+    def _room_service(self):
+        api = self._load_api()
+        if api is None or not self.enabled:
+            return None
+        if self._client is None:
+            self._client = api.LiveKitAPI(
+                url=self.api_url, api_key=self.api_key, api_secret=self.api_secret)
+        return self._client.room
 
     # ---- token ----
     def mint_token(self, username, plan):
@@ -102,57 +116,85 @@ class VoiceService:
         usernames = list(room.seating) + list(room.spectators)
         state = self.issued.setdefault(room.id, {})
         now = time.time()
+        removals = []
         for name in [n for n in state if n not in usernames]:
-            state.pop(name, None)
-            await self._kick(room.id, name)
-        for name in usernames:
-            plan = room.voice_plan(name)
-            key = plan_key(plan)
-            prev = state.get(name)
-            if prev and prev[0] == key and prev[1] > now + self.ttl / 2:
-                continue
-            token = self.mint_token(name, plan)
-            state[name] = (key, now + self.ttl)
-            await self.hub.send_to_user(name, {
-                "type": "voice_update",
-                "url": self.url,
-                "room": next(iter(plan), None),
-                "can_publish": any(plan.values()),
-                "token": token,
-            })
+            previous = state.pop(name, None)
+            if previous and previous[0]:
+                removals.append(self._kick_room(next(iter(previous[0]))[0], name))
+        if removals:
+            await asyncio.gather(*removals)
+        await asyncio.gather(*(self.sync_user(room, name, now=now)
+                               for name in usernames))
 
-    async def _kick(self, room_id, username):
-        """把已不在房间的人从其余频道的 LiveKit 房间里移出（尽力而为）。"""
-        api = self._load_api()
-        if api is None:
+    async def sync_user(self, room, username, *, force=False, now=None):
+        """单用户补发授权；重新进入页面或观战时不等待下一次阶段广播。"""
+        if not self.enabled:
             return
-        for suffix in ("day", "wolf"):
-            name = f"ww{room_id}-{suffix}"
-            try:
-                await asyncio.wait_for(
-                    api.room.remove_participant(
-                        api.RoomParticipantIdentity(room=name, identity=username)), 5)
-            except Exception:
-                continue     # 不在线/房间不存在都是常态
+        now = time.time() if now is None else now
+        state = self.issued.setdefault(room.id, {})
+        plan = room.voice_plan(username)
+        key = plan_key(plan)
+        prev = state.get(username)
+        if (not force and prev and prev[0] == key
+                and prev[1] > now + self.ttl / 2):
+            return
+        if prev and prev[0] != key and prev[0]:
+            await self._kick_room(next(iter(prev[0]))[0], username)
+        token = self.mint_token(username, plan)
+        if plan:
+            self.rooms_seen.setdefault(room.id, set()).update(plan)
+        state[username] = (key, now + self.ttl)
+        await self.hub.send_to_user(username, {
+            "type": "voice_update",
+            "url": self.url,
+            "room": next(iter(plan), None),
+            "can_publish": any(plan.values()),
+            "token": token,
+        })
+
+    async def _kick_room(self, room_name, username):
+        """立即撤销已连接的旧频道；旧令牌只对应旧阶段房间。"""
+        api = self._load_api()
+        service = self._room_service()
+        if service is None:
+            return
+        try:
+            await asyncio.wait_for(service.remove_participant(
+                api.RoomParticipantIdentity(room=room_name, identity=username)), 5)
+        except api.TwirpError as error:
+            if error.status != 404:
+                logger.warning("voice kick failed: %s %s: %s", room_name, username, error)
+        except Exception:
+            logger.warning("voice kick failed: %s %s", room_name, username,
+                           exc_info=True)
 
     async def close_room(self, room_id):
         """房间解散：清签发记录并删除对应 LiveKit 房间（踢出所有连接）。"""
-        self.issued.pop(room_id, None)
-        api = self._load_api()
-        if api is None or not self.enabled:
+        state = self.issued.pop(room_id, {})
+        names = self.rooms_seen.pop(room_id, set())
+        for key, _expires in state.values():
+            names.update(name for name, _publish in key)
+        if not names:
             return
-        for suffix in ("day", "wolf"):
+        api = self._load_api()
+        service = self._room_service()
+        if service is None:
+            return
+        async def delete(name):
             try:
-                await asyncio.wait_for(
-                    api.room.delete_room(
-                        api.DeleteRoomRequest(room=f"ww{room_id}-{suffix}")), 5)
+                await asyncio.wait_for(service.delete_room(
+                    api.DeleteRoomRequest(room=name)), 5)
+            except api.TwirpError as error:
+                if error.status != 404:
+                    logger.warning("voice room delete failed: %s: %s", name, error)
             except Exception:
-                continue
+                logger.warning("voice room delete failed: %s", name, exc_info=True)
+        await asyncio.gather(*(delete(name) for name in names))
 
     async def aclose(self):
-        api = self._load_api()
-        if api is not None:
+        if self._client is not None:
             try:
-                await api.aclose()
+                await self._client.aclose()
             except Exception:
                 pass
+            self._client = None

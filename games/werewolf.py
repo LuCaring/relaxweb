@@ -356,7 +356,9 @@ class WerewolfRoom(BaseRoom):
         channel = view["channel"]
         if not channel:
             return {}
-        return {f"ww{self.id}-{channel}": bool(view["can_speak"])}
+        g = self.game
+        return {f"ww{self.id}-m{g['match_no']}-v{g['voice_epoch']}-{channel}":
+                bool(view["can_speak"])}
 
     def spectator_view(self, username):
         """观战视角：只给公开视图，不跟随被观战者（否则会泄露其角色与夜间信息）。"""
@@ -374,14 +376,16 @@ class WerewolfRoom(BaseRoom):
         if not g or self.status != "playing" or g["phase"] == "showdown":
             return {"channel": None, "can_speak": False}
         phase = g["phase"]
+        if phase == "last_words" and g["last_words"]["current"]:
+            if username in g["roles"] or username in self.spectators:
+                return {"channel": "day",
+                        "can_speak": username == g["last_words"]["current"]}
         if username in g["alive"]:
             if phase in ("day", "vote"):
                 return {"channel": "day", "can_speak": True}
             if phase == "night" and is_wolf_role(g["roles"][username]):
                 return {"channel": "wolf", "can_speak": True}
             return {"channel": None, "can_speak": False}
-        if phase == "last_words" and g["last_words"]["current"] == username:
-            return {"channel": "day", "can_speak": True}
         # 死者与观战者白天可听公开频道（只听不说）
         if phase in ("day", "vote") and (username in g["roles"]
                                          or username in self.spectators):
@@ -393,6 +397,8 @@ class WerewolfRoom(BaseRoom):
         g = self.game
         if not g or self.status != "playing" or g["phase"] == "showdown":
             return None
+        if username in self.spectators:
+            return ""
         if g["last_words"]["current"] == username:
             return None
         if username in g["alive"]:
@@ -417,6 +423,7 @@ class WerewolfRoom(BaseRoom):
         if not g or self.status != "playing":
             return list(self.chat)
         alive = username in g["alive"]
+        is_dead_player = username in g["roles"] and not alive
         is_wolf = alive and is_wolf_role(g["roles"].get(username) or "")
         visible = []
         for message in self.chat:
@@ -425,7 +432,7 @@ class WerewolfRoom(BaseRoom):
                 visible.append(message)
             elif channel == "wolf" and is_wolf:
                 visible.append(message)
-            elif channel == "dead" and not alive:
+            elif channel == "dead" and is_dead_player:
                 visible.append(message)
         return visible
 
@@ -487,6 +494,7 @@ class WerewolfRoom(BaseRoom):
         self.hand_seq += 1
         self.game = {
             "match_no": self.hand_seq,
+            "voice_epoch": 0,
             "day_no": 0,
             "phase": "night",
             "roles": roles,
@@ -528,6 +536,7 @@ class WerewolfRoom(BaseRoom):
     # ---- 夜晚 ----
     async def _enter_night(self):
         g = self.game
+        g["voice_epoch"] += 1
         g["day_no"] += 1
         g["phase"] = "night"
         g["night"] = self._fresh_night()
@@ -637,7 +646,7 @@ class WerewolfRoom(BaseRoom):
             if username in night["protect"]:     # 守卫同样一锤定音
                 return
             if target:
-                if target not in g["alive"] or target == username:
+                if target not in g["alive"]:
                     return
                 if not self.rules["guard_continuous"] \
                         and g["last_protect"].get(username) == target:
@@ -748,6 +757,7 @@ class WerewolfRoom(BaseRoom):
     # ---- 白天 ----
     async def _enter_day(self):
         g = self.game
+        g["voice_epoch"] += 1
         g["phase"] = "day"
         g["deadline"] = time.time() + self.rules["day_seconds"]
         self._arm_phase_timer()
@@ -763,6 +773,7 @@ class WerewolfRoom(BaseRoom):
 
     async def _enter_vote(self):
         g = self.game
+        g["voice_epoch"] += 1
         g["phase"] = "vote"
         g["vote"] = {}
         g["candidates"] = None
@@ -804,6 +815,7 @@ class WerewolfRoom(BaseRoom):
             await self._enter_night()
             return
         if self.rules["tie"] == "revote" and g["vote_round"] == 1:
+            g["voice_epoch"] += 1
             g["vote_round"] = 2
             g["candidates"] = tied
             g["vote"] = {}
@@ -858,8 +870,10 @@ class WerewolfRoom(BaseRoom):
         queue = g["last_words"]["queue"]
         if queue:
             current = queue.pop(0)
+            g["voice_epoch"] += 1
             g["last_words"]["current"] = current
-            g["last_words"]["deadline"] = time.time() + LAST_WORDS_TIMEOUT
+            g["deadline"] = time.time() + LAST_WORDS_TIMEOUT
+            g["last_words"]["deadline"] = g["deadline"]
             self._arm_phase_timer()
             self._log_event(f"请 {self.display_name(current)} 发表遗言",
                             "last_words")
@@ -878,6 +892,7 @@ class WerewolfRoom(BaseRoom):
 
     async def _enter_shot(self):
         g = self.game
+        g["voice_epoch"] += 1
         g["phase"] = "shot"
         g["pending"] = [g["shot_pending"]]
         g["deadline"] = time.time() + SHOT_TIMEOUT
@@ -891,7 +906,10 @@ class WerewolfRoom(BaseRoom):
         if g["phase"] != "shot" or g["shot_pending"] != username:
             return
         target = self._target_name(data)
-        if not target or target not in g["alive"] or target == username:
+        if not target:
+            await self._close_shot()
+            return
+        if target not in g["alive"] or target == username:
             return
         self.cancel_timer("phase")
         g["alive"].remove(target)
