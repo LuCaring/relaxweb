@@ -5,6 +5,7 @@ import { gameMetaById } from "./game-config.js";
 import { gameView } from "./registry.js";
 import { chatOpenButton, reapplySeatBubbles } from "./room-chat.js";
 import { enableVoiceAudio, toggleMic, voiceMicWanted, voiceStatus } from "./room-voice.js";
+import { getPeerVolume, setPeerVolume } from "./voice-mic.js";
 
 function el(tag, className, text) {
   const node = document.createElement(tag);
@@ -159,7 +160,7 @@ function ruleItems(room) {
 
 function refreshWaitingVoice(root, room) {
   const panel = root.querySelector(".waiting-voice");
-  panel.hidden = room.game_type !== "werewolf" || !window.LIVE_CONFIG?.voice?.enabled;
+  panel.hidden = !gameMetaById(room.game_type)?.voice || !window.LIVE_CONFIG?.voice?.enabled;
   if (panel.hidden) return;
   const preview = Boolean(window.LIVE_CONFIG?.voice?.preview);
   const status = voiceStatus();
@@ -174,6 +175,57 @@ function refreshWaitingVoice(root, room) {
     : !status.connected ? "语音连接中，连接后可测试麦克风"
     : status.micError || (on ? "麦克风已开启，可以和房内玩家交谈" : "已连接 · 麦克风关闭");
   panel.querySelector(".waiting-voice-audio").hidden = !status.audioBlocked;
+  syncVoiceMixer(root, room);
+}
+
+function voiceMixerRow() {
+  const row = el("div", "voice-mixer-row");
+  const name = el("span", "voice-mixer-name");
+  const slider = el("input", "voice-mixer-range");
+  slider.type = "range";
+  slider.min = "0";
+  slider.max = "100";
+  slider.step = "5";
+  const value = el("span", "voice-mixer-value");
+  slider.addEventListener("input", () => {
+    if (!row.dataset.voicePeer) return;
+    const volume = setPeerVolume(row.dataset.voicePeer, Number(slider.value) || 0);
+    value.textContent = `${volume}%`;
+  });
+  row.append(name, slider, value);
+  return row;
+}
+
+function syncVoiceMixer(root, room) {
+  const rows = root.querySelector(".voice-mixer-rows");
+  if (!rows) return;
+  const me = state.currentUser?.username;
+  const others = (room.players || []).filter((player) => player.username && player.username !== me);
+  const existing = new Map([...rows.querySelectorAll(".voice-mixer-row")]
+    .map((row) => [row.dataset.voicePeer, row]));
+  const keep = new Set();
+  for (const player of others) {
+    keep.add(player.username);
+    let row = existing.get(player.username);
+    if (!row) {
+      row = voiceMixerRow();
+      rows.append(row);
+    }
+    row.dataset.voicePeer = player.username;
+    const label = player.nickname || player.username;
+    row.querySelector(".voice-mixer-name").textContent = label;
+    const slider = row.querySelector(".voice-mixer-range");
+    const value = row.querySelector(".voice-mixer-value");
+    const volume = getPeerVolume(player.username);
+    if (slider.value !== String(volume)) slider.value = String(volume);
+    if (value.textContent !== `${volume}%`) value.textContent = `${volume}%`;
+    if (slider.getAttribute("aria-label") !== `${label} 音量`) {
+      slider.setAttribute("aria-label", `${label} 音量`);
+    }
+  }
+  for (const [username, row] of existing) {
+    if (!keep.has(username)) row.remove();
+  }
 }
 
 function refreshWaitingRoom(root) {
@@ -238,7 +290,12 @@ function voicePanel() {
   mic.type = "button";
   mic.addEventListener("click", () => { void toggleMic(); });
   actions.append(status, audio, mic);
-  voice.append(info, actions);
+  const mixer = el("div", "waiting-voice-mixer");
+  const mixerHead = el("div", "waiting-voice-mixer-head");
+  mixerHead.append(el("strong", "", "成员音量"),
+    el("span", "waiting-voice-mixer-note", "只调自己听到的音量，下次进房自动沿用"));
+  mixer.append(mixerHead, el("div", "voice-mixer-rows"));
+  voice.append(info, actions, mixer);
   return voice;
 }
 

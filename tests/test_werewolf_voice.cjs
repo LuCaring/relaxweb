@@ -249,6 +249,39 @@ print(json.dumps({n: accounts.create_session(n) for n in names}))
     }
     console.log('PASS lobby: creator and joiners share voice; two microphones publish and play audio');
 
+    // 按人音量混音器：除自己外每人一条滑杆；调整后写入缓存并作用于已挂载音轨
+    assert.equal(await players.va.page.locator('.voice-mixer-row').count(), 3,
+      'va should see one mixer row per other player');
+    await players.va.page.locator('.voice-mixer-row[data-voice-peer="vb"] .voice-mixer-range').fill('40');
+    assert.equal(await players.va.page.evaluate(() => {
+      const saved = JSON.parse(localStorage.getItem('voicePeerVolumes') || '[]');
+      const pair = saved.find(([name]) => name === 'vb');
+      return pair ? pair[1] : null;
+    }), 40, 'slider input persists the per-peer volume');
+    await players.va.page.waitForFunction(() => {
+      const element = document.querySelector('audio[data-voice-peer="vb"]');
+      return element && Math.abs(element.volume - 0.4) < 0.01;
+    }, null, { timeout: 5000, polling: 100 });
+    // 缓存继承：刷新页面后滑杆恢复为保存的值
+    await players.va.page.reload();
+    await players.va.page.waitForFunction(
+      () => Boolean(document.querySelector('.voice-mixer-row[data-voice-peer="vb"] .voice-mixer-range')),
+      null, { timeout: 15000, polling: 100 });
+    assert.equal(await players.va.page.locator('.voice-mixer-row[data-voice-peer="vb"] .voice-mixer-range').inputValue(), '40',
+      'mixer slider restores persisted volume after reload');
+    // 恢复测试用的模块绑定（刷新后 window.voice/window.core 丢失）
+    await players.va.page.evaluate(async () => {
+      const main = [...document.scripts].find((script) => script.type === 'module'
+        && script.src.includes('/assets/js/main.js'));
+      await import(main.src);
+      window.core = await import('/assets/js/core.js');
+      window.voice = await import('/assets/js/room-voice.js');
+    });
+    await players.va.page.waitForFunction(
+      () => core.state.currentUser?.username && voice.voiceDebug().room?.endsWith('-lobby'),
+      null, { timeout: 15000, polling: 100 });
+    console.log('PASS mixer: per-peer sliders render, persist and survive reload');
+
     // 开局 → 第一夜
     await players.va.page.evaluate(() => core.send({ type: 'start_game' }));
     for (const name of Object.keys(players)) {

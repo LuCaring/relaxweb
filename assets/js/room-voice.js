@@ -7,6 +7,7 @@
    牌桌据此高亮座位；连接状态变化广播 voicestate 事件。 */
 
 import { onMessage } from "./registry.js";
+import { getPeerVolume } from "./voice-mic.js";
 
 const mic = { wanted: false, primed: false };
 let current = null;        // 当前 LiveKit Room
@@ -119,6 +120,15 @@ function announceState() {
   }));
 }
 
+// 成员音量滑杆调整时，同步所有已挂载的远端音轨
+document.addEventListener("voicepeerchange", (event) => {
+  const { username, volume } = event.detail || {};
+  if (!username) return;
+  for (const element of remoteAudio.values()) {
+    if (element.dataset.voicePeer === username) element.volume = volume / 100;
+  }
+});
+
 function detachAudio(track) {
   const element = remoteAudio.get(track);
   if (!element) return;
@@ -158,6 +168,7 @@ async function applyUpdate(update) {
       element.playsInline = true;
       element.dataset.voicePeer = participant.identity;
       document.body.append(element);
+      element.volume = getPeerVolume(participant.identity) / 100;
       remoteAudio.set(track, element);
       element.play().catch(() => {
         audioBlocked = true;
