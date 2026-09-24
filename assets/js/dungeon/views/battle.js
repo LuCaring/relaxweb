@@ -5,10 +5,10 @@
  * 绝不发送 abandon——后台战斗继续推进，可随时回来。
  */
 
-import { request } from "../protocol.js";
-import { applyBattle, dgn, notify, reportError, ENEMY_TYPE_LABELS } from "../state.js";
-import { navigate } from "../router.js";
-import { visualNode } from "../assets.js";
+import { rpc } from "../dgn-protocol.js";
+import { applyBattle, dgn, notify, reportError, ENEMY_TYPE_LABELS } from "../dgn-state.js";
+import { navigate } from "../dgn-router.js";
+import { visualNode } from "../dgn-assets.js";
 import { confirmDialog } from "../../dialog.js";
 import { loadingNode } from "./prep.js";
 
@@ -90,7 +90,7 @@ function setBarFromCheckpoint(bars, battle) {
   bars.enemy.set(battle.hp["enemy:0"], bars.enemyMax);
 }
 
-export function render(container, battleId) {
+export function renderBattle(container, battleId) {
   const ctx = {
     battleId, destroyed: false, inFlight: false, timer: 0,
     bars: null, log: null, buttons: {}, statusNode: null, phaseNode: null,
@@ -104,7 +104,7 @@ export function render(container, battleId) {
 
 async function mount(ctx, container) {
   try {
-    const data = await request("dungeon_sync",
+    const data = await rpc("dungeon_sync",
       { battle_id: ctx.battleId, after_sequence: ctx.cursor },
       { volatile: true, timeoutMs: 4500 });
     if (ctx.destroyed) return;
@@ -235,7 +235,7 @@ async function control(ctx, command, extra = {}, retried = false) {
   if (!battle) return;
   for (const button of Object.values(ctx.buttons)) button.disabled = true;
   try {
-    const data = await request("dungeon_control", {
+    const data = await rpc("dungeon_control", {
       battle_id: ctx.battleId,
       command,
       expected_revision: battle.revision,
@@ -251,7 +251,7 @@ async function control(ctx, command, extra = {}, retried = false) {
     // 同步轮询会不断推进 revision，控制命令撞上 state_conflict 属预期：
     // 拉一次权威状态，用最新 revision 重试同一指令一次。
     if (!ctx.destroyed && error?.code === "state_conflict" && !retried) {
-      const fresh = await request("dungeon_sync",
+      const fresh = await rpc("dungeon_sync",
         { battle_id: ctx.battleId, after_sequence: ctx.cursor }, { volatile: true });
       if (!ctx.destroyed && fresh.battle
           && !["settled", "abandoned", "error"].includes(fresh.battle.status)) {
@@ -275,7 +275,7 @@ async function tick(ctx) {
   if (ctx.destroyed || ctx.inFlight) return;
   ctx.inFlight = true;
   try {
-    const data = await request("dungeon_sync",
+    const data = await rpc("dungeon_sync",
       { battle_id: ctx.battleId, after_sequence: ctx.cursor },
       { volatile: true, timeoutMs: 4500 });
     if (ctx.destroyed) return;
@@ -314,7 +314,7 @@ function consume(ctx, data) {
 }
 
 /** 离开战斗视图：只停本地定时器，不发 abandon。 */
-export function destroy() {
+export function teardown() {
   if (active) {
     active.destroyed = true;
     clearTimeout(active.timer);

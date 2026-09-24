@@ -1,9 +1,9 @@
 /* 结算页：拉取服务器终态，展示胜负、金币、掉落，并处理待领取。 */
 
-import { request, refreshState } from "../protocol.js";
-import { dgn, notify, reportError, itemStatsText, QUALITY_LABELS } from "../state.js";
-import { navigate } from "../router.js";
-import { visualNode } from "../assets.js";
+import { rpc, refreshState } from "../dgn-protocol.js";
+import { dgn, notify, reportError, itemStatsText, QUALITY_LABELS } from "../dgn-state.js";
+import { navigate } from "../dgn-router.js";
+import { visualNode } from "../dgn-assets.js";
 import { loadingNode } from "./prep.js";
 
 const OUTCOME_LABELS = {
@@ -48,9 +48,9 @@ function itemRow(item) {
   return row;
 }
 
-export function render(container, battleId) {
+export function renderResult(container, battleId) {
   container.replaceChildren(loadingNode("正在读取结算…"));
-  request("dungeon_get_result", { battle_id: battleId }).then((data) => {
+  rpc("dungeon_get_result", { battle_id: battleId }).then((data) => {
     if (data.battle?.battle_id !== battleId) throw Object.assign(new Error("结算不存在"), { code: "not_found" });
     drawResult(container, data.battle, data.result);
   }).catch((error) => {
@@ -64,7 +64,7 @@ export function render(container, battleId) {
     retry.type = "button";
     retry.className = "dgn-btn";
     retry.textContent = "重新加载";
-    retry.addEventListener("click", () => render(container, battleId));
+    retry.addEventListener("click", () => renderResult(container, battleId));
     container.replaceChildren(retry);
   });
 }
@@ -138,7 +138,7 @@ function drawResult(container, battle, result) {
 async function claim(button, ids, card) {
   button.disabled = true;
   try {
-    await request("dungeon_claim_items", { item_ids: ids });
+    await rpc("dungeon_claim_items", { item_ids: ids });
     notify("装备已领取入包", "info");
     card.querySelectorAll(".dgn-tag-pending").forEach((tag) => {
       tag.textContent = "已入包";

@@ -4,9 +4,9 @@
  * localStorage 里的登录令牌（liveAuthToken）与服务端注入的 LIVE_CONFIG。
  */
 
-import { auth, connect, login, logout, on } from "./protocol.js";
-import { applyState, dgn, subscribe } from "./state.js";
-import { currentRoute, navigate, startRouter } from "./router.js";
+import { auth, connect, signIn, logout, on } from "./dgn-protocol.js";
+import { applyState, dgn, subscribe } from "./dgn-state.js";
+import { currentRoute, navigate, startRouter } from "./dgn-router.js";
 import * as prepView from "./views/prep.js";
 import * as loadoutView from "./views/loadout.js";
 import * as battleView from "./views/battle.js";
@@ -54,7 +54,7 @@ function renderAuthState() {
     elements.user.textContent = auth.user.nickname || auth.user.username;
     renderRoute();
   } else {
-    battleView.destroy();
+    battleView.teardown();
     elements.view.replaceChildren();
   }
 }
@@ -95,7 +95,7 @@ elements.loginForm.addEventListener("submit", (event) => {
     return;
   }
   elements.loginError.textContent = "";
-  void login(username, password).catch((error) => {
+  void signIn(username, password).catch((error) => {
     elements.loginError.textContent = error.message || "登录失败";
   });
 });
@@ -144,21 +144,21 @@ on("state", (data) => {
 function renderRoute() {
   if (!auth.user) return;
   const route = currentRoute();
-  battleView.destroy();
+  battleView.teardown();
   window.scrollTo(0, 0);
   switch (route.name) {
     case "loadout":
-      loadoutView.render(elements.view);
+      loadoutView.renderLoadout(elements.view);
       break;
     case "battle":
-      battleView.render(elements.view, route.param);
+      battleView.renderBattle(elements.view, route.param);
       break;
     case "result":
-      resultView.render(elements.view, route.param);
+      resultView.renderResult(elements.view, route.param);
       break;
     case "prep":
     default:
-      prepView.render(elements.view);
+      prepView.renderPrep(elements.view);
       break;
   }
 }

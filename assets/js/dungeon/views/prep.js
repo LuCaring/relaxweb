@@ -1,10 +1,10 @@
 /* 准备页：属性面板、关卡列表、起局与进行中战斗的恢复入口。 */
 
-import { request } from "../protocol.js";
+import { rpc } from "../dgn-protocol.js";
 import { applyBattle, dgn, progressOf, reportError,
-         DIFFICULTY_LABELS, ENEMY_TYPE_LABELS, statText, STAT_LABELS } from "../state.js";
-import { navigate } from "../router.js";
-import { visualNode } from "../assets.js";
+         DIFFICULTY_LABELS, ENEMY_TYPE_LABELS, statText, STAT_LABELS } from "../dgn-state.js";
+import { navigate } from "../dgn-router.js";
+import { visualNode } from "../dgn-assets.js";
 
 function statPanel(stats) {
   const panel = document.createElement("div");
@@ -84,7 +84,7 @@ function lockedText(challenge, unlocked) {
 async function startChallenge(challenge, button) {
   button.disabled = true;
   try {
-    const data = await request("dungeon_start", {
+    const data = await rpc("dungeon_start", {
       challenge_id: challenge.challenge_id,
       difficulty_id: challenge.difficulty_id,
       expected_version: dgn.snapshot.profile_version,
@@ -103,7 +103,7 @@ function emitRerender() {
   window.dispatchEvent(new CustomEvent("dgn-refresh-prep"));
 }
 
-export function render(container) {
+export function renderPrep(container) {
   const snapshot = dgn.snapshot;
   container.replaceChildren();
 
@@ -111,6 +111,20 @@ export function render(container) {
     container.append(loadingNode());
     return;
   }
+
+  const nav = document.createElement("div");
+  nav.className = "dgn-page-nav";
+  const prepTab = document.createElement("button");
+  prepTab.type = "button";
+  prepTab.className = "dgn-btn dgn-btn-small dgn-nav-active";
+  prepTab.textContent = "关卡";
+  const loadoutTab = document.createElement("button");
+  loadoutTab.type = "button";
+  loadoutTab.className = "dgn-btn dgn-btn-small";
+  loadoutTab.textContent = "装备与背包";
+  loadoutTab.addEventListener("click", () => navigate("#/loadout"));
+  nav.append(prepTab, loadoutTab);
+  container.append(nav);
 
   const active = snapshot.active_job;
   if (active?.kind === "battle") {

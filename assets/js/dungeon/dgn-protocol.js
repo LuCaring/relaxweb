@@ -58,7 +58,7 @@ function sendRaw(payload) {
  * - 写操作超时自动用同一 request_id 重发一次；再超时才报错，错误上保留
  *   request_id，调用方可用 resend() 继续原编号重试。
  */
-export function request(type, payload = {}, { timeoutMs = REQUEST_TIMEOUT_MS, volatile = false } = {}) {
+export function rpc(type, payload = {}, { timeoutMs = REQUEST_TIMEOUT_MS, volatile = false } = {}) {
   const request_id = requestId(type.replace(/^dungeon_/, ""));
   return new Promise((resolve, reject) => {
     registerPending(request_id, type, payload, { timeoutMs, volatile, resolve, reject, attempts: 0 });
@@ -125,7 +125,7 @@ function resendPending() {
   }
 }
 
-export function login(username, password) {
+export function signIn(username, password) {
   return new Promise((resolve, reject) => {
     const done = (user) => (user ? resolve(user) : reject(new Error("用户名或密码错误")));
     const offOk = on("login_success", (user) => { offOk(); offFail(); done(user); });
@@ -139,13 +139,9 @@ export function logout() {
   localStorage.removeItem(AUTH_TOKEN_KEY);
 }
 
-export function isConnected() {
-  return connected;
-}
-
 /** 向服务器要一份最新 dungeon_state（刷新、版本冲突恢复的统一入口）。 */
 export function refreshState() {
-  return request("get_dungeon");
+  return rpc("get_dungeon");
 }
 
 function connectSocket() {
@@ -182,20 +178,20 @@ export function connect() {
   connectSocket();
 }
 
-export function handleServerMessage(data) {
+function handleServerMessage(data) {
   switch (data.type) {
     case "login_success":
       localStorage.setItem(AUTH_TOKEN_KEY, data.token);
       auth.user = data;
       emit("login_success", data);
       emit("auth", data);
-      request("get_dungeon");
+      rpc("get_dungeon");
       break;
     case "resume_success":
       auth.user = data;
       emit("auth", data);
       resendPending();
-      request("get_dungeon");
+      rpc("get_dungeon");
       break;
     case "auth_expired":
       localStorage.removeItem(AUTH_TOKEN_KEY);

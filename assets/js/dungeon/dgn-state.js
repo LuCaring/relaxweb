@@ -4,7 +4,7 @@
  * 都从这里整体刷新；视图层订阅变更后重渲染，不各自缓存副本。
  */
 
-import { refreshState } from "./protocol.js";
+import { refreshState } from "./dgn-protocol.js";
 
 export const dgn = {
   snapshot: null,   // 最新一次 dungeon_state 内容（不含 type/request_id）

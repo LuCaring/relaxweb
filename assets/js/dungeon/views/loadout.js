@@ -1,9 +1,10 @@
 /* 装备页：六槽穿戴、背包、属性对比、锁定/出售与待领取。 */
 
-import { request } from "../protocol.js";
+import { rpc } from "../dgn-protocol.js";
 import { applyState, dgn, notify, reportError, itemStatsText,
-         QUALITY_LABELS, STAT_LABELS, statText } from "../state.js";
-import { visualNode } from "../assets.js";
+         QUALITY_LABELS, STAT_LABELS, statText } from "../dgn-state.js";
+import { navigate } from "../dgn-router.js";
+import { visualNode } from "../dgn-assets.js";
 import { confirmDialog } from "../../dialog.js";
 import { loadingNode } from "./prep.js";
 
@@ -87,10 +88,10 @@ function withVersion(payload) {
 async function runAction(type, payload, { button } = {}) {
   if (button) button.disabled = true;
   try {
-    const data = await request(type, withVersion(payload));
+    const data = await rpc(type, withVersion(payload));
     if (data.state) {
       applyState(data.state);
-      if (mountEl) render(mountEl); // 写操作成功后按最新存档重画本页
+      if (mountEl) renderLoadout(mountEl); // 写操作成功后按最新存档重画本页
     }
     return data;
   } catch (error) {
@@ -125,7 +126,7 @@ async function claimPending(pendingItems, button) {
 
 function comparePanel(panel, item) {
   panel.replaceChildren(loadingNode("对比中…"));
-  request("dungeon_compare_item", { item_id: item.item_id }).then((data) => {
+  rpc("dungeon_compare_item", { item_id: item.item_id }).then((data) => {
     const body = document.createElement("div");
     body.append(Object.assign(document.createElement("h4"),
       { textContent: `替换预览：${item.name}` }));
@@ -168,7 +169,7 @@ function slotCell(slot, equippedItem) {
 
 let mountEl = null;
 
-export function render(container) {
+export function renderLoadout(container) {
   mountEl = container;
   const snapshot = dgn.snapshot;
   container.replaceChildren();
@@ -176,6 +177,20 @@ export function render(container) {
     container.append(loadingNode());
     return;
   }
+
+  const nav = document.createElement("div");
+  nav.className = "dgn-page-nav";
+  const prepTab = document.createElement("button");
+  prepTab.type = "button";
+  prepTab.className = "dgn-btn dgn-btn-small";
+  prepTab.textContent = "关卡";
+  prepTab.addEventListener("click", () => navigate("#/prep"));
+  const loadoutTab = document.createElement("button");
+  loadoutTab.type = "button";
+  loadoutTab.className = "dgn-btn dgn-btn-small dgn-nav-active";
+  loadoutTab.textContent = "装备与背包";
+  nav.append(prepTab, loadoutTab);
+  container.append(nav);
 
   const title = document.createElement("h2");
   title.textContent = "装备与背包";

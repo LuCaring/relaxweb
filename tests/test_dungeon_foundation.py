@@ -53,13 +53,17 @@ class DungeonFoundationTests(unittest.TestCase):
         self.assertEqual(first["stats"]["values"],
                          {"max_hp": 300, "atk": 30, "defense": 20,
                           "crit_bp": 500, "crit_damage_bp": 15000, "speed": 100})
-        self.assertEqual(first["progress"], [{"challenge_id": "ruins_slime_01",
-                                               "difficulty_id": "normal", "clear_count": 0,
-                                               "unlocked": True}])
+        self.assertEqual(next(row for row in first["progress"]
+                              if row["challenge_id"] == "ruins_slime_01"),
+                         {"challenge_id": "ruins_slime_01",
+                          "difficulty_id": "normal", "clear_count": 0,
+                          "unlocked": True})
+        self.assertEqual(len(first["progress"]), len(first["catalog"]["challenges"]))
         self.assertIn("dungeon_equip", first["available_actions"])
         with self.database() as conn:
             self.assertEqual(conn.execute("SELECT COUNT(*) FROM dungeon_items").fetchone()[0], 6)
-            self.assertEqual(conn.execute("SELECT COUNT(*) FROM dungeon_progress").fetchone()[0], 1)
+            self.assertEqual(conn.execute("SELECT COUNT(*) FROM dungeon_progress").fetchone()[0],
+                             len(first["catalog"]["challenges"]))
 
     def test_parallel_first_open_grants_only_six_items(self):
         def open_state():

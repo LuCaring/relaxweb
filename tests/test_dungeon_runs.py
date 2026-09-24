@@ -96,7 +96,8 @@ class DungeonRunTests(unittest.TestCase):
             self.assertEqual(read_run(conn, "alice", battle_id)["result"],
                              first["battle"]["result"])
             self.assertEqual(conn.execute("SELECT coins FROM users WHERE username='alice'").fetchone()[0], 1020)
-            self.assertEqual(conn.execute("SELECT clear_count FROM dungeon_progress WHERE username='alice'").fetchone()[0], 1)
+            self.assertEqual(conn.execute("SELECT clear_count FROM dungeon_progress "
+                                          "WHERE username='alice' AND challenge_id='ruins_slime_01'").fetchone()[0], 1)
             self.assertEqual(conn.execute("SELECT COUNT(*) FROM dungeon_rewards").fetchone()[0], 1)
             self.assertEqual(conn.execute("SELECT COUNT(*) FROM coin_transactions WHERE kind='dungeon_reward'").fetchone()[0], 1)
             self.assertEqual(conn.execute("SELECT COUNT(*) FROM dungeon_items WHERE item_id=?",
@@ -233,7 +234,8 @@ class DungeonRunTests(unittest.TestCase):
             self.assertEqual(conn.execute("SELECT COUNT(*) FROM dungeon_rewards").fetchone()[0], 0)
             self.assertEqual(conn.execute("SELECT COUNT(*) FROM coin_transactions WHERE kind='dungeon_reward'").fetchone()[0], 0)
             self.assertEqual(conn.execute("SELECT COUNT(*) FROM dungeon_items WHERE template_id='ruins_blade'").fetchone()[0], 0)
-            self.assertEqual(conn.execute("SELECT clear_count FROM dungeon_progress WHERE username='alice'").fetchone()[0], 0)
+            self.assertEqual(conn.execute("SELECT clear_count FROM dungeon_progress "
+                                          "WHERE username='alice' AND challenge_id='ruins_slime_01'").fetchone()[0], 0)
             conn.execute("DROP TRIGGER reject_settlement")
         self.assertEqual(self.sync(battle_id, 115_000)["battle"]["result"]["outcome"], "victory")
 

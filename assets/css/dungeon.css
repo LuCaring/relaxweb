@@ -67,6 +67,9 @@ body.dgn-body {
 }
 .dgn-banner-warn { border-color: var(--dgn-warn); }
 
+.dgn-page-nav { display: flex; gap: 8px; margin-top: 14px; }
+.dgn-nav-active { border-color: var(--dgn-accent); color: var(--dgn-accent); }
+
 .dgn-tag {
   display: inline-block; border: 1px solid var(--dgn-line); border-radius: 999px;
   padding: 1px 10px; font-size: 12px; color: var(--dgn-dim); white-space: nowrap;
