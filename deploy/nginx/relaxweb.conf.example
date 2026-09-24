@@ -1,0 +1,88 @@
+# RelaxWeb nginx TLS 入口模板(已在生产验证)
+#
+# 用法:
+#   1. 替换 <公网IP> 为浏览器访问的 IP/域名,<私网IP> 为网卡上的内网地址(见下方说明);
+#   2. 放到 /etc/nginx/sites-available/relaxweb 并软链到 sites-enabled/,删掉 default 站点;
+#   3. 在 http 块或 conf.d 里加一行 `server_tokens off;`(隐藏版本号);
+#   4. `sudo nginx -t && sudo systemctl reload nginx`。
+#
+# 端口模型:nginx 以 TLS 形式监听与后端相同的端口号(443/8765/8889),前端零改动——
+# 页面协议变 https 后,WebSocket/WHEP 自动切 wss/https 同端口。
+#
+# 关于 <私网IP>:后端退绑 127.0.0.1 后,Linux 不允许 nginx 的通配 listen 与之共存
+# (EADDRINUSE),且 `systemctl reload` 遇 bind 失败会静默回滚旧配置,极易漏判。
+# - 公网 IP 直接在网卡上(多数海外 VPS):8765/8889/8000 直接用通配 listen 即可,
+#   即删掉 "172.24.x.x:" 前缀写 `listen 8765 ssl;`;
+# - 云厂商 NAT 公网(阿里云/腾讯云 ECS,网卡只有内网地址):必须写网卡上的内网 IP,
+#   NAT 流量的真实目的地址就是它。内网 IP 用 `ip -4 addr` 查。
+# 443 保持通配(证书看门狗探测 127.0.0.1:443 依赖它)。
+
+# ---- 主入口:静态页 + 直播页(443)----
+server {
+    listen 443 ssl;
+    server_name <公网IP或域名>;
+
+    ssl_certificate     /etc/nginx/ssl/ip.crt;
+    ssl_certificate_key /etc/nginx/ssl/ip.key;
+    ssl_protocols TLSv1.2 TLSv1.3;
+
+    location / {
+        proxy_pass http://127.0.0.1:8000;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto https;
+    }
+
+    # LiveKit 信令(部署语音层后取消注释,LiveKit 绑 127.0.0.1:7880,
+    # 同时把 config.json 的 voice.url 设为 wss://<公网IP或域名>/lk)
+    #location /lk/ {
+    #    proxy_pass http://127.0.0.1:7880/;
+    #    proxy_http_version 1.1;
+    #    proxy_set_header Upgrade $http_upgrade;
+    #    proxy_set_header Connection "upgrade";
+    #}
+}
+
+# ---- 聊天/游戏 WebSocket:对内回源 8765 明文 ----
+server {
+    listen 172.24.x.x:8765 ssl;          # NAT 云写 <私网IP>:8765;直连公网写 8765
+    server_name <公网IP或域名>;
+    ssl_certificate     /etc/nginx/ssl/ip.crt;
+    ssl_certificate_key /etc/nginx/ssl/ip.key;
+    ssl_protocols TLSv1.2 TLSv1.3;
+
+    location / {
+        proxy_pass http://127.0.0.1:8765;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+        proxy_set_header X-Real-IP $remote_addr;   # 注册限流按真实 IP 计数
+        proxy_read_timeout 3600s;                  # 长连接不被掐
+        proxy_send_timeout 3600s;
+    }
+}
+
+# ---- MediaMTX WHEP/WHIP:对内回源 8889 明文 ----
+server {
+    listen 172.24.x.x:8889 ssl;          # NAT 云写 <私网IP>:8889;直连公网写 8889
+    server_name <公网IP或域名>;
+    ssl_certificate     /etc/nginx/ssl/ip.crt;
+    ssl_certificate_key /etc/nginx/ssl/ip.key;
+    ssl_protocols TLSv1.2 TLSv1.3;
+
+    location / {
+        proxy_pass http://127.0.0.1:8889;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header Authorization $http_authorization;  # WHEP 走 Basic 会话鉴权
+    }
+}
+
+# ---- 老入口 http://IP:8000 → 302 跳转 HTTPS ----
+# live-web 配 servers.web_host=127.0.0.1 后,8000 公网面由此块接管。
+# 用 302 而非 301:临时跳转不被浏览器缓存,保留紧急回滚到明文的可能。
+server {
+    listen 172.24.x.x:8000;              # NAT 云写 <私网IP>:8000;直连公网写 8000
+    return 302 https://<公网IP或域名>$request_uri;
+}

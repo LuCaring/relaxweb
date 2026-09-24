@@ -40,17 +40,13 @@ sudo systemctl daemon-reload
 sudo systemctl enable --now live-chat live-web live-auth
 ```
 
-## 3. 反向代理与域名（可选）
+## 3. HTTPS 与反向代理（可选）
 
-`live-web` 直接对外提供 80 端口也可以；若要挂域名与 HTTPS，用 nginx 反代 8000，
-并把 WebSocket 的 8765 与拉流的 8889 一并透传：
-
-```nginx
-location /            { proxy_pass http://127.0.0.1:8000; }
-location /ws/         { proxy_pass http://127.0.0.1:8765; proxy_http_version 1.1;
-                        proxy_set_header Upgrade $http_upgrade;
-                        proxy_set_header Connection "upgrade"; }
-```
+TLS 入口统一由 nginx 提供,以与后端相同的端口号对外(443 页面 / 8765 聊天与游戏 /
+8889 直播信令),后端全部退绑 `127.0.0.1`,前端零改动。完整配置模板与两条证书路线
+(裸 IP 短效证书 / 域名常规证书)见主 README 的「HTTPS(裸 IP 或域名)」一节与
+[`deploy/nginx/relaxweb.conf.example`](nginx/relaxweb.conf.example);
+裸 IP 方案的完整实施手册见 [`docs/https-ip-rollout.md`](../docs/https-ip-rollout.md)。
 
 ## 4. 推流侧
 

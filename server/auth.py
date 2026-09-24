@@ -4,7 +4,7 @@ import re
 import time
 
 from server.accounts import valid_username
-from server.transport import rate_limited
+from server.transport import connection_ip, rate_limited
 
 MAX_AVATAR_LENGTH = 200_000
 AVATAR_PATTERN = re.compile(r"^data:image/(png|jpe?g|gif|webp);base64,[A-Za-z0-9+/=]+$")
@@ -35,7 +35,7 @@ class AuthProtocol:
         }
 
     async def handle_register(self, websocket, state, data):
-        ip = (websocket.remote_address or ("?", 0))[0]
+        ip = connection_ip(websocket)
         now = time.monotonic()
         recent = [t for t in self.register_ip_times.get(ip, []) if now - t < REGISTER_IP_WINDOW]
         self.register_ip_times[ip] = recent

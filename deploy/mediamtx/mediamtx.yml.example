@@ -1,0 +1,21 @@
+# RelaxWeb MediaMTX 配置模板(nginx TLS 反代形态,已在生产验证)
+# 放到 MediaMTX 的配置路径(如 /opt/mediamtx/mediamtx.yml),替换 <公网IP> 与流路径。
+# 只列覆盖默认值的项;MediaMTX 其余监听(RTSP/RTMP/HLS/SRT 等)建议用防火墙收敛,
+# 公网只留 nginx 的 8889/TCP 与 ICE 的 8189/UDP。
+
+logLevel: info
+
+# 鉴权全部走 live-auth(HTTP 回调):推流校验 stream.publish_user/password,
+# 拉流校验观众登录会话。http 模式下 authInternalUsers 不参与鉴权,
+# 留空并保持为空——千万别配 user: any 空密码项,那是匿名拉流的后门。
+authMethod: http
+authHTTPAddress: http://127.0.0.1:8001/auth
+authInternalUsers: []
+
+# WHEP 信令只听 loopback,公网 8889 由 nginx 以 TLS 提供;
+# 绑 loopback 后 ICE 候选必须手动指公网 IP,否则浏览器拿到 127.0.0.1 候选直接黑屏。
+webrtcAddress: 127.0.0.1:8889
+webrtcAdditionalHosts: [<公网IP>]
+
+paths:
+  你的流路径:                      # 对应 config.json 的 stream.path

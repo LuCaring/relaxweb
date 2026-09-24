@@ -16,7 +16,7 @@ from server.accounts import hash_password
 from server.app import create_app
 from server.database import database
 from server.schema import init_db
-from server.transport import ConnectionHub, connection_client
+from server.transport import ConnectionHub, connection_client, connection_ip
 
 
 class Socket:
@@ -73,6 +73,17 @@ class TransportTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(connection_client(old), "game")
         self.assertEqual(connection_client(new), "game")
         self.assertEqual(connection_client(first), "")
+
+    def test_connection_ip_prefers_reverse_proxy_header(self):
+        proxied = type("Socket", (), {
+            "request": type("Request", (), {"headers": {"X-Real-IP": "203.0.113.7"}})(),
+            "remote_address": ("127.0.0.1", 52000),
+        })()
+        direct = type("Socket", (), {"remote_address": ("198.51.100.2", 51000)})()
+        unknown = type("Socket", (), {"remote_address": None})()
+        self.assertEqual(connection_ip(proxied), "203.0.113.7")
+        self.assertEqual(connection_ip(direct), "198.51.100.2")
+        self.assertEqual(connection_ip(unknown), "?")
 
 
 class ApplicationTests(unittest.IsolatedAsyncioTestCase):

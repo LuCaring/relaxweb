@@ -164,6 +164,13 @@ server {
 }
 ```
 
+> 完整可复制的配置模板在 [`deploy/nginx/relaxweb.conf.example`](../deploy/nginx/relaxweb.conf.example)
+> （含 `server_tokens off` 与 `X-Real-IP` 说明）；MediaMTX 侧见
+> [`deploy/mediamtx/mediamtx.yml.example`](../deploy/mediamtx/mediamtx.yml.example)。
+> 8765 反代块务必带 `proxy_set_header X-Real-IP $remote_addr;`——注册限流按它计真实 IP,
+> 否则反代后所有用户共享 127.0.0.1 的配额。另在 http 块或 conf.d 加 `server_tokens off;`
+> 隐藏版本号。
+
 LiveKit 启用时的配置对齐（语音层 `server/voice_livekit.py` 已实现并合入）：nginx 挂上
 `/lk/` 后，服务器 `config.json` 的 `voice.url` 必须改为**浏览器可达**的
 `wss://<公网IP>/lk`——语音层会把 `voice_update.url` 原样下发给浏览器直连，
@@ -178,7 +185,8 @@ LiveKit 启用时的配置对齐（语音层 `server/voice_livekit.py` 已实现
 1. **chat_server**（8765）：服务器上编辑 `config.json`，
    `"servers": { "chat_host": "127.0.0.1", ... }`，然后 `sudo systemctl restart live-chat`。
    验证：`sudo ss -tlnp | grep 8765` 显示 `127.0.0.1:8765`。
-2. **live-web**（8000）：暂保持 0.0.0.0（回退通道），收尾阶段再改 127.0.0.1。
+2. **live-web**（8000）：`servers.web_host` 配 `127.0.0.1`（deploy/serve.py 支持,默认
+   0.0.0.0），8000 公网面交给上方 302 跳转块——老书签自动跳 HTTPS,不再是明文回退通道。
 3. **MediaMTX**（8889）：`systemctl cat mediamtx` 找到配置文件（通常 `/etc/mediamtx.yml`）：
    - `webrtcAddress: 127.0.0.1:8889`
    - `webrtcAdditionalHosts: [<公网IP>]`（绑 loopback 后 ICE 候选必须手动指公网 IP，
@@ -246,30 +254,37 @@ fi
 
 ## 12. 执行记录（2026-09-24）
 
-全量上线完成，站点已跑在 `https://<公网IP>`。当日实况：
+全量上线完成，站点已跑在 `https://<公网IP>`（本记录为一次真实部署的验证存档,
+IP 已占位化）。当日实况：
 
-- 证书：Let's Encrypt（YE1 中级 → ISRG Root X2），SAN = IP，有效期 09-24 ~ 09-30；
-  ARI 续期窗口 **2026-09-27**，acme.sh cron 每天 0/6/12/18 点 55 分自动检查。
-- 监听格局：nginx 持有 0.0.0.0:443、<私网IP>:{8765,8889}；chat 与 MediaMTX
-  已退 127.0.0.1；8000 保留公网明文作回退通道（收尾阶段再关）。
+- 证书：Let's Encrypt（YE1 中级 → ISRG Root X2），SAN = IP，有效期约 6 天；
+  ARI 续期窗口为签发后 3 天，acme.sh cron 每天 0/6/12/18 点 55 分自动检查。
+- 监听格局：nginx 持有 0.0.0.0:443、<私网IP>:{8765,8889,8000}；chat、live-web 与
+  MediaMTX 全部退 127.0.0.1，公网明文端口清零。
 - 验证通过：curl 证书校验、浏览器（`isSecureContext=true`、零混合内容、
   页面内 WSS 握手 101）、WHEP 经 TLS 回源等价直连。
 - `getUserMedia` 在无麦克风设备的环境返回 NotFoundError（非 SecurityError）——
   安全上下文门槛已过，真机上将正常弹权限框，V0 目标达成。
-- 已知非问题：`OPTIONS /xiaopang/whep` 返回 500，TLS 前后行为一致（MediaMTX +
+- 已知非问题：`OPTIONS /<流路径>/whep` 返回 500，TLS 前后行为一致（MediaMTX +
   http auth 的固有行为），浏览器拉流流程不受影响。
-- **老入口跳转（2026-09-24 二次变更）**：`deploy/serve.py` 新增 `servers.web_host`
-  配置（commit c799819，默认仍 0.0.0.0），生产配 127.0.0.1；nginx 绑私网 IP:8000
-  对老地址返回 **302** `https://<公网IP>$request_uri`（路径/参数保留，实测
-  浏览器从 `http://IP:8000/game` 落地 `https://IP/game` 且 WSS 正常）。选 302 不选
-  301 是为了浏览器不缓存，§10 回滚时老入口可立即恢复明文。其余进程端口零改动
+- **老入口跳转（同日二次变更）**：`deploy/serve.py` 支持 `servers.web_host`
+  （默认仍 0.0.0.0），生产配 127.0.0.1；nginx 绑私网 IP:8000 对老地址返回
+  **302** `https://<公网IP>$request_uri`（路径/参数保留，实测浏览器从
+  `http://IP:8000/game` 落地 `https://IP/game` 且 WSS 正常）。选 302 不选 301
+  是为了浏览器不缓存，§10 回滚时老入口可立即恢复明文。其余进程端口零改动
   （chat 8765 / auth 8001 / MediaMTX 8889 / ACME 80 均未动）。
   注意：§10 收尾关闭安全组 8000 后此跳转随之消失，属预期。
-- 续期链自检记录（2026-09-24 复核）：socat 的 cap_net_bind_service 在位、五个
-  systemd 单元均 enabled（重启存活）、acme.sh cron 每天 4 次、看门狗每日 9 点。
+- 安全审计后加固（同日三次变更）：nginx `server_tokens off`（隐藏版本号）、
+  8765 反代补 `X-Real-IP` + 注册限流按真实 IP 计数（`server/transport.py` 的
+  `connection_ip`）、MediaMTX 清除 http 模式下无效的 `authInternalUsers` 空密码
+  `user: any` 项（防将来改回 internal 模式时变成匿名拉流后门）。
+- 续期链自检记录：socat 的 cap_net_bind_service 在位、五个 systemd 单元均
+  enabled（重启存活）、acme.sh cron 每天 4 次、看门狗每日 9 点。
   唯一断链向量：apt 升级 socat 会替换二进制并丢失 setcap → 续期开始失败，
   看门狗会在证书剩 <2 天时报 `/var/log/cert-alert.log`（补救：重跑 §5.0 setcap
   即可）。可选加固：看门狗里加 `getcap` 自检与 ntfy 推送（当前仅写日志）。
+- 网络排查提示：部分云网络（如阿里云）会对未放行端口代答 TCP 握手,`nc -z`
+  显示 OPEN 不代表可达,一律用真实协议请求（curl/握手包）判断。
 - 待办：V0.5 部署 LiveKit（7880 + UDP 50000-50100，放开 §6 的 `/lk/` 注释，
   `config.json` 的 `voice.url` 设为 `wss://<公网IP>/lk`）；狼人杀语音前端 UI；
-  HTTPS 稳定数日后按 §10 收尾关闭 8000。
+  安全组 UDP 规则收敛为仅 ICE 8189（+ LiveKit 端口段）。

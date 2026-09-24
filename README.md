@@ -170,7 +170,9 @@ journalctl -u live-web -u live-auth --since today
 
 在 MediaMTX 配置中完成三件事：
 
-1. 开启 WebRTC/WHEP。直接对外提供 HTTP 时端口与 `stream.whep_port` 一致（默认 `8889`）；使用下文的 nginx HTTPS 配置时，让 MediaMTX 改为仅监听 `127.0.0.1:18889`，浏览器外部端口仍是 `8889`。
+1. 开启 WebRTC/WHEP。使用上文的 nginx HTTPS 配置时,让 MediaMTX 改为仅监听
+   `127.0.0.1:8889`(与 `stream.whep_port` 同号,浏览器外部端口不变),完整模板见
+   [`deploy/mediamtx/mediamtx.yml.example`](deploy/mediamtx/mediamtx.yml.example)。
 2. 把外部鉴权地址设为 `http://127.0.0.1:8001`。新版 MediaMTX 使用 `authMethod: http` 与 `authHTTPAddress`；旧版对应 `authExternalURL`，以所安装版本的示例配置为准。
 3. 公网部署时设置 WebRTC 对外可达的域名或 IP，并放行 MediaMTX 的 ICE/UDP 端口（常见默认值为 `8189/udp`）。
 
@@ -183,67 +185,50 @@ ffmpeg -re -i <视频源> -c:v libx264 -c:a aac -f rtsp \
 
 其中 `<推流用户名>`、`<推流密码>` 和 `<流路径>` 分别对应 `stream.publish_user`、`stream.publish_password` 和 `stream.path`。观众拉流时使用登录会话鉴权，不需要知道推流密码。
 
-### 6. 域名、HTTPS 和反向代理
+### 6. HTTPS(裸 IP 或域名)
 
-网页在 HTTPS 下会分别连接：
+浏览器在 HTTPS 页面下会分别连接 `https://<地址>/`(页面)、`wss://<地址>:8765/`(聊天与游戏)、
+`https://<地址>:8889/<流路径>/whep`(直播信令)——三个端口都要有有效证书,麦克风等浏览器权限
+才可用。项目的做法是 **nginx 统一终结 TLS、以相同端口号对外**,后端退绑 `127.0.0.1`,
+前端零改动(前端按页面协议自动切 `wss`/`https` 并使用相同端口)。完整配置模板见
+[`deploy/nginx/relaxweb.conf.example`](deploy/nginx/relaxweb.conf.example)。
 
-- `https://<域名>/`：站点页面；
-- `wss://<域名>:8765/`：聊天与游戏；
-- `https://<域名>:8889/<流路径>/whep`：直播信令。
+后端退绑方法:`config.json` 里 `servers.chat_host` 与 `servers.web_host` 改 `127.0.0.1`,
+MediaMTX 按 [`deploy/mediamtx/mediamtx.yml.example`](deploy/mediamtx/mediamtx.yml.example)
+配置(`webrtcAddress: 127.0.0.1:8889` + `webrtcAdditionalHosts` 填公网 IP),重启各服务。
+**注意**:后端绑定 loopback 后,云厂商 NAT 公网(网卡只有内网 IP,如阿里云 ECS)上 nginx
+不能用通配 `listen 8765 ssl`,要写网卡内网 IP(如 `listen 172.24.x.x:8765 ssl`),否则
+bind 冲突且 reload 会静默回滚——模板注释里有两种环境的写法。
 
-因此不能只代理网页的 443 端口；WebSocket 和 WHEP 端口也要提供有效证书。以下 nginx 示例保留项目默认端口，证书路径按实际环境修改：
+证书两条路线任选:
 
-```nginx
-server {
-    listen 443 ssl http2;
-    server_name live.example.com;
-    ssl_certificate     /etc/letsencrypt/live/live.example.com/fullchain.pem;
-    ssl_certificate_key /etc/letsencrypt/live/live.example.com/privkey.pem;
-
-    location / {
-        proxy_pass http://127.0.0.1:8000;
-        proxy_set_header Host $host;
-    }
-}
-
-server {
-    listen 8765 ssl;
-    server_name live.example.com;
-    ssl_certificate     /etc/letsencrypt/live/live.example.com/fullchain.pem;
-    ssl_certificate_key /etc/letsencrypt/live/live.example.com/privkey.pem;
-
-    location / {
-        proxy_pass http://127.0.0.1:18765;
-        proxy_http_version 1.1;
-        proxy_set_header Upgrade $http_upgrade;
-        proxy_set_header Connection "upgrade";
-        proxy_set_header Host $host;
-        proxy_read_timeout 3600s;
-    }
-}
-
-server {
-    listen 8889 ssl;
-    server_name live.example.com;
-    ssl_certificate     /etc/letsencrypt/live/live.example.com/fullchain.pem;
-    ssl_certificate_key /etc/letsencrypt/live/live.example.com/privkey.pem;
-
-    location / {
-        proxy_pass http://127.0.0.1:18889;
-        proxy_set_header Host $host;
-        proxy_set_header Authorization $http_authorization;
-    }
-}
-```
-
-检查并加载配置：
+**路线 A:裸 IP,无需域名与备案**(生产在用,完整手册见
+[`docs/https-ip-rollout.md`](docs/https-ip-rollout.md))。Let's Encrypt 自 2026-01 起为
+IP 地址签发证书,但只有约 6 天有效期的 shortlived profile,需要自动续期:
 
 ```bash
-sudo nginx -t
-sudo systemctl reload nginx
+# acme.sh(>=3.1.1)+ socat;standalone 续期要独占 80 端口,nginx 不要监听 80
+sudo setcap cap_net_bind_service=+ep "$(readlink -f /usr/bin/socat)"   # 非 root 绑 80 的前置
+acme.sh --issue --standalone -d <公网IP> --certificate-profile shortlived --server letsencrypt
+sudo mkdir -p /etc/nginx/ssl && sudo chown $(whoami) /etc/nginx/ssl   # 续期以当前用户覆盖写
+acme.sh --install-cert -d <公网IP> \
+        --fullchain-file /etc/nginx/ssl/ip.crt --key-file /etc/nginx/ssl/ip.key \
+        --reloadcmd "sudo nginx -t && sudo systemctl reload nginx"
 ```
 
-防火墙通常需要开放 `443/tcp`、`8765/tcp`、`8889/tcp` 和 MediaMTX 的 WebRTC UDP 端口。内部端口 `8000`、`8001`、`18765`、`18889` 不应直接暴露公网；`8554/tcp` 只向可信推流端开放。若不使用直播，只需网页和 WebSocket。
+acme.sh 安装时自带每天 4 次的续期 cron;再装上到期看门狗
+[`deploy/cert/check-cert-expiry.sh`](deploy/cert/check-cert-expiry.sh)(每天 9 点检查,
+剩不足 2 天告警)。证书绑定 IP,**公网 IP 变化即失效需重签**;长期建议换路线 B。
+
+**路线 B:域名**。常规 `certbot --nginx` 或 DNS 验证签一年期证书,nginx 配置里把证书路径
+换成 certbot 的路径、`server_name` 写域名即可,其余与本仓库模板相同。
+
+老用户从 `http://<地址>:8000` 迁移:live-web 退绑 loopback 后,由 nginx 在 8000 端口
+返回 `302 https://<地址>$request_uri`(模板已含),旧书签自动跳转,路径与参数保留。
+
+防火墙放行 `443/tcp`、`8765/tcp`、`8889/tcp` 与 ICE 的 `8189/udp`;`8000/tcp` 保留到
+跳转稳定后可关;`8001`、`8554`、`1935`、`8888` 等内部/推流端口不应对公网开放
+(推流端可用 SSH 隧道或单独放行给固定 IP)。若不用直播,只放行 443 与 8765 即可。
 
 ### 7. 部署验收
 

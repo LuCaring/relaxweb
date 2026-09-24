@@ -21,6 +21,19 @@ def connection_client(websocket):
     return "game" if "client=game" in str(path) else ""
 
 
+def connection_ip(websocket):
+    """取客户端真实 IP：nginx 反代场景读 X-Real-IP，直连场景退回 socket 地址。
+
+    仅当服务绑定 loopback、公网流量全部经 nginx 时才可信（外部无法伪造该头）。
+    """
+    request = getattr(websocket, "request", None)
+    headers = getattr(request, "headers", None) or getattr(websocket, "request_headers", None)
+    forwarded = headers.get("X-Real-IP") if headers else None
+    if forwarded:
+        return forwarded.strip()
+    return (websocket.remote_address or ("?", 0))[0]
+
+
 class ConnectionHub:
     def __init__(self):
         self.clients = {}
