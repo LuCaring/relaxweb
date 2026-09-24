@@ -57,7 +57,7 @@ function note(text) {
 
 function inventoryFallback(item) {
   return catalogEntry({ seed: "🌱", crop: "🌾", bait: "🪱", fish: "🐟",
-    collectible: "🎁", mineral: "◆" }, item.kind) || "◆";
+    collectible: "🎁", mineral: "◆", supply: "🧪" }, item.kind) || "◆";
 }
 
 export function createEstateUI(root, activities = {}) {
@@ -180,7 +180,7 @@ export function createEstateUI(root, activities = {}) {
     }
     const actions = document.createElement("div"); actions.className = "estate-sheet-actions";
     actions.append(button("一键出售全部产品", async () => {
-      if (await confirmDialog("种子和鱼饵会保留，只出售作物、鱼和矿物。", { title: "确认出售？" })) {
+      if (await confirmDialog("种子和鱼饵会保留；作物、鱼、矿物及化肥会出售。", { title: "确认出售？" })) {
         estateCommand("estate_sell_all");
       }
     }, { className: "estate-button estate-button-gold" }));
@@ -239,7 +239,7 @@ export function createEstateUI(root, activities = {}) {
       `湖中有 ${Object.keys(snapshot.catalog.fish).length} 种鱼类，`
       + `还有 ${Object.keys(snapshot.catalog.fishing_treasures || {}).length} 种神秘收藏物。`
       + `每轮消耗1份鱼饵和1点耐久，失败也会消耗。按住收线，张力过高时松开卸力；`
-      + `高级鱼竿与荧光虫饵能提高稀有鱼机会。今日已保留普通鱼获 ${daily.retained}/${daily.limit}；`
+      + `钓获时蚯蚓鱼饵有5%、荧光虫饵有10%概率额外获得化肥。高级鱼竿与荧光虫饵能提高稀有鱼机会。今日已保留普通鱼获 ${daily.retained}/${daily.limit}；`
       + `额度用完后普通鱼将自动放生，收集品获取不受影响。`));
     const rod = toolPanel("rod", "🎣");
     if (snapshot.fishing_session) {
@@ -284,7 +284,7 @@ export function createEstateUI(root, activities = {}) {
     show("矿洞");
     sheetBody.append(note(
       "每次下矿消耗一点矿镐耐久，空手或触雷也会消耗。越深奖励越好、炸弹越多；"
-      + "触雷立即结束，已获得的矿物可以保留并结算经验。矿镐每天北京时间 0 点自动修满，"
+      + "第三层每敲碎一格有1%概率额外获得化肥。触雷立即结束，已获得的矿物可以保留并结算经验。矿镐每天北京时间 0 点自动修满，"
       + "每天还可主动修理一次。"));
     const pickaxe = toolPanel("pickaxe", "⛏️");
     if (snapshot.mining_run) {
@@ -319,6 +319,8 @@ export function createEstateUI(root, activities = {}) {
     const snapshot = estateStore.snapshot; if (!snapshot) return;
     active = { kind: "plot", index: plot.index };
     show(`休闲农田 · 第 ${plot.index + 1} 块`);
+    const fertilizerCount = (estateStore.homeSnapshot?.inventory || snapshot.inventory || [])
+      .find((item) => item.id === "supply:fertilizer")?.quantity || 0;
     if (estateStore.visit) {
       if (!plot.crop_id) { sheetBody.append(note("这块土地目前没有作物。")); return; }
       const crop = snapshot.catalog.crops[plot.crop_id];
@@ -327,6 +329,10 @@ export function createEstateUI(root, activities = {}) {
       sheetBody.append(note(ready
         ? `${crop.name}已经成熟。偷取后整块收成会进入你的仓库。`
         : `${crop.name}还在生长，距离成熟 ${formatDuration(plot.ready_at - estateNow())}。`));
+      if (!ready) sheetBody.append(button(`施肥 · 缩短1小时（库存${fertilizerCount}）`,
+        () => estateCommand("estate_visit_fertilize", {
+          owner_username: estateStore.visit.owner_username, plot_id: plot.index,
+        }), { disabled: !fertilizerCount }));
       sheetBody.append(button(ready ? "偷走全部收成" : "尚未成熟", async () => {
         try {
           const result = await estateRequest("estate_steal_crop", {
@@ -381,6 +387,9 @@ export function createEstateUI(root, activities = {}) {
       sheetBody.append(button(ready ? "收获" : "还在生长",
         () => estateCommand("estate_harvest", { plot_id: plot.index }),
         { className: "estate-button estate-button-gold", disabled: !ready }));
+      if (!ready) sheetBody.append(button(`施肥 · 缩短1小时（库存${fertilizerCount}）`,
+        () => estateCommand("estate_fertilize", { plot_id: plot.index }),
+        { disabled: !fertilizerCount }));
       return;
     }
     const seeds = new Map(snapshot.inventory

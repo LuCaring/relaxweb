@@ -2,7 +2,7 @@
 
 import { estateRequest } from "./protocol.js";
 import { estateStore } from "./state.js";
-import { catchAsset, drawAsset, toolAsset } from "./assets.js";
+import { FERTILIZER_ASSET, catchAsset, drawAsset, toolAsset } from "./assets.js";
 import { rodFactor, tensionStep } from "./rules.js";
 import { alertDialog } from "../dialog.js";
 
@@ -99,6 +99,11 @@ export function openFishingGame(root, session, options = {}) {
       : caught
       ? `已放入仓库 · 获得 ${result.xp_awarded} 经验`
       : "鱼饵和耐久已经消耗，控制张力后再试一次。";
+    if (result.fertilizer_found) {
+      const icon = document.createElement("img");
+      icon.className = "fishing-fertilizer-icon"; icon.alt = ""; icon.src = FERTILIZER_ASSET;
+      card.querySelector("p").append(" ", icon, "额外获得化肥 ×1！");
+    }
     card.hidden = false;
   }
   async function finish() {

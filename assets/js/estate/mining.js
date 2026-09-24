@@ -1,11 +1,16 @@
 "use strict";
 
 import { estateRequest } from "./protocol.js";
-import { mineralAsset } from "./assets.js";
+import { FERTILIZER_ASSET, mineralAsset } from "./assets.js";
 
-const ICONS = { empty: "·", extra: "+2", bomb: "💣", stone: "🪨", coal: "◆", copper: "⬟", iron: "⬢", amethyst: "♦", star_gem: "✦" };
+const ICONS = { empty: "·", extra: "+2", bomb: "💣", stone: "🪨", coal: "◆", copper: "⬟", iron: "⬢", amethyst: "♦", star_gem: "✦", fertilizer: "🧪" };
 
 function mineralImage(id) {
+  if (id === "fertilizer") {
+    const image = document.createElement("img"); image.alt = "";
+    image.src = FERTILIZER_ASSET;
+    return image;
+  }
   if (!(id in ICONS) || ["empty", "extra", "bomb"].includes(id)) return null;
   const image = document.createElement("img"); image.alt = "";
   image.addEventListener("error", () => image.remove());
@@ -63,6 +68,7 @@ export function openMiningGame(root, run) {
         loot = result.loot || {}; revealCell(cell, result.outcome);
         layer.querySelector("[data-strikes]").textContent = result.strikes_left;
         renderLoot(lootLine, loot, "这块是空洞");
+        if (result.fertilizer_found) lootLine.append(" · 获得化肥！");
         if (result.exploded) {
           layer.classList.add("mine-explosion");
           layer.querySelector(".mine-blast").hidden = false;

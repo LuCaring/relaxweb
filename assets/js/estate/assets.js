@@ -2,6 +2,7 @@
 import { drawCharacterSkin, DEFAULT_SKIN_ID } from "./characters.js";
 
 const ROOT = "assets/estate/nature";
+export const FERTILIZER_ASSET = `${ROOT}/supplies/fertilizer.png`;
 export const ESTATE_SIGN = "assets/estate/signs/estate-sign.png";
 export const PET_SPRITE = "assets/estate/pets/doudou-sheet.png";
 export const PET_SLEEP_SPRITE = "assets/estate/pets/doudou-sleep-sheet.png";
@@ -59,6 +60,7 @@ export function inventoryAsset(item) {
   if (item.kind === "fish") return catchAsset("fish", item.fish_id);
   if (item.kind === "collectible") return catchAsset("collectible", item.collectible_id);
   if (item.kind === "mineral") return mineralAsset(item.mineral_id);
+  if (item.id === "supply:fertilizer") return FERTILIZER_ASSET;
   return null;
 }
 

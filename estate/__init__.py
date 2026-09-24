@@ -15,7 +15,7 @@ from estate.activities import (
 )
 from estate.pets import buy_or_upgrade_pet
 from estate.visits import (
-    list_estates, mark_notifications_read, notifications, public_estate_state,
+    fertilize, list_estates, mark_notifications_read, notifications, public_estate_state,
     steal_crop,
 )
 
@@ -34,6 +34,6 @@ __all__ = [
     # 矿场
     "start_mining", "mine_cell", "finish_mining",
     # 多人拜访
-    "list_estates", "public_estate_state", "steal_crop",
+    "list_estates", "public_estate_state", "steal_crop", "fertilize",
     "notifications", "mark_notifications_read",
 ]

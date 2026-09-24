@@ -126,13 +126,13 @@ class ApplicationTests(unittest.IsolatedAsyncioTestCase):
             transfer_coins admin_set_coins list_rooms get_room create_room join_room leave_room
             start_game poker_action pause_game restart_game settle_vote hand_continue room_chat
             watch_player list_users get_bet create_bet place_bet settle_bet cancel_bet close_bet
-            get_estate estate_buy estate_plant estate_harvest estate_sell estate_sell_all estate_pet
+            get_estate estate_buy estate_plant estate_harvest estate_fertilize estate_sell estate_sell_all estate_pet
             estate_set_skin estate_buy_skin estate_buy_tool estate_upgrade_tool estate_repair_tool
             estate_start_fishing estate_finish_fishing estate_start_mining estate_mine_cell
             estate_finish_mining estate_list_visits estate_enter_visit estate_leave_visit
-            estate_visit_move estate_steal_crop estate_get_notifications estate_mark_notifications_read"""
+            estate_visit_move estate_steal_crop estate_visit_fertilize estate_get_notifications estate_mark_notifications_read"""
         self.assertEqual(set(self.app.handlers), set(expected.split()))
-        self.assertEqual(len(self.app.handlers), 65)
+        self.assertEqual(len(self.app.handlers), 67)
 
     async def test_two_apps_isolate_accounts_rooms_history_and_protocol_state(self):
         second = self.make_app("second")
