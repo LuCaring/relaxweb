@@ -143,7 +143,10 @@ function showSeatBubble(username, text) {
 function applySeatBubble(username) {
   if (!state.myRoom) return;
   const index = state.myRoom.players.findIndex((p) => p.username === username);
-  if (index < 0) return;
+  if (index < 0) {
+    removeSeatBubble(username);
+    return;
+  }
   const seat = seatNodeByIndex(index);
   if (!seat) return;
   removeSeatBubble(username);
@@ -153,16 +156,16 @@ function applySeatBubble(username) {
   node.className = "seat-bubble";
   node.textContent = bubble.text;
   node.dataset.username = username;
-  // Seat transforms create stacking contexts. Render above those contexts so
-  // neighboring avatars cannot paint over a wider message.
-  const table = seat.closest(".casual-page, .uno-table, .poker-table, .liar-table, .waiting-table") || seat;
+  // Render above seats or player rows so neighboring avatars cannot cover the message.
+  const table = seat.closest(".casual-page, .uno-table, .poker-table, .liar-table, .waiting-seats") || seat;
   table.append(node);
   bubble.node = node;
   positionSeatBubble(node, seat, table);
 }
 
 function positionSeatBubble(node, seat, table) {
-  const anchor = seat.getBoundingClientRect();
+  const anchor = (seat.classList.contains("waiting-seat")
+    ? seat.querySelector(".waiting-seat-person") : seat)?.getBoundingClientRect();
   node.hidden = !anchor.width || !anchor.height;
   if (node.hidden) return;
   const bounds = table.getBoundingClientRect();

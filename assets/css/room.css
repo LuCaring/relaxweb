@@ -853,31 +853,28 @@
     font-weight: 650;
 }
 
-/* Shared waiting table shell. Each game still owns its live-play table skin. */
-.waiting-room { width:100%; min-width:0; }
-.waiting-room-info { overflow:hidden; padding:13px 16px; border:1px solid #e4e9eb; border-radius:13px; background:#fff; color:#647078; font-size:13px; text-overflow:ellipsis; white-space:nowrap; }
-.waiting-room-title { margin:15px 2px 13px; color:#263238; font-size:18px; font-weight:750; }
-.waiting-table { position:relative; width:100%; height:clamp(330px, 43vw, 520px); min-height:330px; overflow:hidden; isolation:isolate; border:1px solid #d7e1df; border-radius:45% / 38%; background:radial-gradient(ellipse at center, #d9eee6 0, #c3e0d5 56%, #b2d2c8 100%); box-shadow:inset 0 0 0 8px #ffffff76, 0 14px 34px #123a2b16; }
-.waiting-table::before { position:absolute; inset:8% 8%; z-index:-1; content:""; border:1px solid #ffffffa8; border-radius:45% / 38%; }
-.waiting-seats { position:absolute; inset:12px 6px; }
-.waiting-seat { position:absolute; left:var(--seat-x, 50%); top:var(--seat-y, 50%); display:flex; flex-direction:column; justify-content:center; align-items:center; gap:3px; width:clamp(78px, 11vw, 126px); min-height:65px; padding:7px 8px; transform:translate(-50%,-50%); border:1px solid #dce5e2; border-radius:13px; background:#fff; color:#46544e; box-shadow:0 5px 16px #183b2d20; text-align:center; }
-.waiting-seat[data-position="bottom"] { left:50%; top:84%; }
-.waiting-seat[data-position="top"] { left:50%; top:16%; }
-.waiting-seat[data-position="left"] { left:14%; top:50%; }
-.waiting-seat[data-position="right"] { left:86%; top:50%; }
-.waiting-seat.is-me { border-color:#6fa8db; background:#eff7ff; box-shadow:inset 0 0 0 1px #6fa8db,0 5px 16px #183b2d20; }
-.waiting-seat.is-owner { border-top:3px solid #d7a73b; }
-.waiting-seat.is-empty { justify-content:center; border:1px dashed #91afa2; background:#ffffff61; color:#71877c; box-shadow:none; font-size:12px; }
-.waiting-seat-name { max-width:100%; overflow:hidden; color:#283930; font-size:13px; font-weight:750; text-overflow:ellipsis; white-space:nowrap; }
-.waiting-seat-rating { line-height:1; }
-.waiting-seat-rating .rating-badge { font-size:10px; }
-.waiting-seat-badges { display:flex; flex-wrap:wrap; justify-content:center; gap:3px; }
-.waiting-owner-badge, .waiting-me-badge, .waiting-team-badge { padding:1px 5px; border-radius:5px; background:#fff0d5; color:#79530e; font-size:10px; font-weight:700; }
-.waiting-me-badge { background:#e1efff; color:#1c5f9b; }
-.waiting-team-badge.team-1 { background:#eee7ff; color:#6244a2; }
-.waiting-seat-stack { color:#8b6418; font-size:12px; font-weight:750; font-variant-numeric:tabular-nums; white-space:nowrap; }
-.waiting-center { position:absolute; left:28%; top:39%; display:flex; align-items:center; justify-content:center; width:44%; min-height:54px; padding:10px; border:1px solid #ffffff91; border-radius:14px; background:#ffffffb5; color:#4b6860; font-size:13px; font-weight:700; text-align:center; line-height:1.5; }
-.waiting-room-controls { display:flex; flex-direction:column; gap:8px; margin-top:14px; padding:15px 17px; border:1px solid #e4e9eb; border-radius:14px; background:#fff; }
+/* Shared waiting room list. The active game tables keep their own layouts. */
+.waiting-room { display:grid; gap:15px; width:100%; min-width:0; padding-bottom:12px; }
+.waiting-room-head { min-width:0; padding:22px 25px; border-radius:18px; background:linear-gradient(118deg,#193e36,#226b50); color:#f5fff9; box-shadow:0 12px 28px #183b2d1c; }
+.waiting-room-eyebrow { display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:8px 16px; color:#c8e8d8; font-size:12px; font-weight:700; }
+.waiting-room-game { color:#f5fff9; }
+.waiting-room-id { font-variant-numeric:tabular-nums; }
+.waiting-room-title { margin:11px 0 4px; overflow-wrap:anywhere; font-size:clamp(21px,2.4vw,30px); line-height:1.3; }
+.waiting-room-owner { color:#c6e8d7; font-size:13px; }
+.waiting-room-desc { max-width:78ch; margin:13px 0 0; color:#e0f1e8; font-size:13px; line-height:1.65; }
+.waiting-overview { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:10px; }
+.waiting-fact { display:flex; flex-direction:column; justify-content:center; gap:5px; min-width:0; min-height:77px; padding:12px 15px; border:1px solid #e1e9e4; border-radius:13px; background:#fff; }
+.waiting-fact span { color:#687971; font-size:11px; font-weight:650; }
+.waiting-fact strong { min-width:0; color:#21483a; font-size:17px; font-weight:800; line-height:1.25; overflow-wrap:anywhere; }
+.waiting-room-controls { display:flex; align-items:center; justify-content:space-between; gap:20px; min-width:0; padding:15px 18px; border:1px solid #dbe8df; border-radius:14px; background:#f4faf6; }
+.waiting-readiness { flex:1; min-width:0; }
+.waiting-room-status { color:#795b23; font-size:15px; font-weight:800; line-height:1.4; }
+.waiting-room-status[data-ready="true"] { color:#246645; }
+.waiting-progress { width:min(100%,360px); height:5px; margin:9px 0 7px; overflow:hidden; border-radius:9px; background:#d8e6dc; }
+.waiting-progress-fill { display:block; height:100%; border-radius:9px; background:#35a572; transition:width .25s ease; }
+.waiting-room-hint { margin:0; color:#667b6d; font-size:12px; }
+.waiting-start { flex:none; width:auto; min-width:160px; margin:0; }
+.waiting-start:disabled { opacity:.55; cursor:not-allowed; }
 .waiting-voice { display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:10px 16px; padding:12px 14px; border:1px solid #d6e9df; border-radius:11px; background:#f3fbf7; }
 .waiting-voice[hidden], .waiting-voice-audio[hidden] { display:none; }
 .waiting-voice-info { display:flex; flex-direction:column; gap:3px; color:#285841; font-size:12px; }
@@ -889,34 +886,72 @@
 .waiting-voice-mic:disabled { opacity:.55; cursor:default; }
 .waiting-voice-mic.on { border-color:#1d6b4c; background:#1d6b4c; color:#fff; }
 .waiting-voice-mic:focus-visible, .waiting-voice-audio:focus-visible { outline:3px solid #b491ff; outline-offset:2px; }
-.waiting-room[data-game="werewolf"] .waiting-seat.speaking { border-color:#36b879; box-shadow:0 0 0 3px #5fd39a88, 0 5px 16px #183b2d20; }
-.waiting-start { width:100%; margin:0; }
-.waiting-start:disabled { opacity:.5; cursor:not-allowed; }
-.waiting-room-hint { margin:0; }
-.waiting-seat-enter { animation:waiting-seat-arrive .38s ease-out both; }
-@keyframes waiting-seat-arrive { from { opacity:0; transform:translate(-50%,-40%) scale(.94); } to { opacity:1; transform:translate(-50%,-50%) scale(1); } }
-@media (max-width:1023px) {
-    .waiting-table { display:flex; flex-direction:column; height:auto; min-height:0; overflow:visible; border-radius:20px; background:#e2efe9; }
-    .waiting-table::before { display:none; }
-    .waiting-seats { position:relative; inset:auto; display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:9px; padding:12px; }
-    .waiting-room[data-game="guandan"] .waiting-seats,
-    .waiting-room[data-game="mahjong"] .waiting-seats { grid-template-columns:repeat(2,minmax(0,1fr)); }
-    .waiting-seat { position:relative; inset:auto; left:auto; top:auto; width:auto; min-width:0; min-height:68px; transform:none; }
-    .waiting-seat[data-position="bottom"], .waiting-seat[data-position="top"],
-    .waiting-seat[data-position="left"], .waiting-seat[data-position="right"] { position:relative; left:auto; top:auto; }
-    .waiting-seat-enter { animation:waiting-seat-grid-arrive .38s ease-out both; }
-    @keyframes waiting-seat-grid-arrive { from { opacity:0; transform:translateY(5px) scale(.98); } to { opacity:1; transform:translateY(0) scale(1); } }
-    .waiting-center { position:relative; inset:auto; width:auto; min-height:48px; margin:0 12px 12px; padding:8px 12px; }
+.waiting-roster, .waiting-rules { min-width:0; padding:17px 18px; border:1px solid #e0e9e3; border-radius:15px; background:#fff; }
+.waiting-section-head { display:flex; align-items:baseline; justify-content:space-between; flex-wrap:wrap; gap:7px 14px; margin-bottom:12px; }
+.waiting-section-head h2, .waiting-rules h2 { margin:0; color:#263e33; font-size:17px; }
+.waiting-roster-count { color:#62786c; font-size:12px; }
+.waiting-roster-columns, .waiting-seat { display:grid; grid-template-columns:48px minmax(0,1fr) minmax(88px,125px) minmax(95px,130px); align-items:center; gap:10px; }
+.waiting-roster-columns { padding:0 13px 8px; color:#84928a; font-size:11px; font-weight:700; }
+.waiting-roster-columns span:last-child { text-align:right; }
+.waiting-seats { position:relative; display:flex; flex-direction:column; gap:6px; }
+.waiting-seat { min-width:0; min-height:69px; padding:9px 13px; border:1px solid #e7eeea; border-radius:10px; background:#fff; }
+.waiting-seat:nth-of-type(even) { background:#fafcfb; }
+.waiting-seat.is-me { border-color:#8dbce1; background:#f1f8ff; }
+.waiting-seat.is-owner { border-left:3px solid #d4a847; }
+.waiting-seat.has-no-chips { background:#fff8f6; }
+.waiting-seat-number { color:#8ba097; font-size:15px; font-weight:800; font-variant-numeric:tabular-nums; }
+.waiting-seat-person { display:flex; align-items:center; gap:10px; min-width:0; }
+.waiting-seat-avatar { display:grid; flex:none; place-items:center; width:38px; height:38px; overflow:hidden; border-radius:50%; background:#dceee3; color:#315a43; font-size:16px; font-weight:800; }
+.waiting-seat-avatar img { width:100%; height:100%; object-fit:cover; }
+.waiting-seat-identity { display:flex; flex-direction:column; align-items:flex-start; gap:2px; min-width:0; }
+.waiting-seat-name, .waiting-seat-handle { max-width:100%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.waiting-seat-name { color:#263e33; font-size:13px; }
+.waiting-seat-handle { color:#81958a; font-size:10px; }
+.waiting-seat-handle[hidden] { display:none; }
+.waiting-seat-badges { display:flex; flex-wrap:wrap; gap:3px; }
+.waiting-owner-badge, .waiting-me-badge, .waiting-team-badge, .waiting-no-chips-badge { padding:1px 5px; border-radius:5px; background:#fff0d5; color:#79530e; font-size:10px; font-weight:750; white-space:nowrap; }
+.waiting-me-badge { background:#e1efff; color:#1c5f9b; }
+.waiting-team-badge.team-1 { background:#eee7ff; color:#6244a2; }
+.waiting-no-chips-badge { background:#ffe6e0; color:#aa4938; }
+.waiting-seat-rating { min-width:0; }
+.waiting-seat-rating .rating-badge { max-width:100%; font-size:10px; }
+.waiting-seat-stack { display:flex; flex-direction:column; align-items:flex-end; min-width:0; color:#825e20; font-variant-numeric:tabular-nums; }
+.waiting-seat-stack small { display:none; }
+.waiting-seat-stack strong { max-width:100%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:13px; }
+.waiting-empty { margin-top:8px; padding:11px 13px; border:1px dashed #aec6b7; border-radius:9px; background:#f8fcf9; color:#65806c; font-size:12px; text-align:center; }
+.waiting-empty[hidden] { display:none; }
+.waiting-rules { display:flex; flex-direction:column; gap:12px; }
+.waiting-rules-tags { display:flex; flex-wrap:wrap; gap:7px; }
+.waiting-rule-tag { padding:6px 10px; border-radius:7px; background:#eef5ef; color:#426850; font-size:12px; font-weight:700; }
+.waiting-rules-note { margin:0; color:#64766d; font-size:12px; line-height:1.6; }
+.waiting-room[data-game="werewolf"] .waiting-seat.speaking { border-color:#36b879; box-shadow:0 0 0 2px #5fd39a77; }
+.waiting-seat-enter { animation:waiting-seat-arrive .32s ease-out both; }
+@keyframes waiting-seat-arrive { from { opacity:0; transform:translateY(5px); } to { opacity:1; transform:translateY(0); } }
+@media (max-width:760px) {
+    .waiting-overview { grid-template-columns:repeat(2,minmax(0,1fr)); }
 }
 @media (max-width:650px) {
-    .waiting-room-info { padding:11px 12px; font-size:12px; }
-    .waiting-room-title { font-size:16px; }
-    .waiting-table { height:auto; min-height:0; border-radius:15px; }
-    .waiting-seats { gap:6px; padding:9px; }
-    .waiting-seat { min-height:62px; padding:5px 4px; gap:2px; border-radius:10px; }
-    .waiting-seat-name { font-size:11px; }
-    .waiting-seat-stack { font-size:10px; }
-    .waiting-center { min-height:44px; margin:0 9px 9px; padding:8px 5px; font-size:11px; }
-    .waiting-room-controls { padding:12px; }
+    .waiting-room { gap:11px; }
+    .waiting-room-head { padding:17px 16px; border-radius:14px; }
+    .waiting-room-title { font-size:21px; }
+    .waiting-room-desc { font-size:12px; }
+    .waiting-fact { min-height:65px; padding:10px 12px; }
+    .waiting-fact strong { font-size:15px; }
+    .waiting-room-controls { flex-direction:column; align-items:stretch; gap:11px; padding:13px; }
+    .waiting-start { width:100%; }
+    .waiting-roster, .waiting-rules { padding:13px 11px; }
+    .waiting-roster-columns { display:none; }
+    .waiting-seat { grid-template-columns:27px minmax(0,1fr) auto; gap:5px 7px; min-height:66px; padding:8px; }
+    .waiting-seat-number { font-size:12px; }
+    .waiting-seat-person { gap:7px; }
+    .waiting-seat-avatar { width:33px; height:33px; font-size:14px; }
+    .waiting-seat-rating { grid-column:2; grid-row:2; padding-left:40px; }
+    .waiting-seat-stack { grid-column:3; grid-row:1 / 3; }
+    .waiting-seat-stack small { display:block; color:#9a8a68; font-size:10px; }
+    .waiting-seat-stack strong { font-size:12px; }
+    .waiting-voice-actions { width:100%; }
 }
-@media (prefers-reduced-motion:reduce) { .waiting-seat-enter { animation:none; } }
+@media (prefers-reduced-motion:reduce) {
+    .waiting-seat-enter { animation:none; }
+    .waiting-progress-fill { transition:none; }
+}
