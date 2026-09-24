@@ -4,7 +4,7 @@
 
 | 开发线 | 入口 | 边界 |
 | --- | --- | --- |
-| A：框架、资产和交易 | `dungeon/contracts/`、`domain/`、`application/`、`storage/`、`content/`、`plugins/`；传输适配在 `server/dungeon/` | `dungeon.contracts.simulator.Simulator` 是动作模拟合同；`dungeon.content.load_ruleset` 加载发布规则；`dungeon.plugins.registry.default_registry` 提供受信任机制注册。`AssetService` 已支持升级报价、事务扣费和成功回执重放，旧入口已接装备预留门禁；尚无对外 Beta 协议或成交服务。 |
+| A：框架、资产和交易 | `dungeon/contracts/`、`domain/`、`application/`、`storage/`、`content/`、`plugins/`；传输适配在 `server/dungeon/` | `dungeon.contracts.simulator.Simulator` 是动作模拟合同；`dungeon.content.load_ruleset` 加载发布规则；`dungeon.plugins.registry.default_registry` 提供受信任机制注册。`AssetService` 已支持升级报价、事务扣费和成功回执重放；`TradeService`（`dungeon/application/trading.py`）已支持定向报价、预留、撤销/过期与原子成交，参数来自`economy.json`的`trade_policy`。旧入口已接装备预留门禁；尚无对外 Beta 协议注册。 |
 | B：战斗和客户端 | 服务端动作实现在 `dungeon/simulation/`，遵循 `Simulator` 合同；客户端在 `assets/js/dungeon/`，页面在 `dungeon.html` | 模拟器只消费冻结规则和有序输入，不能写金币、永久装备或数据库；客户端只提交输入，正式奖励由服务端确认。 |
 | C：内容和经济 | `content/dungeon/packs/`、`content/dungeon/release.json`；schema 在 `contracts/dungeon/schemas/` | 内容包使用已注册机制并经 `load_ruleset` 校验；新机制需先与 A/B 约定，不在内容里放可执行脚本。 |
 
@@ -18,4 +18,4 @@ B 线可从本地归档标签 `archive/dungeon-ui-before-beta` 参考 `dungeon.h
 
 旧协议的实际消息注册见 `server/dungeon/legacy_protocol.py`，装备动作见 `dungeon/legacy/actions.py`，旧局/奖励事务见 `dungeon/legacy/runs.py`。旧回执与Beta成功回执使用不同表和格式，不互相转换。旧局按原规则完成，新动作流程通过独立Beta协议接入。
 
-修改兼容路径至少运行 `tests/test_dungeon_namespace.py`、`tests/test_dungeon_equipment.py`、`tests/test_dungeon_runs.py` 与 `tests/test_dungeon_protocol.py`；涉及资产时同时运行 `tests/test_dungeon_beta_assets.py`。旧部署与当前Beta目标不能混用。
+修改兼容路径至少运行 `tests/test_dungeon_namespace.py`、`tests/test_dungeon_equipment.py`、`tests/test_dungeon_runs.py` 与 `tests/test_dungeon_protocol.py`；涉及资产时同时运行 `tests/test_dungeon_beta_assets.py`，涉及交易时运行 `tests/test_dungeon_beta_trading.py`。旧部署与当前Beta目标不能混用。

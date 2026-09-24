@@ -11,7 +11,8 @@
 | 插件 | 可信白名单注册、参数/状态/操作验证、一个可执行的消耗剑势获盾机制 | B线扩展有测试的机制与动作模拟器 |
 | 模拟接口 | 可导入的 Simulator / SimulatorServices 合同 | 实时宿主、碰撞、输入流、检查点、正式房间发奖尚未实现 |
 | 金币与成长 | 共用现有钱包的最小单位适配、纯升级策略、事务化升级应用服务与回执 | A线接正式鉴权协议和前端；当前不向客户端开放Beta升级API |
-| 资产保护 | 统一预留门禁，旧出售/穿戴/锁定/领取/开局路径接入保护 | 原子成交、订单/过期、买卖双方通知仍属于R5 |
+| 玩家交易 | 定向报价、物品预留、接受/撤销/过期、原子成交与唯一结算记录（`dungeon/application/trading.py`，迁移2） | 注册对外交易协议、双方通知与UI接入；手续费/TTL等参数已由`economy.json`配置驱动 |
+| 资产保护 | 统一预留门禁，旧出售/穿戴/锁定/领取/开局路径接入保护 | 交易预留已并入同一门禁；剩余为运行期快照引用 |
 | 数据与管理 | 有编号迁移及回滚保护，账号改名/删除相关的地下城关联处理 | 完整Beta run与交易表在后续迁移增加 |
 | 客户端 | 保留现有UI分支，不合并其旧自动战斗内容 | B线选择性复用页面，在独立大厅入口上接动作版 |
 
@@ -39,6 +40,7 @@ uv run --locked python -m dungeon.tools validate-content content/dungeon/release
 uv run --locked python tests/test_dungeon_namespace.py
 uv run --locked python tests/test_dungeon_beta_content.py
 uv run --locked python tests/test_dungeon_beta_assets.py
+uv run --locked python tests/test_dungeon_beta_trading.py
 uv run --locked python scripts/run_python_tests.py
 ```
 
@@ -55,3 +57,13 @@ uv run --locked python scripts/run_python_tests.py
 代码审阅中发现的迁移半写入、插件依赖漏声明、策略成本校验、预留门禁等问题已修复并补回归。当前可作为三线共同开发起点；对玩家开放仍须完成R4～R6及对应验收。
 
 当前升级回执只保存成功结果：失败操作回滚且不占用请求号，成功重放返回提交时的结果和余额。正式协议需另行获取最新状态，不能把重放余额当成当前余额。当前示例只有一个升级等级和一种护盾机制，数值用于合同与集成验证，不是已定稿的经济方案。
+
+## 玩家定向交易落地（迁移2，`TradeService`）
+
+2026-09-25 追加交付A线R5核心：`dungeon/application/trading.py` + `dungeon/domain/trading.py` + `dungeon/storage/beta_schema.py` 迁移2（`dungeon_trade_offers`、`dungeon_trade_settlements`、账号删除触发器扩展清理）。
+
+- 参数配置文件化：`TradePolicy.from_economy`从冻结规则集`economy.json`读取`fee_bp/min/max/ttl/policy_version`，服务代码无常量数值；创建报价时冻结价格、手续费与快照，接受时按冻结值结算，现行策略变化不重定价旧单（仅创建路径受`quote_changed`保护）。
+- 原子成交：单一`BEGIN IMMEDIATE`事务内完成回执检查、报价终态条件更新、买家扣款、卖家入账、物品实例归属转移（版本+1，满包进`pending`）、唯一结算记录、预留释放与双方资产版本递增。买家总支出=卖家净收入+销毁手续费，三方守恒可由流水与settlement核对。
+- 稳定语义：create/accept/cancel均按`(user_id, request_id)`幂等重放；接受与取消竞争只有单一终态；过期由接受/读取/维护清理共同迁移并释放预留；中途故障（扣买家后等）整笔回滚不留半状态。
+- 验证：`tests/test_dungeon_beta_trading.py` 15项通过（策略舍入与边界、不可交易/重复预留拒绝、竞争终态、过期迁移、满包、故障注入、迁移幂等与账号删除保留已购装备）；全量`scripts/run_python_tests.py` 49/50文件通过，仍仅有既有`test_frontend.py`静态检查失败。迁移1校验和未改动；新代码兼容Python 3.9语法。
+- 未完成：对外WebSocket协议注册、买卖双方实时通知、列表游标分页与浏览器端两账号联调属于R6/协议接入，当前服务仅供应用层与测试调用。

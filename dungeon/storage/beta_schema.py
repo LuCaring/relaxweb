@@ -51,6 +51,52 @@ CREATE TRIGGER delete_user_dungeon_beta AFTER DELETE ON users BEGIN
     DELETE FROM dungeon_beta_progress WHERE user_id=OLD.id;
     DELETE FROM dungeon_beta_asset_revisions WHERE user_id=OLD.id;
 END;
+"""), (2, """
+CREATE TABLE dungeon_trade_offers (
+    offer_id TEXT PRIMARY KEY,
+    seller_user_id INTEGER NOT NULL,
+    buyer_user_id INTEGER NOT NULL,
+    item_id TEXT NOT NULL,
+    item_version INTEGER NOT NULL CHECK(item_version > 0),
+    item_snapshot_json TEXT NOT NULL,
+    price_minor INTEGER NOT NULL CHECK(price_minor > 0),
+    fee_minor INTEGER NOT NULL CHECK(fee_minor >= 0),
+    seller_net_minor INTEGER NOT NULL CHECK(seller_net_minor >= 0),
+    policy_version INTEGER NOT NULL CHECK(policy_version > 0),
+    status TEXT NOT NULL DEFAULT 'open' CHECK(status IN ('open','accepted','cancelled','expired')),
+    offer_version INTEGER NOT NULL DEFAULT 1 CHECK(offer_version > 0),
+    created_at INTEGER NOT NULL,
+    expires_at INTEGER NOT NULL,
+    finalized_at INTEGER,
+    CHECK(seller_user_id <> buyer_user_id),
+    CHECK(price_minor >= fee_minor),
+    CHECK(finalized_at IS NULL OR status <> 'open')
+);
+CREATE INDEX dungeon_trade_offers_party ON dungeon_trade_offers(seller_user_id,buyer_user_id,status);
+CREATE UNIQUE INDEX dungeon_trade_offers_open_item ON dungeon_trade_offers(item_id) WHERE status='open';
+CREATE TABLE dungeon_trade_settlements (
+    settlement_id TEXT PRIMARY KEY,
+    offer_id TEXT NOT NULL UNIQUE,
+    buyer_user_id INTEGER NOT NULL,
+    seller_user_id INTEGER NOT NULL,
+    item_id TEXT NOT NULL,
+    price_minor INTEGER NOT NULL CHECK(price_minor > 0),
+    fee_minor INTEGER NOT NULL CHECK(fee_minor >= 0),
+    seller_net_minor INTEGER NOT NULL CHECK(seller_net_minor >= 0),
+    buyer_request_id TEXT NOT NULL,
+    item_location TEXT NOT NULL CHECK(item_location IN ('bag','pending')),
+    settled_at INTEGER NOT NULL
+);
+DROP TRIGGER IF EXISTS delete_user_dungeon_beta;
+CREATE TRIGGER delete_user_dungeon_beta AFTER DELETE ON users BEGIN
+    DELETE FROM dungeon_asset_reservations WHERE owner_user_id=OLD.id;
+    DELETE FROM dungeon_beta_receipts WHERE user_id=OLD.id;
+    DELETE FROM dungeon_material_balances WHERE user_id=OLD.id;
+    DELETE FROM dungeon_beta_progress WHERE user_id=OLD.id;
+    DELETE FROM dungeon_beta_asset_revisions WHERE user_id=OLD.id;
+    DELETE FROM dungeon_trade_settlements WHERE buyer_user_id=OLD.id OR seller_user_id=OLD.id;
+    DELETE FROM dungeon_trade_offers WHERE seller_user_id=OLD.id OR buyer_user_id=OLD.id;
+END;
 """),)
 
 
