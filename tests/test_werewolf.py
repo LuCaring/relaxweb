@@ -449,8 +449,12 @@ def test_vote_and_tie():
         await skip_to_vote(room)
         vote_phase = g["phase"] == "vote"
         votes = {"a": "b", "b": "a", "c": "a", "d": "b", "e": "a", "f": "b"}
+        vote_locked = False
         for voter, target in votes.items():
             await room.perform_action(voter, "vote", {"target": target})
+            if voter == "a":               # 重复提交被拒绝，票锁定在首次选择
+                await room.perform_action("a", "vote", {"target": "c"})
+                vote_locked = g["vote"].get("a") == "b"
         revote = g["vote_round"] == 2 and set(g["candidates"]) == {"a", "b"} \
             and g["vote"] == {}
         votes2 = {"a": "b", "b": "a", "c": "b", "d": "a", "e": "b", "f": "a"}
@@ -466,10 +470,12 @@ def test_vote_and_tie():
             await room2.perform_action(voter, "vote", {"target": target})
         straight = g2["phase"] == "night" and g2["day_no"] == 2 \
             and len(g2["alive"]) == 6
-        return vote_phase, revote, no_exile, straight
+        return vote_phase, vote_locked, revote, no_exile, straight
 
-    vote_phase, revote, no_exile, straight = run_identity_shuffle(run)
+    vote_phase, vote_locked, revote, no_exile, straight = \
+        run_identity_shuffle(run)
     check("白天结束进入投票", vote_phase)
+    check("重复投票被拒绝且首票锁定", vote_locked)
     check("平票进入候选人重投", revote)
     check("重投仍平无人出局", no_exile)
     check("no_exile 规则平票直接跳过", straight)

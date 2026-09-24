@@ -15,6 +15,7 @@ function baseView(overrides = {}) {
       guard_continuous: false, hunter_shot_on_poison: false, reveal_role: true,
       last_words: 'first', tie: 'revote', day_seconds: 120, vote_seconds: 30,
       night_seconds: 25 },
+    turn_seq: 1,
     players: [
       { username: 'alice', nickname: '爱丽丝', stack: 100, alive: true, role: null },
       { username: 'bob', nickname: '鲍勃', stack: 100, alive: true, role: null },
@@ -142,7 +143,7 @@ function baseView(overrides = {}) {
 
     // —— 白天·投票：得票角标、选人确认、平票重投文案 ——
     await show(baseView({
-      phase: 'vote', night_role: null,
+      phase: 'vote', night_role: null, turn_left: 25, turn_seq: 7,
       vote: { bob: 'alice', carol: 'alice' },
       your_options: { kind: 'vote', voted: null,
         targets: [
@@ -154,6 +155,31 @@ function baseView(overrides = {}) {
     await page.locator('.ww-target[data-username="dave"]').click();
     await page.locator('button:has-text("投出 大卫")').click();
     assert.deepEqual(await sent(), { type: 'poker_action', action: 'vote', target: 'dave' });
+
+    // 服务器回显已投票视图：按钮全部锁定，倒计时基线不因重渲染刷新
+    const baseline = await page.evaluate(() => core.state.hallDeadlineAt);
+    await show(baseView({
+      phase: 'vote', night_role: null, turn_left: 21, turn_seq: 7,
+      vote: { bob: 'alice', carol: 'alice', alice: 'dave' },
+      your_options: { kind: 'vote', voted: 'dave',
+        targets: [
+          { username: 'bob', nickname: '鲍勃' }, { username: 'carol', nickname: '卡萝' },
+          { username: 'dave', nickname: '大卫' }, { username: 'frank', nickname: '弗兰克' }] },
+    }));
+    const confirmVote = page.locator('.ww-action.primary');
+    assert.equal(await confirmVote.isDisabled(), true);
+    assert.match(await confirmVote.innerText(), /已投给 大卫/);
+    assert.equal(await page.locator('.ww-target:not([disabled])').count(), 0);
+    assert.equal(await page.evaluate(() => core.state.hallDeadlineAt), baseline);
+    await show(baseView({
+      phase: 'vote', night_role: null, turn_left: 19, turn_seq: 8,
+      vote: { bob: 'alice', carol: 'alice', alice: 'dave' },
+      your_options: { kind: 'vote', voted: 'dave',
+        targets: [
+          { username: 'bob', nickname: '鲍勃' }, { username: 'carol', nickname: '卡萝' },
+          { username: 'dave', nickname: '大卫' }, { username: 'frank', nickname: '弗兰克' }] },
+    }));
+    assert.notEqual(await page.evaluate(() => core.state.hallDeadlineAt), baseline);
 
     // —— 猎人开枪：放弃即空枪提交 ——
     await show(baseView({

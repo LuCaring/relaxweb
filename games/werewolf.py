@@ -200,6 +200,7 @@ class WerewolfRoom(BaseRoom):
                 "match_no": g["match_no"],
                 "day_no": g["day_no"],
                 "phase": g["phase"],
+                "turn_seq": g.get("turn_seq", 0),
                 "night_role": role_name(g["night_role"])
                 if g.get("night_role") else None,
                 "last_words_current": g["last_words"]["current"],
@@ -500,6 +501,7 @@ class WerewolfRoom(BaseRoom):
         self.game = {
             "match_no": self.hand_seq,
             "voice_epoch": 0,
+            "turn_seq": 0,
             "day_no": 0,
             "phase": "night",
             "roles": roles,
@@ -570,6 +572,7 @@ class WerewolfRoom(BaseRoom):
                 g["wake_idx"] = index
                 g["night_role"] = role_key
                 g["pending"] = pending
+                g["turn_seq"] += 1
                 g["deadline"] = time.time() + self.rules["night_seconds"]
                 self._arm_phase_timer()
                 await self.broadcast_views()
@@ -764,6 +767,7 @@ class WerewolfRoom(BaseRoom):
         g = self.game
         g["voice_epoch"] += 1
         g["phase"] = "day"
+        g["turn_seq"] += 1
         g["deadline"] = time.time() + self.rules["day_seconds"]
         self._arm_phase_timer()
         self._log_event(f"第 {g['day_no']} 天，开始自由发言", "day")
@@ -782,6 +786,7 @@ class WerewolfRoom(BaseRoom):
         g["phase"] = "vote"
         g["vote"] = {}
         g["candidates"] = None
+        g["turn_seq"] += 1
         g["deadline"] = time.time() + self.rules["vote_seconds"]
         self._arm_phase_timer()
         self._log_event("开始投票放逐", "vote")
@@ -790,6 +795,8 @@ class WerewolfRoom(BaseRoom):
     async def act_vote(self, username, data):
         g = self.game
         if g["phase"] != "vote" or username not in g["alive"]:
+            return
+        if username in g["vote"]:            # 一人一票：投出即锁定，防止刷屏刷新倒计时
             return
         target = self._target_name(data)
         if not target or target not in g["alive"]:
@@ -824,6 +831,7 @@ class WerewolfRoom(BaseRoom):
             g["vote_round"] = 2
             g["candidates"] = tied
             g["vote"] = {}
+            g["turn_seq"] += 1
             g["deadline"] = time.time() + self.rules["vote_seconds"]
             self._arm_phase_timer()
             names = "、".join(self.display_name(name) for name in tied)
@@ -877,6 +885,7 @@ class WerewolfRoom(BaseRoom):
             current = queue.pop(0)
             g["voice_epoch"] += 1
             g["last_words"]["current"] = current
+            g["turn_seq"] += 1
             g["deadline"] = time.time() + LAST_WORDS_TIMEOUT
             g["last_words"]["deadline"] = g["deadline"]
             self._arm_phase_timer()
@@ -900,6 +909,7 @@ class WerewolfRoom(BaseRoom):
         g["voice_epoch"] += 1
         g["phase"] = "shot"
         g["pending"] = [g["shot_pending"]]
+        g["turn_seq"] += 1
         g["deadline"] = time.time() + SHOT_TIMEOUT
         self._arm_phase_timer()
         self._log_event(f"猎人 {self.display_name(g['shot_pending'])} 亮出猎枪",

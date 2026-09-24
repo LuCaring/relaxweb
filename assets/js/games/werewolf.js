@@ -23,7 +23,9 @@ const FACTION_CLS = { wolf: "wolf", god: "god", civilian: "civil" };
 
 let actionLock = false;
 let lastRoomView = null;
-let phaseDeadline = 0;
+let phaseDeadline = 0;    // 当前阶段段的绝对截止时间（turn_seq 变化才重置）
+let phaseTotal = 0;       // 当前阶段段总时长，用作进度条分母
+let phaseSeq = null;      // 服务器的 turn_seq：识别新的倒计时段
 let pick = null;          // 女巫/投票的本地选择 {save:null,poison:null} 或 {vote:null}
 let speakingSet = new Set();   // 正在说话的用户名（voicespeakers 事件驱动）
 
@@ -135,7 +137,7 @@ function phaseHintText(room) {
   }
   if (room.phase === "day") return "自由讨论中 · 观点说完等待投票";
   if (room.phase === "vote") {
-    if (options?.voted) return "已投票 · 等待其他人（投票公开可见）";
+    if (options?.voted) return "已投票 · 等待其他人（投票后不可更改）";
     return "请选择放逐对象";
   }
   if (room.phase === "shot") {
@@ -440,24 +442,30 @@ function voteActionNode(room, options) {
   const wrap = el("div", "ww-action-block");
   wrap.append(el("div", "ww-action-title",
     room.vote_round > 1 ? "平票重投 · 只能在候选人中选择" : "选择要放逐的人"));
-  if (!pick || pick.kind !== "vote") pick = { kind: "vote", vote: options.voted || null };
+  const voted = options.voted || null;
+  if (!pick || pick.kind !== "vote") pick = { kind: "vote", vote: null };
   if (pick.vote && !options.targets.some((t) => t.username === pick.vote)) {
     pick.vote = null;
   }
   const grid = el("div", "ww-targets");
   for (const target of options.targets) {
-    grid.append(targetButton(target, pick.vote === target.username,
-      () => { pick.vote = target.username; renderGameView(); }, actionLock));
+    grid.append(targetButton(target, voted === target.username
+      || (!voted && pick.vote === target.username),
+      () => { pick.vote = target.username; renderGameView(); },
+      Boolean(voted) || actionLock));
   }
   const confirm = el("button", "ww-action primary");
   confirm.type = "button";
-  confirm.textContent = `投出 ${pick.vote ? targetLabel(options, pick.vote) : "…"}${
-    options.voted && options.voted !== pick.vote ? "（改票）" : ""}`;
-  confirm.disabled = !pick.vote || actionLock;
+  confirm.textContent = voted
+    ? `已投给 ${targetLabel(options, voted)}`
+    : `投出 ${pick.vote ? targetLabel(options, pick.vote) : "…"}`;
+  confirm.disabled = Boolean(voted) || !pick.vote || actionLock;
   confirm.addEventListener("click", () => {
     wwAct({ action: "vote", target: pick.vote });
   });
-  wrap.append(grid, confirm, noteNode("投票公开可见；全员投完或超时后开票。"));
+  wrap.append(grid, confirm, noteNode(voted
+    ? "投票已锁定，不能更改；全员投完或倒计时结束开票。"
+    : "投票公开可见；确认后锁定，不能更改。"));
   return wrap;
 }
 
@@ -558,13 +566,13 @@ function dockNode() {
   }
   body.append(info);
   if (acting) {
-    if (room.turn_left > 0) {
-      const countdown = el("div", "countdown");
-      const fill = el("div", "countdown-fill");
-      countdown.append(fill);
-      body.append(countdown);
-      startHallTicker(fill, Math.max(0, (phaseDeadline - Date.now()) / 1000));
-    }
+  if (room.turn_left > 0) {
+    const countdown = el("div", "countdown");
+    const fill = el("div", "countdown-fill");
+    countdown.append(fill);
+    body.append(countdown);
+    startHallTicker(fill, phaseTotal || room.turn_left, phaseDeadline);
+  }
     body.append(actionAreaNode(room));
   }
   dock.append(body);
@@ -622,7 +630,12 @@ function renderWerewolfTable() {
   if (lastRoomView !== room) {
     actionLock = false;
     lastRoomView = room;
-    phaseDeadline = room.turn_left > 0 ? Date.now() + room.turn_left * 1000 : 0;
+    if (room.turn_seq !== phaseSeq) {
+      // 只在服务器开启新的倒计时段时重置基线；普通广播（他人投票等）不打断进度条
+      phaseSeq = room.turn_seq;
+      phaseTotal = Math.max(0, room.turn_left || 0);
+      phaseDeadline = phaseTotal > 0 ? Date.now() + phaseTotal * 1000 : 0;
+    }
     if (room.phase !== "vote") pick = null;
   }
   body.replaceChildren();

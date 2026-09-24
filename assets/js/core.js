@@ -351,12 +351,14 @@ export async function leaveRoom() {
   if (await confirmDialog(message, { title, tone })) send({ type: "leave_room" });
 }
 
-export function startHallTicker(fill, seconds) {
+export function startHallTicker(fill, seconds, endsAt = 0) {
   stopHallTicker();
-  state.hallDeadlineAt = Date.now() + seconds * 1000;
+  // endsAt 传入阶段绝对截止时间：跨重渲染保持同一进度基线，进度条不被刷新归零。
+  state.hallDeadlineAt = endsAt > 0 ? endsAt : Date.now() + seconds * 1000;
+  const total = Math.max(1, seconds * 1000);
   const update = () => {
     const left = Math.max(0, state.hallDeadlineAt - Date.now());
-    fill.style.width = `${Math.max(0, Math.min(100, (left / (seconds * 1000)) * 100))}%`;
+    fill.style.width = `${Math.max(0, Math.min(100, (left / total) * 100))}%`;
     if (left <= 0) stopHallTicker();
   };
   update();
