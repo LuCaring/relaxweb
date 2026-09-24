@@ -141,6 +141,15 @@ class EstateFrontendTests(unittest.TestCase):
         self.assertIn('bomb: "💣"', mining)
         self.assertIn("mine-explosion", mining)
 
+    def test_fertilizer_asset_is_transparent_and_wired_to_rewards(self):
+        asset = ROOT / "assets/estate/nature/supplies/fertilizer.png"
+        data = asset.read_bytes()
+        self.assertEqual(data[:8], b"\x89PNG\r\n\x1a\n")
+        self.assertEqual(data[25], 6)  # PNG RGBA
+        self.assertIn("supply:fertilizer", self.read("assets/js/estate/assets.js"))
+        self.assertIn("FERTILIZER_ASSET", self.read("assets/js/estate/fishing.js"))
+        self.assertIn("FERTILIZER_ASSET", self.read("assets/js/estate/mining.js"))
+
     def test_client_does_not_reimplement_server_rules(self):
         """玩法规则只能在服务端定义一处；客户端消费 catalog 下发的值。"""
         fishing = self.read("assets/js/estate/fishing.js")

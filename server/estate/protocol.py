@@ -13,6 +13,7 @@ from estate import (
     buy_tool as estate_buy_tool,
     buy_or_upgrade_pet as estate_buy_or_upgrade_pet,
     estate_state,
+    fertilize as estate_fertilize,
     finish_fishing as estate_finish_fishing,
     finish_mining as estate_finish_mining,
     harvest as estate_harvest,
@@ -52,6 +53,7 @@ class EstateProtocol:
             "estate_buy": self.handle_estate_buy,
             "estate_plant": self.handle_estate_plant,
             "estate_harvest": self.handle_estate_harvest,
+            "estate_fertilize": self.handle_estate_fertilize,
             "estate_sell": self.handle_estate_sell,
             "estate_sell_all": self.handle_estate_sell_all,
             "estate_buy_tool": self.handle_estate_buy_tool,
@@ -67,6 +69,7 @@ class EstateProtocol:
             "estate_enter_visit": self.handle_estate_enter_visit,
             "estate_leave_visit": self.handle_estate_leave_visit,
             "estate_steal_crop": self.handle_estate_steal_crop,
+            "estate_visit_fertilize": self.handle_estate_visit_fertilize,
             "estate_get_notifications": self.handle_estate_get_notifications,
             "estate_mark_notifications_read": self.handle_estate_mark_notifications_read,
             "estate_visit_move": self.presence.move,
@@ -163,6 +166,51 @@ class EstateProtocol:
             await self.send_json(websocket, {"type": "estate_error", "code": code,
                                         "message": message, "request_id": request_id})
 
+    async def handle_estate_visit_fertilize(self, websocket, state, data):
+        user = state.get("user")
+        owner = state.get("estate_owner")
+        request_id = data.get("request_id")
+        if not user:
+            await self.send_json(websocket, {"type": "estate_error", "code": "auth_required",
+                                             "message": "请先登录", "request_id": request_id})
+            return
+        if not owner or owner.lower() != str(data.get("owner_username") or "").lower():
+            await self.send_json(websocket, {"type": "estate_error", "code": "not_visiting",
+                                             "message": "未在目标庄园内", "request_id": request_id})
+            return
+        try:
+            plot_id = int(data.get("plot_id"))
+            plot_x, plot_y = ESTATE_PLOT_POSITIONS[plot_id]
+            position = state.get("estate_position", {})
+            if math.hypot(float(position.get("x", -999)) - (plot_x + 41),
+                          float(position.get("y", -999)) - (plot_y + 35)) > 82:
+                raise ValueError
+        except (TypeError, ValueError, IndexError):
+            await self.send_json(websocket, {"type": "estate_error", "code": "too_far",
+                                             "message": "请先走到农田附近", "request_id": request_id})
+            return
+        try:
+            with self.database() as conn, conn:
+                conn.execute("BEGIN IMMEDIATE")
+                now = int(time.time())
+                result = estate_fertilize(conn, user["username"], request_id, owner, plot_id, now)
+                visit_snapshot = public_estate_state(conn, user["username"], owner, now)
+                own_snapshot = estate_state(conn, user["username"], now)
+                owner_snapshot = estate_state(conn, owner, now)
+            await self.send_json(websocket, {"type": "estate_visit_fertilize_result",
+                                             "result": result, "state": visit_snapshot,
+                                             "home_state": own_snapshot,
+                                             "request_id": request_id})
+            if not result.get("replayed"):
+                await self.publish_estate(owner, owner_snapshot)
+                await self.presence.broadcast(owner, {"type": "estate_crop_fertilized",
+                    "plot_id": plot_id, "ready_at": result["ready_at"]}, exclude=websocket)
+        except (EstateError, sqlite3.Error) as error:
+            code = error.code if isinstance(error, EstateError) else "estate_failed"
+            message = str(error) if isinstance(error, EstateError) else "庄园暂时忙碌，请稍后重试"
+            await self.send_json(websocket, {"type": "estate_error", "code": code,
+                                             "message": message, "request_id": request_id})
+
     async def handle_estate_get_notifications(self, websocket, state, data):
         user = state.get("user")
         if not user:
@@ -216,6 +264,9 @@ class EstateProtocol:
                     result = estate_harvest(
                         conn, username, request_id, data.get("plot_id"), now,
                     )
+                elif action == "fertilize":
+                    result = estate_fertilize(conn, username, request_id, username,
+                                              data.get("plot_id"), now)
                 elif action == "sell":
                     result = estate_sell(
                         conn, username, request_id, data.get("item_id"),
@@ -306,6 +357,9 @@ class EstateProtocol:
 
     async def handle_estate_harvest(self, websocket, state, data):
         await self.handle_estate_action(websocket, state, data, "harvest")
+
+    async def handle_estate_fertilize(self, websocket, state, data):
+        await self.handle_estate_action(websocket, state, data, "fertilize")
 
     async def handle_estate_sell(self, websocket, state, data):
         await self.handle_estate_action(websocket, state, data, "sell")

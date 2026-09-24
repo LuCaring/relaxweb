@@ -12,8 +12,8 @@ from estate.activities import (
     make_board, pick_fishing_catch, buy_tool, finish_fishing, finish_mining, mine_cell, repair_tool,
     start_fishing, start_mining, upgrade_tool,
 )
-from estate.catalog import FISHING_TREASURES, MINERALS, bait_item
-from estate.farming import buy
+from estate.catalog import FERTILIZER_ITEM, FISHING_TREASURES, MINERALS, bait_item
+from estate.farming import buy, sell
 from estate.schema import init_estate
 from estate.store import EstateError, estate_state
 
@@ -103,6 +103,37 @@ class ActivityTests(unittest.TestCase):
         state = self.call(estate_state, "alice", NOW + 10)
         self.assertFalse(any(item["kind"] == "bait" for item in state["inventory"]))
         self.assertEqual(state["tools"]["rod"]["durability"], 19)
+
+    def test_fertilizer_bonus_uses_bait_odds_and_sells_for_100(self):
+        self.call(buy_tool, "alice", "fert-rod-01", "rod", NOW, adjust_coins)
+        self.conn.execute("UPDATE estate_profiles SET level=3 WHERE username='alice'")
+        for bait, roll, expected in (("worm", .049, True), ("worm", .05, False),
+                                     ("glow_grub", .099, True), ("glow_grub", .10, False)):
+            self.call(buy, "alice", f"fert-buy-{bait}-{roll}", "bait", bait, 1, NOW, adjust_coins)
+            started = self.call(start_fishing, "alice", f"fert-start-{bait}-{roll}", bait, NOW)
+            with patch("estate.activities.random.random", return_value=roll):
+                result = self.call(finish_fishing, "alice", f"fert-end-{bait}-{roll}",
+                                   started["session_id"], winning_trace(started["pattern"]), NOW + 25)
+            self.assertEqual(bool(result.get("fertilizer_found")), expected)
+        quantity = self.conn.execute("SELECT quantity FROM estate_inventory WHERE username='alice' AND item_id=?",
+                                     (FERTILIZER_ITEM,)).fetchone()[0]
+        self.assertEqual(quantity, 2)
+        sold = self.call(sell, "alice", "fert-sell-01", FERTILIZER_ITEM, 1, NOW, adjust_coins)
+        self.assertEqual(sold["earned"], 100)
+
+    def test_deep_mine_fertilizer_bonus_on_each_broken_cell(self):
+        self.call(buy_tool, "alice", "fert-pick-01", "pickaxe", NOW, adjust_coins)
+        self.conn.execute("UPDATE estate_tools SET level=3 WHERE username='alice'")
+        self.conn.execute("UPDATE estate_profiles SET level=6 WHERE username='alice'")
+        with patch("estate.activities.make_board", return_value=["stone", "bomb"] + ["empty"] * 23):
+            started = self.call(start_mining, "alice", "fert-mine-start", 3, NOW)
+        with patch("estate.activities.random.random", return_value=0):
+            first = self.call(mine_cell, "alice", "fert-mine-cell-0", started["run_id"], 0, NOW)
+            last = self.call(mine_cell, "alice", "fert-mine-cell-1", started["run_id"], 1, NOW)
+        self.assertEqual(first["fertilizer_found"], 1)
+        self.assertEqual(last["fertilizer_found"], 1)
+        self.assertEqual(last["result"]["loot"], {"stone": 1, "fertilizer": 2})
+        self.assertEqual(last["result"]["xp_awarded"], MINERALS["stone"]["xp"])
 
     def test_fishing_reuses_bait_slot_in_full_warehouse(self):
         self.call(buy_tool, "alice", "full-rod-0001", "rod", NOW, adjust_coins)

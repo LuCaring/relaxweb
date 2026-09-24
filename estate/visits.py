@@ -3,7 +3,8 @@ from datetime import datetime
 import secrets
 from zoneinfo import ZoneInfo
 
-from estate.catalog import CROPS, PET_LEVELS, crop_item, public_catalog
+from estate.catalog import (CROPS, PET_LEVELS, FERTILIZER_ITEM,
+                            FERTILIZER_SECONDS, crop_item, public_catalog)
 from estate.store import (
     CROP_DATA_BROKEN, bump_version, change_inventory,
     estate_error, load_profile, plot_index, require_capacity,
@@ -82,6 +83,41 @@ def public_estate_state(conn, visitor, owner, now):
             "owner_remaining": max(0, OWNER_DAILY_LIMIT - owner_used),
         },
     }
+
+
+def fertilize(conn, username, request_id, owner, plot_id, now):
+    """消耗自己的化肥，为本人或正在拜访的庄园缩短一小时成熟时间。"""
+    owner = str(owner or username).strip()
+    index = plot_index(plot_id)
+
+    def mutate():
+        if owner.lower() != username.lower():
+            _require_visit_level(conn, username)
+        profile = load_profile(conn, owner)
+        if index >= profile["plot_count"]:
+            raise estate_error(("plot_locked", "这块土地尚未解锁"))
+        row = conn.execute(
+            "SELECT crop_id,ready_at FROM estate_plots WHERE username=? AND plot_index=?",
+            (owner, index),
+        ).fetchone()
+        if not row or not row[0]:
+            raise estate_error(("plot_empty", "土地上没有作物"))
+        if row[1] <= int(now):
+            raise estate_error(("crop_mature", "作物已经成熟，无需施肥"))
+        change_inventory(conn, username, FERTILIZER_ITEM, -1)
+        ready_at = max(int(now), row[1] - FERTILIZER_SECONDS)
+        conn.execute(
+            "UPDATE estate_plots SET ready_at=? WHERE username=? AND plot_index=?",
+            (ready_at, owner, index),
+        )
+        if owner.lower() != username.lower():
+            bump_version(conn, owner, now)
+        return {"action": "fertilize", "owner_username": owner,
+                "plot_id": index, "crop_id": row[0], "ready_at": ready_at,
+                "seconds_reduced": row[1] - ready_at}
+
+    return run_action(conn, username, request_id, "fertilize",
+                      {"owner_username": owner, "plot_id": index}, now, mutate)
 
 
 def steal_crop(conn, visitor, request_id, owner, plot_id, now,

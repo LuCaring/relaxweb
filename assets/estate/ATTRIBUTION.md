@@ -34,4 +34,5 @@
 - `buildings/seed-shop.png`、`warehouse.png`、`mine.png`、`store.png`：用户提供的种子铺、仓库、矿洞与商店透明 PNG；运行时在空白招牌上绘制固定场所名称。
 - `pets/doudou-sheet.png`：用户提供的宠物“豆豆”四方向透明行走图集。
 - `pets/doudou-sleep-sheet.png`：用户提供的豆豆四帧趴睡呼吸动画图集。
+- `nature/supplies/fertilizer.png`：用户提供的化肥袋透明像素 PNG；保留原图，通过 CSS 最近邻缩放用于仓库、钓鱼奖励和矿洞收获展示。
 - 未接入内容：人物整图及矿镐、鱼饵、矿格、炸弹和特效总览仅为参考图，未复制到运行时资源。

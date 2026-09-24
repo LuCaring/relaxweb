@@ -45,6 +45,8 @@ async def main():
                 conn.execute("UPDATE estate_profiles SET plot_count=12 WHERE username=?", (name,))
             conn.execute("UPDATE estate_plots SET crop_id='wheat',planted_at=?,ready_at=? "
                          "WHERE username='bob' AND plot_index=9", (clock - 400, clock - 1))
+            conn.execute("INSERT INTO estate_inventory(username,item_id,quantity) "
+                         "VALUES ('alice','supply:fertilizer',1)")
         alice_token = server.accounts.create_session("alice")
         bob_token = server.accounts.create_session("bob")
         async with websockets.serve(server.handler, "127.0.0.1", 0) as host:
@@ -63,10 +65,22 @@ async def main():
                            owner_username="bob", plot_id=9)
                 stolen = await receive(alice, "estate_steal_result")
                 assert stolen["result"]["crop_id"] == "wheat"
+                with server.database() as conn, conn:
+                    conn.execute("UPDATE estate_plots SET crop_id='wheat',planted_at=?,ready_at=? "
+                                 "WHERE username='bob' AND plot_index=9", (clock - 100, clock + 4000))
+                await send(alice, type="estate_visit_fertilize", request_id="visit-fert-001",
+                           owner_username="bob", plot_id=9)
+                fertilized = await receive(alice, "estate_visit_fertilize_result")
+                assert fertilized["result"]["ready_at"] == clock + 400
+                assert not any(item["id"] == "supply:fertilizer"
+                               for item in fertilized["home_state"]["inventory"])
             async with websockets.connect(uri) as bob:
                 await send(bob, type="resume", token=bob_token); await receive(bob, "resume_success")
                 await send(bob, type="get_estate")
                 await receive(bob, "estate_state")
+                with server.database() as conn:
+                    assert conn.execute("SELECT ready_at FROM estate_plots WHERE username='bob' "
+                                        "AND plot_index=9").fetchone()[0] == clock + 400
                 notices = await receive(bob, "estate_notifications")
                 assert notices["notifications"][0]["visitor_username"] == "alice"
     print("PASS estate visits: directory, offline entry, theft and deferred notification")

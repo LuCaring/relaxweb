@@ -10,9 +10,10 @@ from zoneinfo import ZoneInfo
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from estate import ensure_estate, init_estate
+from estate.catalog import FERTILIZER_ITEM
 from estate.store import EstateError
 from estate.visits import (
-    day_key, list_estates, mark_notifications_read, notifications,
+    day_key, fertilize, list_estates, mark_notifications_read, notifications,
     public_estate_state, steal_crop,
 )
 from server.estate.presence import valid_estate_position
@@ -42,6 +43,37 @@ class EstateVisitTests(unittest.TestCase):
             "UPDATE estate_plots SET crop_id=?,planted_at=?,ready_at=? "
             "WHERE username=? AND plot_index=?", (crop, self.now - 500, self.now - 1, owner, index),
         )
+
+    def test_fertilizer_works_on_own_and_visitor_plots_once_per_request(self):
+        self.conn.execute("INSERT INTO estate_inventory VALUES (?,?,?)",
+                          ("alice", FERTILIZER_ITEM, 2))
+        for owner, index in (("alice", 0), ("bob", 1)):
+            self.conn.execute(
+                "UPDATE estate_plots SET crop_id='wheat',planted_at=?,ready_at=? "
+                "WHERE username=? AND plot_index=?",
+                (self.now - 100, self.now + 4000, owner, index),
+            )
+            result = fertilize(self.conn, "alice", f"fert-{owner}", owner, index, self.now)
+            self.assertEqual(result["ready_at"], self.now + 400)
+            self.assertTrue(fertilize(self.conn, "alice", f"fert-{owner}", owner, index,
+                                      self.now)["replayed"])
+        self.assertIsNone(self.conn.execute(
+            "SELECT quantity FROM estate_inventory WHERE username='alice' AND item_id=?",
+            (FERTILIZER_ITEM,)).fetchone())
+
+    def test_fertilizer_rejects_empty_or_mature_plots_without_consuming(self):
+        self.conn.execute("INSERT INTO estate_inventory VALUES (?,?,?)",
+                          ("alice", FERTILIZER_ITEM, 1))
+        with self.assertRaises(EstateError) as empty:
+            fertilize(self.conn, "alice", "fert-empty", "bob", 0, self.now)
+        self.assertEqual(empty.exception.code, "plot_empty")
+        self.mature("bob", 0)
+        with self.assertRaises(EstateError) as mature:
+            fertilize(self.conn, "alice", "fert-mature", "bob", 0, self.now)
+        self.assertEqual(mature.exception.code, "crop_mature")
+        self.assertEqual(self.conn.execute(
+            "SELECT quantity FROM estate_inventory WHERE username='alice' AND item_id=?",
+            (FERTILIZER_ITEM,)).fetchone()[0], 1)
 
     def test_schema_has_twelve_plots_and_new_unlocks(self):
         from estate.catalog import MAX_PLOTS, PLOT_UNLOCKS

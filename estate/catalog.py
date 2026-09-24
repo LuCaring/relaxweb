@@ -80,6 +80,11 @@ MINE_BOARD_SIZE = 5             # 矿壁边长，下发客户端用于布局
 MINE_EXTRA_CELLS = 2            # 每局固定的 +2 敲击格数量
 MINE_EMPTY_WEIGHT = 24          # 空格在矿壁权重表中的权重
 MINE_LEGACY_RESERVED_SLOTS = 12  # 旧存档矿局的预留仓位，仅供迁移默认值使用
+FERTILIZER_ITEM = "supply:fertilizer"
+FERTILIZER_SELL_PRICE = 100.0
+FERTILIZER_SECONDS = 60 * 60
+FERTILIZER_FISH_CHANCE = {"worm": .05, "glow_grub": .10}
+FERTILIZER_MINE_CHANCE = .01
 
 def _crop(name, seed_price, sell_price, grow_minutes, xp, unlock_level, icon, color):
     """所有收益与成长规则集中定义，保留稳定存档 ID。"""
@@ -298,6 +303,9 @@ def grow_seconds(crop_id, land_level):
 
 
 def item_info(item_id):
+    if item_id == FERTILIZER_ITEM:
+        return {"id": item_id, "kind": "supply", "name": "化肥",
+                "sellable": True, "sell_price": FERTILIZER_SELL_PRICE}
     if not isinstance(item_id, str) or ":" not in item_id:
         return None
     kind, crop_id = item_id.split(":", 1)
@@ -321,6 +329,11 @@ def item_info(item_id):
 def public_catalog():
     return {
         "balance_version": BALANCE_VERSION,
+        "fertilizer": {"item_id": FERTILIZER_ITEM, "name": "化肥",
+                       "sell_price": FERTILIZER_SELL_PRICE,
+                       "seconds_reduced": FERTILIZER_SECONDS,
+                       "fish_chance": FERTILIZER_FISH_CHANCE,
+                       "mine_chance": FERTILIZER_MINE_CHANCE},
         "skins": {key: {"id": key, **deepcopy(value)} for key, value in SKINS.items()},
         "crops": {
             crop_id: {

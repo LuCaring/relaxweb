@@ -13,6 +13,8 @@ const onlineWaiters = new Set();
 const SOUND_CUES = {
   estate_plant: "plant",
   estate_harvest: "harvest",
+  estate_fertilize: "plant",
+  estate_visit_fertilize: "plant",
   estate_finish_fishing: "fish",
   estate_mine_cell: "mine",
   estate_finish_mining: "mine",
@@ -144,6 +146,18 @@ onMessage("estate_steal_result", (data) => {
     }
   }
   setVisitSnapshot({ ...data.state, players: [...estateStore.players.values()] });
+});
+onMessage("estate_visit_fertilize_result", (data) => {
+  settleRequest(data.request_id, { result: data.result });
+  if (data.home_state) estateStore.homeSnapshot = data.home_state;
+  setVisitSnapshot({ ...data.state, players: [...estateStore.players.values()] });
+  if (state.hallPage === "estate" && !data.result?.replayed) playGameSound("plant");
+});
+onMessage("estate_crop_fertilized", (data) => {
+  if (!estateStore.visit || !presenceBelongsHere(data)) return;
+  const plot = estateStore.snapshot.plots.find((item) => item.index === data.plot_id);
+  if (plot) plot.ready_at = data.ready_at;
+  estateStore.listeners.forEach((listener) => listener(estateStore.snapshot));
 });
 
 onMessage("estate_visit_joined", (data) => {

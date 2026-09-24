@@ -13,6 +13,7 @@ from estate.catalog import (
     TOOLS, CATCH_BOOST_PER_ROD_LEVEL, CATCH_RARITY_BASE, CATCH_TREASURE_BAIT_BONUS,
     CATCH_TREASURE_CHANCE, CATCH_TREASURE_RARITY_BASE, CATCH_TREASURE_ROD_BONUS,
     FISHING_STEPS, FISHING_STEPS_PER_FRAME, FISHING_TIMEOUT_SECONDS,
+    FERTILIZER_ITEM, FERTILIZER_FISH_CHANCE, FERTILIZER_MINE_CHANCE,
     HOLD_PROGRESS_BASE, HOLD_PROGRESS_FORCE_SCALE, HOLD_PROGRESS_GAIN,
     HOLD_TENSION_FORCE_BASE, HOLD_TENSION_GAIN, MINE_BOARD_SIZE, MINE_CELLS,
     MINE_EMPTY_WEIGHT, MINE_EXTRA_CELLS, PATTERN_DIFFICULTY_WEIGHT, PATTERN_MAX,
@@ -24,6 +25,7 @@ from estate.catalog import (
 from estate.store import (
     LEVEL_LOCKED, TOOL_MISSING, award_xp, change_inventory, debit, estate_error,
     estate_day_key, load_profile, refresh_daily_pickaxe, require_capacity,
+    capacity, inventory_used,
     retain_daily_fish, run_action,
 )
 
@@ -213,9 +215,9 @@ def start_fishing(conn, username, request_id, bait_id, now):
         if profile["level"] < bait["unlock_level"]:
             raise estate_error(LEVEL_LOCKED)
         _require_idle(conn, "estate_fishing_sessions", username, "已有一局钓鱼正在进行")
-        # 消耗的一份鱼饵腾出一格，满仓时仍可用现有鱼饵钓鱼。
-        require_capacity(conn, username, profile, 0)
         change_inventory(conn, username, bait_item(bait_id), -1)
+        # 消耗的鱼饵腾出一格，满仓时仍可钓鱼。
+        require_capacity(conn, username, profile, 1)
         conn.execute("UPDATE estate_tools SET durability=durability-1,updated_at=? "
                      "WHERE username=? AND tool_type='rod'", (int(now), username))
         seed = secrets.randbelow(_SEED_CEILING)
@@ -282,7 +284,7 @@ def finish_fishing(conn, username, request_id, session_id, trace, now):
 
     def mutate():
         row = conn.execute(
-            "SELECT fish_id,rod_level,pattern_json,expires_at,status,result_json "
+            "SELECT fish_id,rod_level,pattern_json,expires_at,status,result_json,bait_id "
             "FROM estate_fishing_sessions WHERE session_id=? AND username=?",
             (session_id, username),
         ).fetchone()
@@ -324,6 +326,12 @@ def finish_fishing(conn, username, request_id, session_id, trace, now):
                             "quantity": 0 if payload.get("released") or payload.get("duplicate_collectible") else 1,
                             "xp_awarded": 0 if payload.get("released") else catch["xp"],
                             "rarity": catch["rarity"], "difficulty": catch["difficulty"]})
+            profile = load_profile(conn, username)
+            has_room = (inventory_used(conn, username) + profile["reserved_capacity"]
+                        <= capacity(profile))
+            if random.random() < FERTILIZER_FISH_CHANCE[row[6]] and has_room:
+                change_inventory(conn, username, FERTILIZER_ITEM, 1)
+                payload["fertilizer_found"] = 1
         conn.execute("UPDATE estate_profiles SET reserved_capacity=max(0,reserved_capacity-1) "
                      "WHERE username=?", (username,))
         conn.execute("UPDATE estate_fishing_sessions SET status='finished',result_json=? "
@@ -409,10 +417,11 @@ def _finish_run(conn, username, run_id, loot, reason="completed"):
     require_capacity(conn, username, load_profile(conn, username),
                      max(0, sum(loot.values()) - reserved_slots))
     for mineral_id, quantity in loot.items():
-        change_inventory(conn, username, mineral_item(mineral_id), quantity)
+        change_inventory(conn, username, FERTILIZER_ITEM if mineral_id == "fertilizer"
+                         else mineral_item(mineral_id), quantity)
     conn.execute("UPDATE estate_profiles SET reserved_capacity=max(0,reserved_capacity-?) "
                  "WHERE username=?", (reserved_slots, username))
-    xp = sum(MINERALS[key]["xp"] * count for key, count in loot.items())
+    xp = sum(MINERALS[key]["xp"] * count for key, count in loot.items() if key in MINERALS)
     level = award_xp(conn, username, xp)
     result = {"action": "finish_mining", "run_id": run_id, "loot": loot,
               "finished": True, "reason": reason, "xp_awarded": xp, "level": level}
@@ -434,7 +443,7 @@ def mine_cell(conn, username, request_id, run_id, cell, now):
 
     def mutate():
         row = conn.execute(
-            "SELECT board_json,revealed_json,loot_json,strikes_left,status "
+            "SELECT board_json,revealed_json,loot_json,strikes_left,status,mine_level "
             "FROM estate_mining_runs WHERE run_id=? AND username=?",
             (run_id, username),
         ).fetchone()
@@ -455,6 +464,13 @@ def mine_cell(conn, username, request_id, run_id, cell, now):
             strikes += MINE_EXTRA_CELLS
         elif outcome in MINERALS:
             loot[outcome] = loot.get(outcome, 0) + 1
+        profile = load_profile(conn, username)
+        bonus_room = (inventory_used(conn, username) + profile["reserved_capacity"]
+                      + loot.get("fertilizer", 0) + 1 <= capacity(profile))
+        fertilizer_found = (row[5] == 3 and bonus_room
+                            and random.random() < FERTILIZER_MINE_CHANCE)
+        if fertilizer_found:
+            loot["fertilizer"] = loot.get("fertilizer", 0) + 1
         conn.execute(
             "UPDATE estate_mining_runs SET revealed_json=?,loot_json=?,strikes_left=? WHERE run_id=?",
             (json.dumps(revealed), json.dumps(loot), strikes, run_id),
@@ -463,6 +479,8 @@ def mine_cell(conn, username, request_id, run_id, cell, now):
                    "outcome": outcome, "strikes_left": strikes, "loot": loot,
                    "revealed": revealed, "finished": exploded or strikes <= 0,
                    "exploded": exploded}
+        if fertilizer_found:
+            payload["fertilizer_found"] = 1
         if payload["finished"]:
             payload["result"] = _finish_run(
                 conn, username, run_id, loot, "bomb" if exploded else "exhausted")
