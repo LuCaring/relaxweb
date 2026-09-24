@@ -2,16 +2,19 @@
 await import(document.querySelector('script[type="module"][src*="assets/js/main.js"]').src);
 const core = await import("/assets/js/core.js");
 const params = new URLSearchParams(location.search);
-const [fixtures, spectators] = await Promise.all([
+const [fixtures, spectators, waitingViews] = await Promise.all([
   fetch("/__preview/fixtures").then(response => response.json()),
   fetch("/__preview/spectators").then(response => response.json()),
+  fetch("/__preview/waiting").then(response => response.json()),
 ]);
 const game = Object.hasOwn(fixtures, params.get("game")) ? params.get("game") : "guandan";
 const spectating = params.get("perspective") === "spectator";
 const scenes = spectating ? spectators[game] : fixtures[game];
 const scene = Object.hasOwn(scenes, params.get("scene")) ? params.get("scene") : "normal";
+const players = Object.hasOwn(waitingViews[game], params.get("players")) ? params.get("players") : "1";
 let watched = spectating && Object.hasOwn(scenes[scene], params.get("watch")) ? params.get("watch") : "p0";
-const snapshot = () => spectating ? scenes[scene][watched] : scenes[scene];
+const snapshot = () => spectating ? scenes[scene][watched]
+  : scene === "waiting" ? waitingViews[game][players] : scenes[scene];
 const me = spectating ? {username: "preview-watcher", nickname: "本地观众"}
   : snapshot().players.find(player => player.username === "p0");
 core.state.currentUser = {...me, coins: 10000};
@@ -27,6 +30,7 @@ function render(room = structuredClone(snapshot())) {
 function syncPerspective() {
   params.set("game", game);
   params.set("scene", scene);
+  params.set("players", players);
   params.set("perspective", spectating ? "spectator" : "player");
   params.set("watch", watched);
   history.replaceState(null, "", `?${params}`);
@@ -75,7 +79,9 @@ window.addEventListener("message", event => {
 render();
 syncPerspective();
 feedback(spectating ? "本地观战样例已加载，可更换玩家、查看手牌并测试观战聊天；对局操作只读。"
-  : "本地布局样例已加载，可选牌和聊天；出牌等操作仅记录，不推进完整对局。");
+  : scene === "waiting" ? `等待界面已加载：${players} 人入座。可在工具栏切换人数和屏宽。`
+    : "本地布局样例已加载，可选牌和聊天；出牌等操作仅记录，不推进完整对局。");
 document.documentElement.dataset.previewReady = game;
 document.documentElement.dataset.previewScene = scene;
 document.documentElement.dataset.previewPerspective = spectating ? "spectator" : "player";
+document.documentElement.dataset.previewPlayers = players;

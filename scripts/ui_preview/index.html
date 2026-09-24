@@ -22,8 +22,9 @@
 <body>
   <header>
     <strong>本地 UI 预览</strong>
-    <label>游戏<select id="game"><option value="guandan">掼蛋</option><option value="mahjong">麻将</option><option value="holdem">德扑</option><option value="uno">UNO</option><option value="ludo">飞行棋</option><option value="liarsbar">骗子酒馆</option></select></label>
-    <label>场景<select id="scene"><option value="normal">普通牌桌</option><option value="dense">长昵称 / 拥挤牌面</option><option value="waiting">等待开局</option><option value="paused">暂停</option></select></label>
+    <label>游戏<select id="game"><option value="guandan">掼蛋</option><option value="mahjong">麻将</option><option value="holdem">德扑</option><option value="uno">UNO</option><option value="ludo">飞行棋</option><option value="liarsbar">骗子酒馆</option><option value="werewolf">狼人杀</option></select></label>
+    <label>场景<select id="scene"><option value="normal">普通牌桌</option><option value="dense">长昵称 / 拥挤牌面</option><option value="waiting">等待开局 · 列表布局</option><option value="paused">暂停</option></select></label>
+    <label id="players-label" hidden>入座人数<select id="players"></select></label>
     <label>视角<select id="perspective"><option value="player">玩家</option><option value="spectator">观战</option></select></label>
     <label id="watch-label" hidden>观看<select id="watch"><option value="p0">清风</option><option value="p1">竹间听雨</option><option value="p2">月下客</option><option value="p3">一杯春茶</option></select></label>
     <label>尺寸<select id="size"><option value="auto">自适应</option><option value="1440x900">桌面 1440 × 900</option><option value="1024x768">平板 1024 × 768</option><option value="390x844">手机 390 × 844</option><option value="320x568">小屏 320 × 568</option><option value="844x390">横屏 844 × 390</option></select></label>
@@ -32,10 +33,10 @@
     <button id="bubbles">显示聊天气泡</button>
     <button id="reset">重置场景</button>
     <label><input type="checkbox" id="reload" checked>自动刷新</label>
-    <a id="direct" target="_blank" rel="noopener">单独打开牌桌</a>
+    <a id="direct" target="_blank" rel="noopener">单独打开界面</a>
   </header>
   <p id="feedback" role="status">本地布局样例，可选牌和聊天；出牌等操作仅记录，不推进完整对局。</p>
-  <main><iframe id="table" title="游戏牌桌预览"></iframe></main>
+  <main><iframe id="table" title="游戏界面预览"></iframe></main>
   <script type="module" src="/__preview/shell.js"></script>
 </body>
 </html>

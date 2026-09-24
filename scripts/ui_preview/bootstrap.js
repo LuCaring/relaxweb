@@ -1,5 +1,6 @@
 /* Loaded before production modules, only by the loopback preview server. */
-window.LIVE_CONFIG = {site: {game_title: "本地 UI 预览"}, chat_port: 0};
+window.LIVE_CONFIG = {site: {game_title: "本地 UI 预览"}, chat_port: 0,
+  voice: {enabled: true, preview: true}};
 window.WebSocket = class PreviewSocket extends EventTarget {
   static OPEN = 1;
   readyState = 1;

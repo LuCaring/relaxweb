@@ -161,15 +161,17 @@ function refreshWaitingVoice(root, room) {
   const panel = root.querySelector(".waiting-voice");
   panel.hidden = room.game_type !== "werewolf" || !window.LIVE_CONFIG?.voice?.enabled;
   if (panel.hidden) return;
+  const preview = Boolean(window.LIVE_CONFIG?.voice?.preview);
   const status = voiceStatus();
   const on = status.connected && status.canPublish && voiceMicWanted();
   const button = panel.querySelector(".waiting-voice-mic");
-  button.disabled = !status.connected || !status.canPublish;
+  button.disabled = preview || !status.connected || !status.canPublish;
   button.classList.toggle("on", on);
   button.textContent = on ? "🎙 关闭麦克风" : "🎙 开启麦克风";
   button.setAttribute("aria-pressed", String(on));
-  panel.querySelector(".waiting-voice-status").textContent = !status.connected
-    ? "语音连接中，连接后可测试麦克风"
+  panel.querySelector(".waiting-voice-status").textContent = preview
+    ? "布局预览 · 麦克风未连接"
+    : !status.connected ? "语音连接中，连接后可测试麦克风"
     : status.micError || (on ? "麦克风已开启，可以和房内玩家交谈" : "已连接 · 麦克风关闭");
   panel.querySelector(".waiting-voice-audio").hidden = !status.audioBlocked;
 }

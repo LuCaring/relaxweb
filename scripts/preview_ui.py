@@ -26,9 +26,11 @@ sys.path.insert(0, str(ROOT))
 from games.base import create_room  # noqa: E402
 from games.ludo import GOAL  # noqa: E402
 
-GAMES = ("guandan", "mahjong", "holdem", "uno", "ludo", "liarsbar")
+GAMES = ("guandan", "mahjong", "holdem", "uno", "ludo", "liarsbar", "werewolf")
 SCENES = ("normal", "dense", "waiting", "paused")
 PLAYERS = ("p0", "p1", "p2", "p3")
+WAITING_CAPACITY = {"guandan": 4, "mahjong": 4, "holdem": 9, "uno": 9,
+                    "ludo": 4, "liarsbar": 6, "werewolf": 12}
 
 
 def is_previous_preview(process):
@@ -106,7 +108,7 @@ def lan_addresses():
 def avatar(index):
     colors = ("#287b9c", "#875fb3", "#c47740", "#479373")
     svg = (f'<svg xmlns="http://www.w3.org/2000/svg" width="96" height="96">'
-           f'<rect width="96" height="96" rx="24" fill="{colors[index]}"/>'
+           f'<rect width="96" height="96" rx="24" fill="{colors[index % len(colors)]}"/>'
            '<circle cx="48" cy="34" r="16" fill="#fff5df"/>'
            '<path d="M18 88v-8a30 30 0 0 1 60 0v8" fill="#fff5df"/></svg>')
     return "data:image/svg+xml," + quote(svg)
@@ -117,20 +119,32 @@ async def make_fixtures():
     random.seed(19)
     fixtures = {}
     spectators = {}
-    names = ("清风", "竹间听雨", "月下客", "一杯春茶")
+    waiting_views = {}
+    names = ("清风", "竹间听雨", "月下客", "一杯春茶", "晚星", "松涛",
+             "山岚", "小满", "听雪", "南风", "流萤", "半夏")
 
     async def noop(*args, **kwargs):
         pass
 
     for game in GAMES:
+        waiting_views[game] = {}
+        for count in range(1, WAITING_CAPACITY[game] + 1):
+            lobby = create_room(game, room_id="local-" + game,
+                                name="本地 UI 测试桌", owner="p0", buy_in=200, blind=1)
+            lobby.display_name = lambda username: names[int(username[1:])]
+            lobby.player_avatar = lambda username: avatar(int(username[1:]))
+            for i in range(count):
+                lobby.add_member(f"p{i}", 200)
+            waiting_views[game][str(count)] = copy.deepcopy(lobby.view_for("p0"))
+        rules = {"board": ["werewolf", "seer", "witch", "villager"]} if game == "werewolf" else None
         room = create_room(game, room_id="local-" + game, name="本地 UI 测试桌",
-                           owner="p0", buy_in=200, blind=1)
+                           owner="p0", buy_in=200, blind=1, rules=rules)
         room.display_name = lambda username: names[int(username[1:])]
         room.player_avatar = lambda username: avatar(int(username[1:]))
         room.broadcast_views = room.broadcast_payload = room.on_rooms_changed = noop
         for i in range(4):
             room.add_member(f"p{i}", 200)
-        waiting = room.view_for("p0")
+        waiting = waiting_views[game]["1"]
 
         def capture():
             # Each target uses the engine's actual private view, including team,
@@ -234,7 +248,7 @@ async def make_fixtures():
         spectators[game] = {"normal": normal_spectators, "dense": dense_spectators,
                             "paused": {name: {**copy.deepcopy(view), "paused": True}
                                        for name, view in normal_spectators.items()}}
-    return fixtures, spectators
+    return fixtures, spectators, waiting_views
 
 
 def revision():
@@ -267,6 +281,8 @@ class PreviewHandler(BaseHTTPRequestHandler):
             return self.reply(json.dumps(self.server.fixtures, ensure_ascii=False))
         if path == "/__preview/spectators":
             return self.reply(json.dumps(self.server.spectators, ensure_ascii=False))
+        if path == "/__preview/waiting":
+            return self.reply(json.dumps(self.server.waiting_views, ensure_ascii=False))
         if path == "/__preview/revision":
             return self.reply(json.dumps({"revision": revision()}))
         if path in ("/game.html", "/game"):
@@ -302,6 +318,8 @@ def main():
     parser = argparse.ArgumentParser(description="一行命令启动本地游戏 UI 预览，无需登录或数据库。")
     parser.add_argument("--game", choices=GAMES, default="guandan")
     parser.add_argument("--scene", choices=SCENES, default="normal")
+    parser.add_argument("--players", type=int, default=1,
+                        help="等待开局场景的入座人数，按游戏容量选择（默认 1）")
     parser.add_argument("--spectator", action="store_true", help="以观战视角启动，可在牌桌内更换玩家")
     parser.add_argument("--watch", choices=PLAYERS, help="以观战视角观看指定玩家，默认 p0")
     parser.add_argument("--port", type=int, default=8010, help="本地端口，0 表示自动选择空闲端口")
@@ -316,9 +334,11 @@ def main():
     args = parser.parse_args()
     if not 0 <= args.port <= 65535:
         parser.error('端口必须介于 0 和 65535 之间')
+    if not 1 <= args.players <= WAITING_CAPACITY[args.game]:
+        parser.error(f'{args.game} 的入座人数必须介于 1 和 {WAITING_CAPACITY[args.game]} 之间')
     if (args.spectator or args.watch) and args.scene == "waiting":
         parser.error("等待开局场景不支持观战；请使用 normal、dense 或 paused")
-    fixtures, spectators = asyncio.run(make_fixtures())
+    fixtures, spectators, waiting_views = asyncio.run(make_fixtures())
     if not args.no_replace:
         try:
             stop_previous_previews()
@@ -330,7 +350,8 @@ def main():
         parser.exit(1, f"无法启动端口 {args.port}：{error}。可用 --port 0 自动选择空闲端口。\n")
     server.fixtures = fixtures
     server.spectators = spectators
-    query = f"game={args.game}&scene={args.scene}"
+    server.waiting_views = waiting_views
+    query = f"game={args.game}&scene={args.scene}&players={args.players}"
     if args.spectator or args.watch:
         query += f"&perspective=spectator&watch={args.watch or 'p0'}"
     url = f"http://127.0.0.1:{server.server_port}/?{query}&size={args.size}"

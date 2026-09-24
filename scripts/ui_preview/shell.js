@@ -1,7 +1,21 @@
 const $ = id => document.getElementById(id);
 const params = new URLSearchParams(location.search);
-for (const id of ["game", "scene", "size", "perspective", "watch"]) {
+const waitingCapacity = {guandan: 4, mahjong: 4, holdem: 9, uno: 9,
+  ludo: 4, liarsbar: 6, werewolf: 12};
+for (let count = 1; count <= 12; count += 1) {
+  const option = document.createElement("option");
+  option.value = String(count);
+  option.textContent = `${count} 人`;
+  $("players").append(option);
+}
+for (const id of ["game", "scene", "size", "perspective", "watch", "players"]) {
   if ([...$(id).options].some(option => option.value === params.get(id))) $(id).value = params.get(id);
+}
+function syncPlayers() {
+  const capacity = waitingCapacity[$("game").value];
+  for (const option of $("players").options) option.disabled = Number(option.value) > capacity;
+  if (Number($("players").value) > capacity) $("players").value = String(capacity);
+  $("players-label").hidden = $("scene").value !== "waiting";
 }
 function resize() {
   const dimensions = $("size").value.split("x").map(Number);
@@ -10,7 +24,7 @@ function resize() {
   $("table").style.height = auto ? `${Math.max(320, innerHeight - $("table").getBoundingClientRect().top - 16)}px` : `${dimensions[1]}px`;
 }
 function updateURL() {
-  const next = new URLSearchParams(["game", "scene", "size", "perspective", "watch"].map(id => [id, $(id).value]));
+  const next = new URLSearchParams(["game", "scene", "size", "perspective", "watch", "players"].map(id => [id, $(id).value]));
   history.replaceState(null, "", `?${next}`);
   $("direct").href = `/game.html?${next}`;
 }
@@ -19,11 +33,12 @@ function load(force = false) {
   $("watch-label").hidden = !spectating;
   $("scene").querySelector('[value="waiting"]').disabled = spectating;
   if (spectating && $("scene").value === "waiting") $("scene").value = "normal";
+  syncPlayers();
   updateURL();
   if (force || $("table").src !== $("direct").href) $("table").src = $("direct").href;
   resize();
 }
-for (const id of ["game", "scene", "perspective", "watch"]) $(id).addEventListener("change", () => load());
+for (const id of ["game", "scene", "perspective", "watch", "players"]) $(id).addEventListener("change", () => load());
 $("size").addEventListener("change", () => { updateURL(); resize(); });
 $("mobile").addEventListener("click", () => {
   $("size").value = "390x844";

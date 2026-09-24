@@ -323,6 +323,14 @@ uv run --locked python deploy/serve.py
 uv run --locked python scripts/preview_ui.py
 ```
 
+预览开房等待界面时可直接指定游戏和入座人数，例如：
+
+```bash
+uv run --locked python scripts/preview_ui.py --game werewolf --scene waiting --players 6 --mobile
+```
+
+预览工具栏也能切换七种多人游戏、1 人到满房的等待列表，以及桌面和手机屏宽。狼人杀语音区在预览中仅展示布局，不连接麦克风或 LiveKit。
+
 再次启动会自动停止同一项目的旧预览进程。需要同时运行多个预览时加 `--no-replace`。本地服务在上述终端按 Ctrl+C 停止后重新启动；`uv run --locked python admin.py status` 可查看本地服务状态，`admin.py restart` 仅用于 systemd 部署。
 
 运行全部 Python 测试（包括独立游戏测试脚本）：
