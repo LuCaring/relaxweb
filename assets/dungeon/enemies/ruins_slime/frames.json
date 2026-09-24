@@ -1,0 +1,14 @@
+{
+  "visual_id": "ruins_slime",
+  "format": "horizontal_sprite_sheet",
+  "frame_width": 362,
+  "frame_height": 724,
+  "frame_count": 6,
+  "frame_order": "left_to_right",
+  "animations": {
+    "idle": "idle.png",
+    "attack": "attack.png",
+    "hit": "hit.png",
+    "death": "death.png"
+  }
+}
