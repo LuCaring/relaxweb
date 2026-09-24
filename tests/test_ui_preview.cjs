@@ -31,9 +31,18 @@ const python = process.env.PYTHON || path.join(root, '.venv', 'bin', 'python');
       ['scripts/preview_ui.py', '--spectator', '--scene', 'waiting', '--no-open', '--no-replace'],
       {cwd:root, encoding:'utf8', timeout:5000});
     assert.equal(invalid.status,2,'the CLI rejects spectating a game that has not started');
+    const invalidCount = spawnSync(python,
+      ['scripts/preview_ui.py', '--game', 'guandan', '--scene', 'waiting', '--players', '12', '--no-open', '--no-replace'],
+      {cwd:root, encoding:'utf8', timeout:5000});
+    assert.equal(invalidCount.status,2,'the CLI rejects a player count above the game capacity');
     const fixtureViews = await (await fetch(origin + '/__preview/fixtures')).json();
     const spectatorViews = await (await fetch(origin + '/__preview/spectators')).json();
+    const waitingViews = await (await fetch(origin + '/__preview/waiting')).json();
     assert.deepEqual(Object.keys(fixtureViews.ludo), ['normal','dense','waiting','paused']);
+    assert.equal(Object.keys(waitingViews).length, 7);
+    assert.equal(waitingViews.werewolf['1'].players.length, 1);
+    assert.equal(waitingViews.werewolf['12'].players.length, 12);
+    assert.equal(fixtureViews.werewolf.normal.status, 'playing');
     assert.equal(fixtureViews.ludo.normal.dice, 6);
     assert.ok(fixtureViews.ludo.normal.your_options.plane.length > 0);
     assert.equal(fixtureViews.liarsbar.normal.last_play.username, 'p3');
@@ -89,6 +98,32 @@ const python = process.env.PYTHON || path.join(root, '.venv', 'bin', 'python');
     await page.locator('#mobile').click();
     assert.equal(await page.locator('#table').evaluate(el => el.contentWindow.innerWidth), 390);
     await page.locator('#size').selectOption('1440x900');
+    await page.locator('#scene').selectOption('waiting');
+    frame = await table('guandan');
+    assert.equal(await page.locator('#players-label').isVisible(), true);
+    assert.equal(await frame.locator('.waiting-seat').count(), 1);
+    assert.match(await frame.locator('.waiting-empty').innerText(), /3 个空位/);
+    await page.locator('#game').selectOption('werewolf');
+    frame = await table('werewolf');
+    await page.locator('#players').selectOption('12');
+    frame = await table('werewolf');
+    assert.equal(await frame.locator('.waiting-seat').count(), 12);
+    assert.equal(await frame.locator('.waiting-voice').isVisible(), true);
+    assert.match(await frame.locator('.waiting-voice-status').innerText(), /布局预览/);
+    assert.equal(await frame.locator('.waiting-voice-mic').isDisabled(), true);
+    await page.locator('#players').selectOption('7');
+    frame = await table('werewolf');
+    assert.equal(await frame.locator('.waiting-seat').count(), 7);
+    assert.equal(await frame.getByRole('button', {name:'开始游戏',exact:true}).isDisabled(), true);
+    await page.locator('#size').selectOption('390x844');
+    assert.equal(await frame.locator('body').evaluate(() => document.documentElement.scrollWidth > innerWidth), false);
+    await page.locator('#game').selectOption('guandan');
+    frame = await table('guandan');
+    assert.equal(await page.locator('#players').inputValue(), '4');
+    assert.equal(new URL(await page.locator('#direct').getAttribute('href'), origin).searchParams.get('players'), '4');
+    await page.locator('#scene').selectOption('normal');
+    await page.locator('#size').selectOption('1440x900');
+    frame = await table('guandan');
     await page.locator('#bubbles').click();
     await frame.locator('.seat-bubble').first().waitFor();
     assert.equal(await frame.locator('.seat-bubble').count(), 4);
@@ -99,7 +134,8 @@ const python = process.env.PYTHON || path.join(root, '.venv', 'bin', 'python');
     await frame.getByRole('button', {name: /出牌 ·/}).click();
     await page.locator('#feedback').filter({hasText: '已捕获操作'}).waitFor();
 
-    const selectors = {guandan: '.gd-page', mahjong: '.mj-page', holdem: '.poker-table', uno: '.uno-table', ludo: '.ludo-table', liarsbar: '.liar-table'};
+    const selectors = {guandan: '.gd-page', mahjong: '.mj-page', holdem: '.poker-table',
+      uno: '.uno-table', ludo: '.ludo-table', werewolf: '.ww-table', liarsbar: '.liar-table'};
     for (const game of Object.keys(selectors)) {
       await page.locator('#game').selectOption(game);
       await table(game);
@@ -209,6 +245,10 @@ const python = process.env.PYTHON || path.join(root, '.venv', 'bin', 'python');
       if (game === 'ludo') {
         assert.notDeepEqual(spectatorViews.ludo.normal.p0.players[0].planes,
           spectatorViews.ludo.normal.p0.players[1].planes);
+      } else if (game === 'werewolf') {
+        assert.notEqual(spectatorViews[game].normal.p0.watching,
+          spectatorViews[game].normal.p1.watching);
+        assert.equal(spectatorViews[game].normal.p0.your_role,undefined);
       } else {
         assert.notDeepEqual(spectatorViews[game].normal.p0.your_hand || spectatorViews[game].normal.p0.your_hole,
           spectatorViews[game].normal.p1.your_hand || spectatorViews[game].normal.p1.your_hole,
@@ -299,7 +339,7 @@ const python = process.env.PYTHON || path.join(root, '.venv', 'bin', 'python');
     assert.deepEqual(errors, []);
     assert.deepEqual(sockets, [], 'preview never opens a network WebSocket');
     assert.deepEqual(external, [], 'all requests remain on the local preview server');
-    console.log('PASS startup, 6 games × 4 player scenes and 3 spectator scenes × 4 seats, target switching, spectator chat/exit, viewport, reload and local-only requests');
+    console.log('PASS startup, 7 games × 4 player scenes and 3 spectator scenes × 4 seats, waiting counts, target switching, viewport, reload and local-only requests');
   } finally {
     if (fs.existsSync(marker)) fs.unlinkSync(marker);
     if (browser) await browser.close();
