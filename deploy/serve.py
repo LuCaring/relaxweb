@@ -20,12 +20,14 @@ from urllib.parse import unquote
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from config import client_config, get_int  # noqa: E402
+from config import client_config, get, get_int  # noqa: E402
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 ASSETS = os.path.join(ROOT, "assets")
 DEAD_END = os.path.join(ROOT, "__forbidden__")
 PORT = get_int("servers.web_port", env="LIVE_WEB_PORT", default=8000)
+# 默认绑全网卡；生产在 nginx 后面时配 servers.web_host=127.0.0.1 收敛公网面
+HOST = get("servers.web_host", env="LIVE_WEB_HOST", default="0.0.0.0")
 
 # 只放行这几类静态资源：源码（.py）、数据库、备份文件都在白名单之外
 ALLOWED_EXT = {".js", ".css", ".png", ".jpg", ".jpeg", ".svg", ".ico", ".webp",
@@ -94,5 +96,5 @@ class Handler(http.server.SimpleHTTPRequestHandler):
 
 
 if __name__ == "__main__":
-    server = http.server.ThreadingHTTPServer(("0.0.0.0", PORT), Handler)
+    server = http.server.ThreadingHTTPServer((HOST, PORT), Handler)
     server.serve_forever()

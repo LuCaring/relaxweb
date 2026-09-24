@@ -5,7 +5,7 @@
 | 服务 | 脚本 | 作用 | 监听 |
 | --- | --- | --- | --- |
 | live-chat | `chat_server.py` | 聊天、账号、金币、竞猜、游戏厅（WebSocket） | `servers.chat_port`（默认 8765） |
-| live-web | `deploy/serve.py` | 静态页面，白名单只放行 index.html / game.html / assets（含子目录） | `servers.web_port`（默认 8000） |
+| live-web | `deploy/serve.py` | 静态页面，白名单只放行 index.html / game.html / assets（含子目录） | `servers.web_host:web_port`（默认 0.0.0.0:8000；nginx 反代时配 127.0.0.1） |
 | live-auth | `auth_server.py` | 拉流鉴权，供 MediaMTX 的 `authExternalUrl` 调用 | `servers.auth_host:auth_port`（默认 127.0.0.1:8001） |
 
 ## 1. 配置
@@ -21,7 +21,7 @@ $EDITOR config.json        # 站点标题、端口、推流路径与口令、数
 | --- | --- |
 | `LIVE_CONFIG_FILE` | 配置文件路径本身 |
 | `LIVE_CHAT_HOST` / `LIVE_CHAT_PORT` | `servers.chat_host` / `servers.chat_port` |
-| `LIVE_WEB_PORT` | `servers.web_port` |
+| `LIVE_WEB_HOST` / `LIVE_WEB_PORT` | `servers.web_host` / `servers.web_port` |
 | `LIVE_AUTH_HOST` / `LIVE_AUTH_PORT` | `servers.auth_host` / `servers.auth_port` |
 | `LIVE_DB_FILE` | `database.file` |
 | `NEW_USER_COINS` | `economy.new_user_coins` |
