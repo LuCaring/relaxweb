@@ -43,8 +43,9 @@ IP 标识符 + shortlived profile 的兼容修复在 2025-12/2026-01 才合入�
 
 ```bash
 git clone https://github.com/acmesh-official/acme.sh.git /tmp/acme.sh
-# GitHub 慢时用镜像：git clone https://gitee.com/neilpang/acme.sh.git /tmp/acme.sh
-cd /tmp/acme.sh && ./acme.sh --install -m 你的邮箱 --server letsencrypt
+# GitHub 慢时用镜像（2026-09 实测：服务器直连 gitee 镜像可行，无需本机中转）
+git clone https://gitee.com/neilpang/acme.sh.git /tmp/acme.sh
+cd /tmp/acme.sh && ./acme.sh --install --server letsencrypt   # -m 邮箱可省略，LE 允许无联系邮箱注册
 exec -l $SHELL   # 重载 shell 使 acme.sh 生效
 acme.sh --version   # 确认 >= 3.1.1（建议当日 master）
 acme.sh --set-default-ca --server letsencrypt   # acme.sh 默认是 ZeroSSL，必须切
@@ -53,6 +54,10 @@ acme.sh --set-default-ca --server letsencrypt   # acme.sh 默认是 ZeroSSL，�
 ## 5. 步骤三：签发证书（先 staging，后正式）
 
 ```bash
+# 5.0 前置（一次性）：standalone 以 admin 身份绑 80 特权端口会 Permission denied，
+# socat 授予 cap_net_bind_service 后续期 cron 也能一直正常绑 80。
+sudo setcap cap_net_bind_service=+ep "$(readlink -f /usr/bin/socat)"
+
 # 5.1 staging 试签：验证端口/账号/profile 整条链路，不消耗正式限额
 acme.sh --issue --standalone -d <公网IP> \
         --certificate-profile shortlived --staging --server letsencrypt
@@ -62,12 +67,14 @@ acme.sh --issue --standalone -d <公网IP> \
         --certificate-profile shortlived --server letsencrypt
 
 # 5.3 安装到固定路径并挂 nginx 重载（acme.sh 自动登记续期动作）
-sudo mkdir -p /etc/nginx/ssl
+# 注意：install-cert 与后续每次续期都以 admin 身份写入，/etc/nginx/ssl 必须归 admin 所有，
+# 否则首次安装和续期都会 Permission denied（不能按惯例 chown root）。
+sudo mkdir -p /etc/nginx/ssl && sudo chown admin:admin /etc/nginx/ssl
 acme.sh --install-cert -d <公网IP> \
         --fullchain-file /etc/nginx/ssl/ip.crt \
         --key-file       /etc/nginx/ssl/ip.key \
         --reloadcmd      "sudo nginx -t && sudo systemctl reload nginx"
-sudo chown root:root /etc/nginx/ssl/ip.* && sudo chmod 600 /etc/nginx/ssl/ip.key
+chmod 600 /etc/nginx/ssl/ip.key
 ```
 
 验证点：
@@ -80,7 +87,11 @@ sudo chown root:root /etc/nginx/ssl/ip.* && sudo chmod 600 /etc/nginx/ssl/ip.key
 ## 6. 步骤四：nginx 配置（对外 TLS + 对内回源）
 
 新增 `/etc/nginx/sites-available/relaxweb` 并软链到 sites-enabled，**删掉 default 站点**
-（避免占 443/80）。完整配置：
+（避免占 443/80）。**8765/8889 必须绑 ECS 私网 IP（<私网IP>），不能写通配 listen**：
+后端退回 127.0.0.1 后，Linux 不允许通配绑定与已存在的特定地址绑定共存（EADDRINUSE），
+且 `systemctl reload nginx` 遇 bind 失败会**静默回滚旧配置**（服务状态仍显示 active，极易漏判）；
+阿里云公网 IP 是 NAT 映射、不在网卡上，绑公网 IP 不可行，NAT 流量的真实目的地址正是私网 IP。
+443 保持通配（无冲突，看门狗探测 127.0.0.1:443 依赖它）。完整配置：
 
 ```nginx
 # ---- 主入口：静态页 + 直播页（443）----
@@ -111,7 +122,7 @@ server {
 
 # ---- 游戏厅/庄园 WebSocket：对内仍回源 8765 明文 ----
 server {
-    listen 8765 ssl;
+    listen <私网IP>:8765 ssl;
     server_name <公网IP>;
     ssl_certificate     /etc/nginx/ssl/ip.crt;
     ssl_certificate_key /etc/nginx/ssl/ip.key;
@@ -129,7 +140,7 @@ server {
 
 # ---- MediaMTX WHEP/WHIP：回源 8889 明文 ----
 server {
-    listen 8889 ssl;
+    listen <私网IP>:8889 ssl;
     server_name <公网IP>;
     ssl_certificate     /etc/nginx/ssl/ip.crt;
     ssl_certificate_key /etc/nginx/ssl/ip.key;
@@ -224,3 +235,21 @@ fi
 - 微信内置浏览器对非 443 端口与自建站点的兼容性本来就差，语音功能仍建议引导系统浏览器。
 - LE 对 shortlived profile 的速率限制独立且宽松，每 3~4 天续一张远低于限额；
   staging 演练不计入正式额度。
+
+## 12. 执行记录（2026-09-24）
+
+全量上线完成，站点已跑在 `https://<公网IP>`。当日实况：
+
+- 证书：Let's Encrypt（YE1 中级 → ISRG Root X2），SAN = IP，有效期 09-24 ~ 09-30；
+  ARI 续期窗口 **2026-09-27**，acme.sh cron 每天 0/6/12/18 点 55 分自动检查。
+- 监听格局：nginx 持有 0.0.0.0:443、<私网IP>:{8765,8889}；chat 与 MediaMTX
+  已退 127.0.0.1；8000 保留公网明文作回退通道（收尾阶段再关）。
+- 验证通过：curl 证书校验、浏览器（`isSecureContext=true`、零混合内容、
+  页面内 WSS 握手 101）、WHEP 经 TLS 回源等价直连。
+- `getUserMedia` 在无麦克风设备的环境返回 NotFoundError（非 SecurityError）——
+  安全上下文门槛已过，真机上将正常弹权限框，V0 目标达成。
+- 已知非问题：`OPTIONS /xiaopang/whep` 返回 500，TLS 前后行为一致（MediaMTX +
+  http auth 的固有行为），浏览器拉流流程不受影响。
+- 待办：V0.5 部署 LiveKit（7880 + UDP 50000-50100，放开 §6 的 `/lk/` 注释，
+  `config.json` 的 `voice.url` 设为 `wss://<公网IP>/lk`）；狼人杀语音前端 UI；
+  HTTPS 稳定数日后按 §10 收尾关闭 8000。
