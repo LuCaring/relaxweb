@@ -181,6 +181,22 @@ function baseView(overrides = {}) {
     }));
     assert.notEqual(await page.evaluate(() => core.state.hallDeadlineAt), baseline);
 
+    // —— 白天·依次发言：当前发言人高亮，非发言人聊天框锁定 ——
+    await show(baseView({
+      phase: 'day', night_role: null, your_options: null, vote: {},
+      speech_current: 'carol', turn_left: 18.4, turn_seq: 9,
+    }));
+    assert.match(await page.locator('.ww-phase').innerText(), /第 1 天 · 卡萝 发言中/s);
+    assert.match(await page.locator('.ww-seat[data-username="carol"] .ww-seat-status').innerText(), /发言中/);
+    assert.equal(await page.locator('#roomChatInput').isDisabled(), true);
+    await show(baseView({
+      phase: 'day', night_role: null, your_options: null, vote: {},
+      speech_current: 'alice', turn_left: 30, turn_seq: 9,
+    }));
+    assert.equal(await page.locator('#roomChatInput').isDisabled(), false);
+    assert.match(await page.locator('#roomChatInput').getAttribute('placeholder'), /轮到你发言/);
+    assert.ok(await page.locator('.ww-dock .countdown').isVisible());
+
     // —— 猎人开枪：放弃即空枪提交 ——
     await show(baseView({
       phase: 'shot', night_role: null, vote: {},

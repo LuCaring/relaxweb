@@ -98,7 +98,15 @@ function chatComposerState() {
   if (room.phase === "night" && room.your_role?.faction === "wolf") {
     return { disabled: false, placeholder: "狼队频道…（仅存活狼人可见）" };
   }
-  if (room.phase === "day" || room.phase === "vote") {
+  if (room.phase === "day") {
+    if (room.speech_current === me) {
+      return { disabled: false, placeholder: "轮到你发言…（对全桌可见）" };
+    }
+    const speaker = (room.players || []).find((p) => p.username === room.speech_current);
+    return { disabled: true, placeholder: `依次发言中 · 等待 ${
+      speaker?.nickname || room.speech_current || "其他人"} 发言` };
+  }
+  if (room.phase === "vote") {
     return { disabled: false, placeholder: "讨论…（对全桌可见）" };
   }
   return { disabled: true, placeholder: "当前阶段不能发言" };

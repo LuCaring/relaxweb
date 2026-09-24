@@ -66,7 +66,7 @@ def six_room(rules=None):
 async def skip_to_vote(room):
     """把当前夜晚全部空过并吸收遗言/开枪，推进到投票阶段（或对局结束）。"""
     g = room.game
-    for _ in range(12):
+    for _ in range(40):
         phase = g["phase"]
         if phase in ("vote", "showdown"):
             return
@@ -80,7 +80,7 @@ async def skip_to_vote(room):
             if g["phase"] == "night" and g.get("night_role") == g["night_role"]:
                 await room._advance_night()
         elif phase == "day":
-            await room._close_speech()
+            await room._advance_speech()
         elif phase == "last_words":
             await room._advance_last_words()
         elif phase == "shot":
@@ -93,19 +93,20 @@ async def skip_to_vote(room):
 def test_sanitize_and_board():
     room = make_room({"board": "bad", "win_mode": "tucheng",
                       "witch_self_save": "no", "last_words": "sometimes",
-                      "tie": "coin", "day_seconds": 1, "vote_seconds": 99999})
+                      "tie": "coin", "speak_seconds": 1, "vote_seconds": 99999})
     check("非法规则回落默认", room.rules["board"] is None
           and room.rules["win_mode"] == "bian"
           and room.rules["witch_self_save"] == "first"
           and room.rules["last_words"] == "first"
           and room.rules["tie"] == "revote"
-          and room.rules["day_seconds"] == 15
+          and room.rules["speak_seconds"] == 15
           and room.rules["vote_seconds"] == 600, str(room.rules))
     board = ["werewolf", "seer", "witch", "villager", "villager"]
     room = make_room({"board": board, "win_mode": "cheng",
                       "witch_self_save": "always", "guard_continuous": True,
                       "hunter_shot_on_poison": True, "reveal_role": False,
-                      "last_words": "none", "tie": "no_exile"})
+                      "last_words": "none", "tie": "no_exile",
+                      "speak_seconds": 45})
     check("合法自定义规则保留", room.rules["board"] == board
           and room.rules["win_mode"] == "cheng"
           and room.rules["witch_self_save"] == "always"
@@ -113,7 +114,8 @@ def test_sanitize_and_board():
           and room.rules["hunter_shot_on_poison"] is True
           and room.rules["reveal_role"] is False
           and room.rules["last_words"] == "none"
-          and room.rules["tie"] == "no_exile")
+          and room.rules["tie"] == "no_exile"
+          and room.rules["speak_seconds"] == 45)
     preset, error = resolve_board({"board": None}, 9)
     check("9 人预设板子 3 狼", preset is not None
           and sum(1 for k in preset if is_wolf_role(k)) == 3, str(preset))
@@ -273,7 +275,8 @@ def test_witch_rules_and_guard():
         await room.perform_action("c", "witch", {"save": False})
         await room.perform_action("d", "night", {})
         guard_saved = not g["last_night"] and g["phase"] == "day"
-        await room._close_speech()
+        while g["phase"] == "day":
+            await room._advance_speech()
         await room._phase_timeout()          # 无人投票 → 无人出局 → 第 2 夜
         night2 = g["day_no"] == 2 and g["phase"] == "night"
         # 守卫不能连守同一人：提交 e 被拒绝，改守 d 成功
@@ -540,7 +543,7 @@ def test_win_bian_vs_cheng():
             if phase == "last_words":
                 await room2._advance_last_words()
             elif phase == "day":
-                await room2._close_speech()
+                await room2._advance_speech()
             elif phase == "vote":
                 for voter in list(g2["alive"]):
                     await room2.perform_action(voter, "vote", {"target": "d"})
@@ -597,6 +600,20 @@ def test_leave_mid_night():
     check("狼人全部离桌好人获胜", good_win)
 
 
+async def skip_night(room):
+    """空过当前夜晚所有分段（显式空刀/不救/不验），停在白天或后续阶段。"""
+    g = room.game
+    while g["phase"] == "night":
+        ability = ROLES[g["night_role"]]["ability"]
+        for name in list(g.get("pending", [])):
+            if ability == "witch":
+                await room.perform_action(name, "witch", {"save": False})
+            else:
+                await room.perform_action(name, "night", {})
+        if g["phase"] == "night":
+            await room._advance_night()
+
+
 # ---- 聊天定向 ----
 def test_chat_channels():
     async def run():
@@ -605,8 +622,16 @@ def test_chat_channels():
         g = room.game
         night_wolf = room.chat_route("a", {})
         night_good = room.chat_route("c", {})
+        await skip_night(room)
+        day_speaker = g["speech"]["current"]
+        day_speaker_route = room.chat_route(day_speaker, {})
+        day_other = next(name for name in g["alive"]
+                         if name != day_speaker)
+        day_muted_route = room.chat_route(day_other, {})
+        speech_visible = room.view_for(day_other)["speech_current"] \
+            == day_speaker
         await skip_to_vote(room)
-        day_public = room.chat_route("a", {})
+        vote_route = room.chat_route("a", {})
         for voter in list(g["alive"]):
             await room.perform_action(voter, "vote", {"target": "f"})
         while g["phase"] == "last_words":
@@ -626,17 +651,23 @@ def test_chat_channels():
         wolf_sees = [m["text"] for m in room.visible_chat("a")]
         good_sees = [m["text"] for m in room.visible_chat("e")]
         dead_sees = [m["text"] for m in room.visible_chat("f")]
-        return (night_wolf, night_good, day_public, dead_channel, night2_wolf,
+        return (night_wolf, night_good, day_speaker_route, day_muted_route,
+                speech_visible, vote_route, dead_channel, night2_wolf,
                 audience_wolf, audience_dead, wolf_sees, good_sees, dead_sees,
                 spectator_route, spectator_sees)
 
-    (night_wolf, night_good, day_public, dead_channel, night2_wolf,
+    (night_wolf, night_good, day_speaker_route, day_muted_route,
+     speech_visible, vote_route, dead_channel, night2_wolf,
      audience_wolf, audience_dead, wolf_sees, good_sees, dead_sees,
      spectator_route, spectator_sees) = \
         run_identity_shuffle(run)
     check("夜晚狼人走 wolf 频道", night_wolf == "wolf" and night2_wolf == "wolf")
     check("夜晚好人被禁言", night_good == "")
-    check("白天存活者公开发言", day_public is None)
+    check("白天仅当前发言人可公开发言",
+          day_speaker_route is None and day_muted_route == "",
+          f"speaker={day_speaker_route} other={day_muted_route}")
+    check("发言顺序对全体可见", speech_visible)
+    check("投票阶段存活者公开发言", vote_route is None)
     check("被放逐者走 dead 频道", dead_channel == "dead")
     check("wolf 频道听众只有存活狼", set(audience_wolf) == {"a", "b"},
           str(audience_wolf))
@@ -650,6 +681,54 @@ def test_chat_channels():
     check("观战者看不到死者频道且不能冒充死者发言",
           spectator_route == "" and spectator_sees == ["大家好"],
           str(spectator_sees))
+
+
+# ---- 白天依次发言 ----
+def test_day_speech_order_and_mute():
+    async def run():
+        # 平安夜：全员存活 → 从座次首位开始依次发言，默认每人 30 秒
+        room = six_room()
+        await room.start()
+        g = room.game
+        await skip_night(room)
+        queue_ok = g["speech"]["queue"] == ["b", "c", "d", "e", "f"] \
+            and g["speech"]["current"] == "a"
+        view = room.view_for("c")
+        view_ok = view["speech_current"] == "a" and "your_options" not in view
+        timer_ok = 28 < g["deadline"] - time.time() <= 30
+        # 发言人离桌：话筒立即交给下一位
+        left = room.note_leave("a")
+        await room.progress_game()
+        advanced = g["speech"]["current"] == "b"
+        for _ in range(5):                     # b..f 说完进入投票
+            await room._advance_speech()
+        vote_ok = g["phase"] == "vote" and g["speech"]["current"] is None
+
+        # 夜晚死人后从死者下一位开始；发言中离桌立即交给下一位
+        room2 = six_room({"speak_seconds": 20})
+        await room2.start()
+        g2 = room2.game
+        await room2.perform_action("a", "night", {"target": "e"})
+        await room2.perform_action("b", "night", {"target": "e"})
+        await room2.perform_action("d", "witch", {"save": False})
+        await room2.perform_action("c", "night", {})
+        await room2._advance_last_words()      # e 的遗言结束 → 白天
+        day2 = g2["phase"] == "day" and g2["last_night"] == {"e": "kill"}
+        rotated_ok = g2["speech"]["current"] == "f" \
+            and g2["speech"]["queue"] == ["a", "b", "c", "d"]
+        rotated_timer_ok = 18 < g2["deadline"] - time.time() <= 20
+        return (queue_ok, view_ok, timer_ok, vote_ok, advanced, day2,
+                rotated_ok, rotated_timer_ok)
+
+    (queue_ok, view_ok, timer_ok, vote_ok, advanced, day2, rotated_ok,
+     rotated_timer_ok) = run_identity_shuffle(run)
+    check("平安夜从座次首位开始依次发言", queue_ok)
+    check("发言顺序与当前发言人写入视图", view_ok)
+    check("默认发言时限 30 秒", timer_ok)
+    check("发言人离桌立即换下一位", advanced)
+    check("全员说完自动进入投票", vote_ok)
+    check("第二天从死者下一位开始发言", day2 and rotated_ok)
+    check("自定义发言时限生效", rotated_timer_ok)
 
 
 # ---- 结算投票 ----
@@ -735,7 +814,7 @@ async def drive_random_match(room, rng, limit=8000):
         if phase == "night":
             await submit_night_randomly(room, rng)
         elif phase == "day":
-            await room._close_speech()
+            await room._advance_speech()
         elif phase == "vote":
             voters = [n for n in g["alive"] if n not in g["vote"]]
             if voters and rng.random() < 0.85:
@@ -821,6 +900,7 @@ def main():
     test_win_bian_vs_cheng()
     test_leave_mid_night()
     test_chat_channels()
+    test_day_speech_order_and_mute()
     test_settlement_vote()
     test_full_random_match()
     failed = [name for name, ok in results if not ok]

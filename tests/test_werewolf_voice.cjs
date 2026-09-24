@@ -289,29 +289,36 @@ print(json.dumps({n: accounts.create_session(n) for n in names}))
         null, { timeout: 30000 });
     }
 
-    // 白天：全员换到 day 频道
+    // 白天：全员换到 day 频道（依次发言中）
     for (const name of Object.keys(players)) {
       await players[name].page.waitForFunction(() => voice.voiceDebug().connected
         && voice.voiceDebug().room.endsWith('-day'), null, { timeout: 30000 });
     }
-    console.log('PASS day: all four connected to the day channel');
+    const speaker = await players.va.page.evaluate(() => core.state.myRoom.speech_current);
+    const speakerRole = roleOf[speaker];
+    console.log(`PASS day: all four connected to the day channel, speaker ${speaker}(${speakerRole})`);
 
-    // 狼人与预言家上麦（假麦克风）：发布本机麦克风并订阅到对方音轨
-    for (const name of [wolf, seer]) {
-      const wanted = await players[name].page.evaluate(async () => {
-        const result = voice.voiceMicWanted() || await voice.toggleMic();
-        return { wanted: result, debug: voice.voiceDebug() };
-      });
-      console.log(`[mic ${name}]`, JSON.stringify(wanted));
+    // 依次发言：只有当前发言人可发布麦克风，其余人只听
+    for (const name of Object.keys(players)) {
+      if (name === speaker) continue;
+      const state = await players[name].page.evaluate(() => voice.voiceDebug());
+      assert.equal(state.connected, true, `${name} stays in the day channel`);
     }
+    await players[speaker].page.evaluate(async () => {
+      const result = voice.voiceMicWanted() || await voice.toggleMic();
+      return result;
+    });
+    const listener = Object.keys(players).find((n) => n !== speaker);
     try {
-      for (const name of [wolf, seer]) {
-        await players[name].page.waitForFunction(() => voice.voiceDebug().micPublished === true
-          && voice.voiceDebug().remoteAudio >= 1
-          && [...document.querySelectorAll('audio[data-voice-peer]')]
-            .some((element) => !element.paused && element.readyState >= 2),
+      await players[speaker].page.waitForFunction(() => voice.voiceDebug().micPublished === true,
         null, { timeout: 40000 });
-      }
+      await players[listener].page.waitForFunction(() => voice.voiceDebug().remoteAudio >= 1
+        && [...document.querySelectorAll('audio[data-voice-peer]')]
+          .some((element) => !element.paused && element.readyState >= 2),
+      null, { timeout: 40000 });
+      const listenerState = await players[listener].page.evaluate(() => voice.voiceDebug());
+      assert.equal(listenerState.micPublished, false,
+        `listener ${listener} must not publish during another player's speech turn`);
     } catch (error) {
       for (const name of Object.keys(players)) {
         const dump = await players[name].page.evaluate(async () => {
@@ -327,6 +334,7 @@ print(json.dumps({n: accounts.create_session(n) for n in names}))
             voice: voice.voiceDebug(),
             wanted: voice.voiceMicWanted(),
             phase: core.state.myRoom?.phase,
+            speaker: core.state.myRoom?.speech_current,
             secure: window.isSecureContext,
             hasMediaDevices: Boolean(navigator.mediaDevices),
             gum,
@@ -336,12 +344,12 @@ print(json.dumps({n: accounts.create_session(n) for n in names}))
       }
       throw error;
     }
-    console.log(`PASS audio: ${wolf} and ${seer} published and played attached remote tracks`);
+    console.log(`PASS audio: ${speaker}(${speakerRole}) published, ${listener} listened without publishing`);
     assert.equal(processErrors.some((line) => /voice kick failed|voice room delete failed/.test(line)),
       false, 'LiveKit 管理 API should revoke old rooms without errors');
 
     for (const name of Object.keys(players)) assert.deepEqual(errors[name], [], `${name} page errors`);
-    console.log('PASS: werewolf voice e2e (night wolf-only channel, day shared channel, mutual audio)');
+    console.log('PASS: werewolf voice e2e (night wolf-only channel, day sequential speech audio)');
   } finally {
     await browser?.close().catch(() => {});
     for (const proc of procs.reverse()) {

@@ -20,6 +20,7 @@ function draftFor(gameId) {
         chambers: 6, cards: 5, max_play: 3, jokers: "wild", respin: 0,
         win_mode: "bian", witch_self_save: "first", last_words: "first",
         tie: "revote", reveal_role: 1, guard_continuous: 0, board_text: "",
+        speak_seconds: 30,
       },
     });
   }
@@ -143,6 +144,10 @@ function createRules(game, draft, details) {
       labeledSelect("女巫自救", "女巫自救", [["first", "仅首夜可自救（经典）"], ["always", "始终可自救"], ["never", "不可自救"]], draft.rules.witch_self_save, save("witch_self_save", false)),
       labeledSelect("遗言规则", "遗言规则", [["first", "首夜死者与被放逐者有遗言"], ["all", "所有死者都有遗言"], ["none", "无遗言"]], draft.rules.last_words, save("last_words", false)),
       labeledSelect("平票处理", "平票处理", [["revote", "平票后在候选人中重投一轮"], ["no_exile", "平票直接无人出局"]], draft.rules.tie, save("tie", false)),
+      labeledSelect("每人发言时长", "每人发言时长",
+        [[15, "15 秒"], [20, "20 秒"], [30, "30 秒（默认）"], [45, "45 秒"],
+         [60, "60 秒"], [90, "90 秒"], [120, "120 秒"]],
+        draft.rules.speak_seconds, save("speak_seconds")),
       labeledSelect("出局翻牌", "出局翻牌", [[1, "公示出局者身份（休闲）"], [0, "不公示，猜到终局（竞技）"]], draft.rules.reveal_role, save("reveal_role")),
       labeledSelect("守卫连守", "守卫连守", [[0, "不能连守同一人（经典）"], [1, "可以连守同一人"]], draft.rules.guard_continuous, save("guard_continuous")),
       labeledText("自定义板子", "自定义板子", draft.rules.board_text,
@@ -162,7 +167,7 @@ function createRules(game, draft, details) {
 
 function createDescription(game) {
   if (game.id === "mahjong") return "国标麻将需 4 人开局。自摸三家各付一份，点炮按所选计法赔付；花牌每张 1 分计入总番。荒庄不计分且庄家连庄。";
-  if (game.id === "werewolf") return "狼人杀 4–12 人开局，6/8/9/10/12 人自动配板。夜晚按守卫→狼人→女巫→预言家行动，白天讨论后投票放逐；输方各付一份底注，胜方全体均分。";
+  if (game.id === "werewolf") return "狼人杀 4–12 人开局，6/8/9/10/12 人自动配板。夜晚按守卫→狼人→女巫→预言家行动，白天按座次依次发言（每人限时，可设置）后投票放逐；输方各付一份底注，胜方全体均分。";
   if (game.id === "guandan") return "掼蛋需 4 人开局，隔位玩家自动组队。各自从 2 打到 A，头游方获胜升级；线上暂不支持进贡还贡。";
   if (game.id === "uno") return "UNO 至少 2 人开局。一手结束后，赢家按各家剩余牌数乘以底注收注，离桌时按筹码自动结算。";
   if (game.id === "ludo") return "飞行棋 2–4 人开局，按加入顺序执红黄蓝绿。先送 4 架飞机到家者夺冠，其余按到达进度排名；超终点的点数从终点反弹，落点敌机全部撞回机场。";
@@ -189,7 +194,7 @@ function updateCreateSummary() {
         : game.id === "liarsbar"
           ? `${draft.rules.chambers} 弹巢${draft.rules.respin ? "重转" : "递增"} · ${draft.rules.cards} 张手牌 · 至多出 ${draft.rules.max_play} 张 · ${draft.rules.jokers === "wild" ? "小丑百搭" : "无小丑"} · ${draft.rules.payout === "rank" ? "按出局结算" : "冠军通吃"}`
           : game.id === "werewolf"
-            ? `${draft.rules.win_mode === "cheng" ? "屠城局" : "屠边局"} · 女巫${draft.rules.witch_self_save === "always" ? "始终可自救" : draft.rules.witch_self_save === "never" ? "不可自救" : "仅首夜可自救"} · ${draft.rules.last_words === "none" ? "无遗言" : draft.rules.last_words === "all" ? "全遗言" : "首夜遗言"} · ${draft.rules.tie === "no_exile" ? "平票流局" : "平票重投"} · ${Number(draft.rules.reveal_role) ? "出局翻牌" : "身份隐藏"}${draft.rules.board_text.trim() ? " · 自定义板子" : " · 自动配板"}`
+            ? `${draft.rules.win_mode === "cheng" ? "屠城局" : "屠边局"} · 女巫${draft.rules.witch_self_save === "always" ? "始终可自救" : draft.rules.witch_self_save === "never" ? "不可自救" : "仅首夜可自救"} · ${draft.rules.last_words === "none" ? "无遗言" : draft.rules.last_words === "all" ? "全遗言" : "首夜遗言"} · ${draft.rules.tie === "no_exile" ? "平票流局" : "平票重投"} · 每人发言 ${draft.rules.speak_seconds} 秒 · ${Number(draft.rules.reveal_role) ? "出局翻牌" : "身份隐藏"}${draft.rules.board_text.trim() ? " · 自定义板子" : " · 自动配板"}`
             : game.id === "holdem" ? "无限注德州扑克" : "UNO 经典规则";
   summary.querySelector(".create-summary-rules").textContent = ruleSummary;
   buyin.min = String(min);
@@ -356,6 +361,7 @@ function renderCreate() {
         last_words: ["all", "none"].includes(draft.rules.last_words)
           ? draft.rules.last_words : "first",
         tie: draft.rules.tie === "no_exile" ? "no_exile" : "revote",
+        speak_seconds: Number(draft.rules.speak_seconds) || 30,
         reveal_role: Boolean(Number(draft.rules.reveal_role)),
         guard_continuous: Boolean(Number(draft.rules.guard_continuous)),
       };

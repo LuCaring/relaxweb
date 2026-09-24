@@ -70,6 +70,12 @@ function isMe(name) {
   return Boolean(name) && name === selfUsername() && !state.myRoom?.spectator;
 }
 
+/** 优先用本房间座位昵称，其次全局 profile 缓存。 */
+function nameOf(username) {
+  const row = (state.myRoom?.players || []).find((p) => p.username === username);
+  return row?.nickname || displayNameOf(username);
+}
+
 function el(tag, className, text) {
   const node = document.createElement(tag);
   if (className) node.className = className;
@@ -101,7 +107,9 @@ function phaseBanner(room) {
     label.textContent = `第 ${dayNo} 夜 · ${room.night_role ? `${room.night_role}请行动` : "天黑请闭眼"}`;
   } else if (room.phase === "day") {
     icon.textContent = "☀️";
-    label.textContent = `第 ${dayNo} 天 · 自由讨论`;
+    label.textContent = room.speech_current
+      ? `第 ${dayNo} 天 · ${nameOf(room.speech_current)} 发言中`
+      : `第 ${dayNo} 天 · 依次发言`;
   } else if (room.phase === "vote") {
     icon.textContent = "🗳️";
     label.textContent = `第 ${dayNo} 天 · ${room.vote_round > 1 ? "平票重投" : "投票放逐"}`;
@@ -135,7 +143,13 @@ function phaseHintText(room) {
     if (options) return options.kind === "witch" ? "轮到你 · 女巫的药水" : `轮到你 · ${options.role}行动`;
     return room.night_role ? `${room.night_role}正在行动，请闭眼等待…` : "天黑请闭眼…";
   }
-  if (room.phase === "day") return "自由讨论中 · 观点说完等待投票";
+  if (room.phase === "day") {
+    if (room.speech_current && isMe(room.speech_current)) {
+      return "轮到你发言 · 打开聊天或上麦，时间结束自动交给下一位";
+    }
+    if (room.speech_current) return `等待 ${nameOf(room.speech_current)} 发言…`;
+    return "即将进入投票阶段";
+  }
   if (room.phase === "vote") {
     if (options?.voted) return "已投票 · 等待其他人（投票后不可更改）";
     return "请选择放逐对象";
@@ -147,7 +161,7 @@ function phaseHintText(room) {
   if (room.phase === "last_words") {
     return room.last_words_current && isMe(room.last_words_current)
       ? "轮到你发表遗言 · 打开聊天说出判断"
-      : `等待 ${room.last_words_current ? displayNameOf(room.last_words_current) : ""} 发表遗言…`;
+      : `等待 ${room.last_words_current ? nameOf(room.last_words_current) : ""} 发表遗言…`;
   }
   return "";
 }
@@ -182,6 +196,7 @@ function seatNode(p, index) {
   identity.append(name);
 
   const statusText = !p.alive ? "出局"
+    : room.phase === "day" && room.speech_current === p.username ? "发言中"
     : room.phase === "vote" && room.vote?.[p.username] ? "已投票"
     : room.phase === "night" && room.night_role && p.username === me
     && room.your_options ? "行动中"
@@ -560,20 +575,25 @@ function dockNode() {
   } else {
     info.append(el("div", "ww-dock-note",
       room.phase === "night" ? "夜晚静默：好人无法发言，狼人可在狼队频道密谋。"
-        : room.phase === "day" ? "自由发言阶段：打开聊天输出你的推理。"
+        : room.phase === "day" ? "依次发言阶段：只有当前发言人的聊天和麦克风生效。"
         : room.phase === "vote" ? "投票进行中：每个人的票都公开显示在座位上。"
         : "按提示完成当前行动。"));
   }
   body.append(info);
-  if (acting) {
-  if (room.turn_left > 0) {
+  const amSpeaking = room.phase === "day" && isMe(room.speech_current);
+  if ((acting || amSpeaking) && phaseDeadline > 0) {
     const countdown = el("div", "countdown");
     const fill = el("div", "countdown-fill");
     countdown.append(fill);
     body.append(countdown);
     startHallTicker(fill, phaseTotal || room.turn_left, phaseDeadline);
   }
+  if (acting) {
     body.append(actionAreaNode(room));
+  }
+  if (amSpeaking) {
+    body.append(el("div", "ww-dock-note",
+      "轮到你发言：打开聊天输出推理，或点击右上角「上麦」用语音发言。"));
   }
   dock.append(body);
   return dock;
@@ -677,7 +697,7 @@ function renderWerewolfTable() {
 registerGame("werewolf", {
   stakeLabel: "底注",
   blindLabel: "下一局底注",
-  waitingHint: "狼人杀 4–12 人开局：夜晚狼人刀人，女巫救毒、预言家查验、守卫守护；白天讨论并投票放逐。6/8/9/10/12 人自动配板，其他人数需在开房时填写自定义板子。",
+  waitingHint: "狼人杀 4–12 人开局：夜晚狼人刀人，女巫救毒、预言家查验、守卫守护；白天按座次依次发言后投票放逐。6/8/9/10/12 人自动配板，其他人数需在开房时填写自定义板子。",
   noNextHint: () => "人数不足 4 人或有人筹码不足，过半数投「解散」后房间将按当前筹码退还所有人。",
   renderTable: renderWerewolfTable,
   renderReview: (result) => {

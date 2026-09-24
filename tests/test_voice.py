@@ -88,7 +88,9 @@ def test_voice_plan():
         room = make_room()
         await room.start()
         room.game["phase"] = "day"           # start 直接进第一夜；从白天开始观察
+        room.game["speech"]["current"] = "a"  # 依次发言：轮到 a 开口
         day = room.voice_plan("a")
+        day_listener = room.voice_plan("b")
         spectator_day = room.voice_plan("watcher")
         room.game["phase"] = "night"
         room.game["voice_epoch"] += 1
@@ -103,13 +105,16 @@ def test_voice_plan():
         room.game["voice_epoch"] += 1
         words_speaker = room.voice_plan("e")
         words_listener = room.voice_plan("c")
-        return (day, spectator_day, dead, night_wolf, night_good,
+        return (day, day_listener, spectator_day, dead, night_wolf, night_good,
                 spectator_night, words_speaker, words_listener)
 
-    (day, spectator_day, dead, night_wolf, night_good, spectator_night,
-     words_speaker, words_listener) = \
+    (day, day_listener, spectator_day, dead, night_wolf, night_good,
+     spectator_night, words_speaker, words_listener) = \
         run_identity_shuffle(run)
-    check("白天存活者可进 day 频道发言", day == {"ww42-m1-v1-day": True}, str(day))
+    check("白天仅当前发言人可进 day 频道发言",
+          day == {"ww42-m1-v1-day": True}, str(day))
+    check("白天其他存活者只听不说", day_listener == {"ww42-m1-v1-day": False},
+          str(day_listener))
     check("夜晚狼人切到 wolf 频道", night_wolf == {"ww42-m1-v2-wolf": True},
           str(night_wolf))
     check("夜晚好人无频道", night_good == {}, str(night_good))
@@ -170,6 +175,7 @@ def test_service_diff():
         room = make_room()
         await room.start()
         room.game["phase"] = "day"           # start 直接进第一夜；测试从白天开始
+        room.game["speech"]["current"] = "a"  # 依次发言：轮到 a 开口
         await service.sync_room(room)
         first = {name: len(msgs) for name, msgs in hub.sent.items()}
         # 计划未变：不重发

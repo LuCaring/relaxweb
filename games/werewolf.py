@@ -11,8 +11,10 @@
   - 夜晚：狼人共同刀一人（允许显式空刀，超时也空刀），守卫守护一人
     （默认不能连守同一人），女巫一瓶解药一瓶毒药各一次（自救规则可选
     首夜/始终/不可），预言家验一人得知是否狼人；
-  - 白天：公布死讯（可配是否翻牌身份）→ 自由发言（走房间聊天）→
-    投票放逐；平票可配重投一轮或无人出局；遗言规则可选；
+  - 白天：公布死讯（可配是否翻牌身份）→ 按座次依次发言（每人限时
+    speak_seconds，可在建房时设置；仅当前发言人可用文字/语音发言，
+    从昨晚首位死者的下一位开始，平安夜从座次首位开始）→ 投票放逐；
+    平票可配重投一轮或无人出局；遗言规则可选；
   - 猎人被刀或被放逐可开枪带走一人（默认被毒不能开枪）；
   - 胜负：狼人全灭好人胜；默认屠边局（神职或平民全灭即狼胜，可配屠城），
     狼人存活数不少于好人作为兜底立即判狼胜；
@@ -35,7 +37,7 @@ from games.base import BaseRoom, register_room_type
 logger = logging.getLogger("live-chat.werewolf")
 
 NIGHT_TIMEOUT = float(os.environ.get("WEREWOLF_NIGHT_TIMEOUT", "25"))
-DAY_TIMEOUT = float(os.environ.get("WEREWOLF_DAY_TIMEOUT", "120"))
+SPEAK_TIMEOUT = float(os.environ.get("WEREWOLF_SPEAK_TIMEOUT", "30"))
 VOTE_TIMEOUT = float(os.environ.get("WEREWOLF_VOTE_TIMEOUT", "30"))
 SHOT_TIMEOUT = float(os.environ.get("WEREWOLF_SHOT_TIMEOUT", "15"))
 LAST_WORDS_TIMEOUT = float(os.environ.get("WEREWOLF_LAST_WORDS_TIMEOUT", "20"))
@@ -138,7 +140,7 @@ class WerewolfRoom(BaseRoom):
             "reveal_role": bool(rules.get("reveal_role", True)),
             "last_words": pick("last_words", LAST_WORDS_MODES, "first"),
             "tie": pick("tie", TIE_POLICIES, "revote"),
-            "day_seconds": clamp_seconds("day_seconds", int(DAY_TIMEOUT)),
+            "speak_seconds": clamp_seconds("speak_seconds", int(SPEAK_TIMEOUT)),
             "vote_seconds": clamp_seconds("vote_seconds", int(VOTE_TIMEOUT)),
             "night_seconds": clamp_seconds("night_seconds", int(NIGHT_TIMEOUT)),
         }
@@ -204,6 +206,8 @@ class WerewolfRoom(BaseRoom):
                 "night_role": role_name(g["night_role"])
                 if g.get("night_role") else None,
                 "last_words_current": g["last_words"]["current"],
+                "speech_current": g["speech"].get("current")
+                if isinstance(g.get("speech"), dict) else None,
                 "turn_left": round(max(0.0, g["deadline"] - time.time()), 1)
                 if g["deadline"] else 0,
                 "vote": dict(g["vote"]) if g["phase"] == "vote" else {},
@@ -387,7 +391,11 @@ class WerewolfRoom(BaseRoom):
                 return {"channel": "day",
                         "can_speak": username == g["last_words"]["current"]}
         if username in g["alive"]:
-            if phase in ("day", "vote"):
+            if phase == "day":
+                # 依次发言：只有当前发言人可以开口（文字与语音同规则）
+                return {"channel": "day",
+                        "can_speak": g["speech"].get("current") == username}
+            if phase == "vote":
                 return {"channel": "day", "can_speak": True}
             if phase == "night" and is_wolf_role(g["roles"][username]):
                 return {"channel": "wolf", "can_speak": True}
@@ -408,8 +416,10 @@ class WerewolfRoom(BaseRoom):
         if g["last_words"]["current"] == username:
             return None
         if username in g["alive"]:
-            if g["phase"] in ("day", "vote"):
+            if g["phase"] == "vote":
                 return None
+            if g["phase"] == "day":
+                return None if g["speech"].get("current") == username else ""
             if g["phase"] == "night" and is_wolf_role(g["roles"][username]):
                 return "wolf"
             return ""
@@ -468,7 +478,7 @@ class WerewolfRoom(BaseRoom):
         if phase == "night":
             await self._advance_night()
         elif phase == "day":
-            await self._close_speech()
+            await self._advance_speech()
         elif phase == "vote":
             await self._close_vote()
         elif phase == "shot":
@@ -513,6 +523,7 @@ class WerewolfRoom(BaseRoom):
             "shot_pending": None,
             "shot_after": None,
             "last_words": {"queue": [], "current": None, "deadline": 0},
+            "speech": {"queue": [], "current": None},
             "vote": {},
             "vote_round": 1,
             "candidates": None,
@@ -763,21 +774,44 @@ class WerewolfRoom(BaseRoom):
                                  and self.game["day_no"] == 1)
 
     # ---- 白天 ----
+    def _speech_queue(self):
+        """白天发言顺序：按座次，从昨晚首位死者的下一位开始；平安夜从首位开始。"""
+        g = self.game
+        order = [name for name in self.seating if name in g["alive"]]
+        anchor = None
+        for name in self.seating:
+            if name in g["last_night"]:
+                anchor = self.seating.index(name)
+                break
+        if anchor is None:
+            return order
+        for offset, name in enumerate(order):
+            if self.seating.index(name) > anchor:
+                return order[offset:] + order[:offset]
+        return order
+
     async def _enter_day(self):
         g = self.game
         g["voice_epoch"] += 1
         g["phase"] = "day"
-        g["turn_seq"] += 1
-        g["deadline"] = time.time() + self.rules["day_seconds"]
-        self._arm_phase_timer()
-        self._log_event(f"第 {g['day_no']} 天，开始自由发言", "day")
-        await self.broadcast_views()
+        g["speech"] = {"queue": self._speech_queue(), "current": None}
+        self._log_event(f"第 {g['day_no']} 天，按座次依次发言", "day")
+        await self._advance_speech()
 
-    async def _close_speech(self):
+    async def _advance_speech(self):
+        """交出下一位发言者的限时话筒；全员说完进入投票。"""
         g = self.game
-        if g["phase"] != "day":
+        queue = g["speech"].get("queue", [])
+        if queue:
+            current = queue.pop(0)
+            g["speech"]["current"] = current
+            g["turn_seq"] += 1
+            g["deadline"] = time.time() + self.rules["speak_seconds"]
+            self._arm_phase_timer()
+            self._log_event(f"请 {self.display_name(current)} 发言", "day")
+            await self.broadcast_views()
             return
-        self.cancel_timer("phase")
+        g["speech"]["current"] = None
         await self._enter_vote()
 
     async def _enter_vote(self):
@@ -1073,6 +1107,12 @@ class WerewolfRoom(BaseRoom):
             g["last_words"]["current"] = None
         if g["last_words"].get("queue") and username in g["last_words"]["queue"]:
             g["last_words"]["queue"].remove(username)
+        speech = g.get("speech")
+        if isinstance(speech, dict):
+            if speech.get("current") == username:
+                speech["current"] = None
+            if speech.get("queue") and username in speech["queue"]:
+                speech["queue"].remove(username)
         if g["night"].get("kill") == username:
             g["night"]["kill"] = None       # 刀目标离开视作空刀
         return was_alive
@@ -1100,6 +1140,12 @@ class WerewolfRoom(BaseRoom):
         elif phase == "vote":
             if g["alive"] and all(name in g["vote"] for name in g["alive"]):
                 await self._close_vote()
+            else:
+                await self.broadcast_views()
+        elif phase == "day":
+            # 当前发言人离桌时立即交给下一位，避免空转
+            if not g["speech"].get("current"):
+                await self._advance_speech()
             else:
                 await self.broadcast_views()
         elif phase == "shot":
