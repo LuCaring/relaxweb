@@ -1,0 +1,22 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "required": ["pack_id", "pack_version", "schema_version", "requires", "files"],
+  "properties": {
+    "pack_id": {"type": "string", "pattern": "^[a-z][a-z0-9_]*(?:[.-][a-z][a-z0-9_]*)+$"},
+    "pack_version": {"type": "string", "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$"},
+    "schema_version": {"type": "integer", "const": 1},
+    "requires": {"type": "array", "items": {"type": "object", "required": ["plugin_id", "plugin_version"], "properties": {
+      "plugin_id": {"type": "string", "pattern": "^[a-z][a-z0-9_]*(?:[.-][a-z][a-z0-9_]*)+$"},
+      "plugin_version": {"type": "string", "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$"}
+    }, "additionalProperties": false}},
+    "files": {"type": "object", "minProperties": 1, "properties": {
+      "weapons": {"$ref": "#/$defs/file"}, "enemies": {"$ref": "#/$defs/file"},
+      "encounters": {"$ref": "#/$defs/file"}, "effects": {"$ref": "#/$defs/file"},
+      "progression": {"$ref": "#/$defs/file"}, "economy": {"$ref": "#/$defs/file"},
+      "loot": {"$ref": "#/$defs/file"}
+    }, "additionalProperties": false}
+  },
+  "$defs": {"file": {"type": "string", "pattern": "^[a-z][a-z0-9_-]*\\.json$"}},
+  "additionalProperties": false
+}

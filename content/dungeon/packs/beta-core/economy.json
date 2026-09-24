@@ -1,0 +1,9 @@
+{
+  "trade_policy": {
+    "policy_version": 1,
+    "fee_bp": 250,
+    "minimum_price_minor": 100,
+    "maximum_price_minor": 10000000,
+    "ttl_seconds": 86400
+  }
+}

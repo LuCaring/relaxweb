@@ -1,0 +1,4 @@
+[
+  {"id": "beta.encounter.entry", "name": "遗迹入口", "enemies": ["beta.enemy.slime"], "loot_pool_id": "beta.loot.entry"},
+  {"id": "beta.encounter.guard", "name": "石像守卫", "enemies": ["beta.enemy.guard"], "loot_pool_id": "beta.loot.boss", "clear_progress_id": "beta.clear.first_boss"}
+]

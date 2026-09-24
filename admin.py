@@ -56,7 +56,10 @@ USERNAME_REF_TABLES = (
     "invite_codes",  # created_by / used_by 两列
     "estate_actions", "estate_fishing_sessions", "estate_mining_runs",
     "estate_tools", "estate_inventory", "estate_plots", "estate_profiles",
+    "dungeon_profiles", "dungeon_loadout", "dungeon_runs", "dungeon_active_jobs",
+    "dungeon_rewards", "dungeon_progress", "dungeon_actions", "dungeon_items",
 )
+USERNAME_REF_COLUMNS = {"dungeon_items": ("owner",)}
 DELETION_PLAN = (
     ("auth_sessions", "user_id IN (SELECT id FROM users WHERE username = ?)"),
     ("rating_history", "user_id IN (SELECT id FROM users WHERE username = ?)"),
@@ -76,8 +79,28 @@ DELETION_PLAN = (
     ("estate_inventory", "username = ?"),
     ("estate_plots", "username = ?"),
     ("estate_profiles", "username = ?"),
+    ("dungeon_asset_reservations", "owner_user_id IN (SELECT id FROM users WHERE username = ?)"),
+    ("dungeon_beta_receipts", "user_id IN (SELECT id FROM users WHERE username = ?)"),
+    ("dungeon_material_balances", "user_id IN (SELECT id FROM users WHERE username = ?)"),
+    ("dungeon_beta_progress", "user_id IN (SELECT id FROM users WHERE username = ?)"),
+    ("dungeon_beta_asset_revisions", "user_id IN (SELECT id FROM users WHERE username = ?)"),
     ("users", "username = ?"),
 )
+
+
+def active_dungeon_job(conn, username):
+    if table_exists(conn, "dungeon_active_jobs") and conn.execute(
+            "SELECT 1 FROM dungeon_active_jobs WHERE username=?", (username,)).fetchone():
+        return True
+    if table_exists(conn, "dungeon_runs") and conn.execute(
+            "SELECT 1 FROM dungeon_runs WHERE username=? AND status IN ('running','paused')",
+            (username,)).fetchone():
+        return True
+    if table_exists(conn, "dungeon_beta_runs") and conn.execute(
+            "SELECT 1 FROM dungeon_beta_runs WHERE user_id=(SELECT id FROM users WHERE username=?) "
+            "AND status IN ('ready','running','paused')", (username,)).fetchone():
+        return True
+    return False
 
 
 def fail(message):
@@ -263,6 +286,8 @@ def cmd_delete(username, assume_yes=False):
         blocker = open_bet_involving(conn, username)
         if blocker:
             fail(f"{blocker}，请先结账或流局再删除")
+        if active_dungeon_job(conn, username):
+            fail("该用户有活动地下城挑战，请先结束挑战再删除")
         counts = []
         for table, where in DELETION_PLAN:
             if not table_exists(conn, table):
@@ -284,8 +309,11 @@ def cmd_delete(username, assume_yes=False):
         print("已取消")
         return
     with database() as conn, conn:
+        conn.execute("BEGIN IMMEDIATE")
         if not get_user(conn, username):
             fail("用户不存在")
+        if active_dungeon_job(conn, username):
+            fail("该用户有活动地下城挑战，请先结束挑战再删除")
         for table, where in DELETION_PLAN:
             if table_exists(conn, table):
                 conn.execute(f"DELETE FROM {table} WHERE {where}", (username,))
@@ -353,8 +381,11 @@ def cmd_edit(username, field, value, assume_yes=False):
         print("已取消")
         return
     with database() as conn, conn:
+        conn.execute("BEGIN IMMEDIATE")
         if not get_user(conn, username):
             fail("用户不存在")
+        if active_dungeon_job(conn, username):
+            fail("该用户有活动地下城挑战，请先结束挑战再改名")
         conn.execute(
             "UPDATE users SET username = ? WHERE username = ?", (new_name, username)
         )
@@ -363,7 +394,7 @@ def cmd_edit(username, field, value, assume_yes=False):
             if not table_exists(conn, table):
                 continue
             columns = {info[1] for info in conn.execute(f"PRAGMA table_info({table})")}
-            for column in ("username", "creator", "created_by", "used_by"):
+            for column in USERNAME_REF_COLUMNS.get(table, ("username", "creator", "created_by", "used_by")):
                 if column in columns:
                     cur = conn.execute(
                         f"UPDATE {table} SET {column} = ? WHERE {column} = ?",

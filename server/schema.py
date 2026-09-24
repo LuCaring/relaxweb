@@ -1,6 +1,7 @@
 """共享数据库建表与兼容迁移；管理命令和 WebSocket 宿主共用。"""
 from estate import init_estate
-from estate.dungeon.schema import init_dungeon
+from dungeon.storage.legacy_schema import init_dungeon
+from dungeon.storage.beta_schema import init_beta
 from holdem_stats import init_holdem_stats
 from rewards import init_rewards
 from server.database import database
@@ -67,6 +68,7 @@ def init_db(database=database):
         init_rewards(conn)
         init_estate(conn)
         init_dungeon(conn)
+        init_beta(conn)
         init_holdem_stats(conn)
         conn.execute("""
             CREATE TABLE IF NOT EXISTS rating_history (

@@ -4,6 +4,7 @@ version = "0.1.0"
 description = "Self-hosted live room and game hall"
 requires-python = ">=3.9"
 dependencies = [
+    "jsonschema>=4.21,<5",
     "psutil>=7.2",
     "websockets>=11",
 ]

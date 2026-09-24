@@ -1,0 +1,8 @@
+{
+  "ruleset_id": "beta-20260925-f0",
+  "progress": ["beta.clear.first_boss"],
+  "item": {"item_id": "item_f0_sword", "version": 1, "template_id": "beta.sword.basic", "upgrade_level": 0, "stats": {"atk": 12}},
+  "target_level": 1,
+  "expected_costs": [{"resource_id": "wallet:coins", "amount": 200}],
+  "expected_stats": {"atk": 14}
+}

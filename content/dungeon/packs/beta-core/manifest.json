@@ -1,0 +1,15 @@
+{
+  "pack_id": "beta.core",
+  "pack_version": "0.1.0",
+  "schema_version": 1,
+  "requires": [{"plugin_id": "builtin.sword_rules", "plugin_version": "0.1.0"}],
+  "files": {
+    "weapons": "weapons.json",
+    "enemies": "enemies.json",
+    "encounters": "encounters.json",
+    "effects": "effects.json",
+    "progression": "progression.json",
+    "economy": "economy.json",
+    "loot": "loot.json"
+  }
+}

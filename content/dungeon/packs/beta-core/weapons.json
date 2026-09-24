@@ -1,0 +1,11 @@
+[
+  {
+    "id": "beta.sword.basic",
+    "name": "遗迹长剑",
+    "slot": "weapon",
+    "visual_id": "beta.visual.ruins_blade",
+    "stats": {"atk": 12},
+    "effects": ["beta.effect.guard_momentum"],
+    "trade": {"allowed": true, "reason": null}
+  }
+]

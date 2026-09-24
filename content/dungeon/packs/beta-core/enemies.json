@@ -1,0 +1,4 @@
+[
+  {"id": "beta.enemy.slime", "name": "遗迹史莱姆", "visual_id": "beta.visual.ruins_slime", "hp": 30, "attack": 3, "boss": false},
+  {"id": "beta.enemy.guard", "name": "石像守卫", "visual_id": "beta.visual.stone_guard", "hp": 180, "attack": 12, "boss": true}
+]

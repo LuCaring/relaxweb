@@ -1,0 +1,12 @@
+{
+  "ruleset_id": "beta-20260925-f0",
+  "effect_id": "beta.effect.guard_momentum",
+  "kind": "sword.shield_on_spend",
+  "event": {"type": "sword.momentum_spent", "actor_id": "hero_1", "action_id": "swing_1", "actual_spent": 3, "origin": "main_weapon", "proc_depth": 0},
+  "context": {"tick": 60, "tick_rate": 30, "max_hp": 100},
+  "effect_state": {"cooldown_until_tick": 0, "last_action_id": null},
+  "expected": {
+    "next_effect_state": {"cooldown_until_tick": 210, "last_action_id": "swing_1"},
+    "operations": [{"operation": "shield.add", "actor_id": "hero_1", "amount": 8, "duration_ticks": 60, "stacking": "refresh_max"}]
+  }
+}

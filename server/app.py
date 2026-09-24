@@ -12,7 +12,7 @@ from server.betting import Betting
 from server.chat import ChatProtocol
 from server.database import database as default_database
 from server.estate.presence import EstatePresence
-from server.estate.dungeon import DungeonProtocol
+from server.dungeon.legacy_protocol import DungeonProtocol
 from server.estate.protocol import EstateProtocol
 from server.ranking import Ranking
 from server.rewards import RewardsProtocol

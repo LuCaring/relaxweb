@@ -1,0 +1,4 @@
+[
+  {"id": "beta.loot.entry", "entries": [{"item_template_id": "beta.sword.basic", "weight": 1}]},
+  {"id": "beta.loot.boss", "entries": [{"item_template_id": "beta.sword.basic", "weight": 1}]}
+]

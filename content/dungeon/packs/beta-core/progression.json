@@ -1,0 +1,16 @@
+[
+  {
+    "id": "beta.upgrade.sword",
+    "template_id": "beta.sword.basic",
+    "strategy": "fixed_level_table",
+    "rows": [
+      {
+        "from_level": 0,
+        "to_level": 1,
+        "requires_progress": "beta.clear.first_boss",
+        "costs": [{"resource_id": "wallet:coins", "amount": 200}],
+        "changes": [{"operation": "item.stat_flat", "stat": "atk", "value": 2}]
+      }
+    ]
+  }
+]

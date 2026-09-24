@@ -10,9 +10,9 @@ import sys
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
-from estate.dungeon.catalog import CATALOG  # noqa: E402
-from estate.dungeon.combat import BattleSnapshot, make_battle_snapshot, simulate  # noqa: E402
-from estate.dungeon.effects import resolve_stats  # noqa: E402
+from dungeon.legacy.catalog import CATALOG  # noqa: E402
+from dungeon.legacy.combat import BattleSnapshot, make_battle_snapshot, simulate  # noqa: E402
+from dungeon.legacy.effects import resolve_stats  # noqa: E402
 
 
 def starter_snapshot(seed_hex):

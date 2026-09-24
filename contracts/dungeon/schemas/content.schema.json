@@ -1,0 +1,56 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$defs": {
+    "id": {"type": "string", "pattern": "^[a-z][a-z0-9_]*(?:[.-][a-z][a-z0-9_]*)+$"},
+    "cost": {"type": "object", "required": ["resource_id", "amount"], "properties": {
+      "resource_id": {"type": "string", "pattern": "^(wallet:coins|material:[a-z][a-z0-9_]*(?:[.-][a-z][a-z0-9_]*)+)$"},
+      "amount": {"type": "integer", "minimum": 1, "maximum": 1000000000}
+    }, "additionalProperties": false},
+    "weapons": {"type": "array", "minItems": 1, "items": {"type": "object", "required": ["id", "name", "slot", "visual_id", "stats", "effects", "trade"], "properties": {
+      "id": {"$ref": "#/$defs/id"}, "name": {"type": "string", "minLength": 1, "maxLength": 80},
+      "slot": {"const": "weapon"}, "visual_id": {"$ref": "#/$defs/id"},
+      "stats": {"type": "object", "required": ["atk"], "properties": {"atk": {"type": "integer", "minimum": 1, "maximum": 100000}}, "additionalProperties": false},
+      "effects": {"type": "array", "uniqueItems": true, "items": {"$ref": "#/$defs/id"}},
+      "trade": {"type": "object", "required": ["allowed", "reason"], "properties": {"allowed": {"type": "boolean"}, "reason": {"type": ["string", "null"], "minLength": 1}}, "additionalProperties": false}
+    }, "additionalProperties": false}},
+    "enemies": {"type": "array", "minItems": 1, "items": {"type": "object", "required": ["id", "name", "visual_id", "hp", "attack", "boss"], "properties": {
+      "id": {"$ref": "#/$defs/id"}, "name": {"type": "string", "minLength": 1}, "visual_id": {"$ref": "#/$defs/id"},
+      "hp": {"type": "integer", "minimum": 1}, "attack": {"type": "integer", "minimum": 0}, "boss": {"type": "boolean"}
+    }, "additionalProperties": false}},
+    "encounters": {"type": "array", "minItems": 1, "items": {"type": "object", "required": ["id", "name", "enemies", "loot_pool_id"], "properties": {
+      "id": {"$ref": "#/$defs/id"}, "name": {"type": "string", "minLength": 1},
+      "enemies": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/id"}},
+      "loot_pool_id": {"$ref": "#/$defs/id"}, "clear_progress_id": {"$ref": "#/$defs/id"}
+    }, "additionalProperties": false}},
+    "effects": {"type": "array", "items": {"type": "object", "required": ["id", "kind", "trigger", "filter", "params", "limits", "stacking", "remove_policy"], "properties": {
+      "id": {"$ref": "#/$defs/id"}, "kind": {"type": "string", "minLength": 1}, "trigger": {"type": "string", "minLength": 1},
+      "filter": {"type": "object", "required": ["origin"], "properties": {"origin": {"const": "main_weapon"}}, "additionalProperties": false},
+      "params": {"type": "object"},
+      "limits": {"type": "object", "required": ["per_action", "max_proc_depth"], "properties": {"per_action": {"type": "integer", "const": 1}, "max_proc_depth": {"type": "integer", "const": 1}}, "additionalProperties": false},
+      "stacking": {"const": "refresh_max"}, "remove_policy": {"const": "remove_owned_state"}
+    }, "additionalProperties": false}},
+    "progression": {"type": "array", "minItems": 1, "items": {"type": "object", "required": ["id", "template_id", "strategy", "rows"], "properties": {
+      "id": {"$ref": "#/$defs/id"}, "template_id": {"$ref": "#/$defs/id"}, "strategy": {"const": "fixed_level_table"},
+      "rows": {"type": "array", "minItems": 1, "items": {"type": "object", "required": ["from_level", "to_level", "requires_progress", "costs", "changes"], "properties": {
+        "from_level": {"type": "integer", "minimum": 0}, "to_level": {"type": "integer", "minimum": 1},
+        "requires_progress": {"$ref": "#/$defs/id"},
+        "costs": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/cost"}},
+        "changes": {"type": "array", "minItems": 1, "items": {"type": "object", "required": ["operation", "stat", "value"], "properties": {
+          "operation": {"const": "item.stat_flat"}, "stat": {"const": "atk"}, "value": {"type": "integer", "minimum": 1, "maximum": 10000}
+        }, "additionalProperties": false}}
+      }, "additionalProperties": false}}
+    }, "additionalProperties": false}},
+    "economy": {"type": "object", "required": ["trade_policy"], "properties": {
+      "trade_policy": {"type": "object", "required": ["policy_version", "fee_bp", "minimum_price_minor", "maximum_price_minor", "ttl_seconds"], "properties": {
+        "policy_version": {"type": "integer", "minimum": 1}, "fee_bp": {"type": "integer", "minimum": 0, "maximum": 10000},
+        "minimum_price_minor": {"type": "integer", "minimum": 1}, "maximum_price_minor": {"type": "integer", "minimum": 1},
+        "ttl_seconds": {"type": "integer", "minimum": 60, "maximum": 2592000}
+      }, "additionalProperties": false}
+    }, "additionalProperties": false},
+    "loot": {"type": "array", "minItems": 1, "items": {"type": "object", "required": ["id", "entries"], "properties": {
+      "id": {"$ref": "#/$defs/id"}, "entries": {"type": "array", "minItems": 1, "items": {"type": "object", "required": ["item_template_id", "weight"], "properties": {
+        "item_template_id": {"$ref": "#/$defs/id"}, "weight": {"type": "integer", "minimum": 1, "maximum": 1000000}
+      }, "additionalProperties": false}}
+    }, "additionalProperties": false}}
+  }
+}

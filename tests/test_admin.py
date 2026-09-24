@@ -20,6 +20,7 @@ from server.rooms import settlement as settlement_module
 from server import wallet as wallet_module
 
 import server.database as storage
+from dungeon.legacy.service import dungeon_state
 
 server = create_app()
 
@@ -213,6 +214,53 @@ class AdminTests(unittest.TestCase):
             self.run_admin("edit", "alice", "username", "BOB", "-y")  # NOCASE 冲突
         with self.assertRaises(SystemExit):
             self.run_admin("edit", "alice", "username", "!", "-y")
+
+    def test_dungeon_rename_updates_legacy_owner_and_preserves_beta_user_id(self):
+        with server.database() as conn, conn:
+            dungeon_state(conn, "alice", 100)
+            user_id = conn.execute("SELECT id FROM users WHERE username='alice'").fetchone()[0]
+            item_id = conn.execute("SELECT item_id FROM dungeon_items WHERE owner='alice' LIMIT 1").fetchone()[0]
+            conn.execute("""INSERT INTO dungeon_actions
+                (username,request_id,action_type,request_hash,result_json,created_at)
+                VALUES ('alice','old-1','dungeon_lock_item','digest','{}',100)""")
+            conn.execute("INSERT INTO dungeon_beta_progress VALUES (?,'beta.clear.first_boss')", (user_id,))
+            conn.execute("""INSERT INTO dungeon_beta_receipts
+                (user_id,request_id,request_hash,status,result_json,created_at)
+                VALUES (?,'beta-1','digest','success','{}',100)""", (user_id,))
+        self.run_admin("edit", "alice", "username", "alice2", "-y")
+        with server.database() as conn:
+            self.assertEqual(conn.execute("SELECT owner FROM dungeon_items WHERE item_id=?", (item_id,)).fetchone()[0], "alice2")
+            self.assertEqual(conn.execute("SELECT username FROM dungeon_profiles").fetchone()[0], "alice2")
+            self.assertEqual(conn.execute("SELECT username FROM dungeon_loadout LIMIT 1").fetchone()[0], "alice2")
+            self.assertEqual(conn.execute("SELECT username FROM dungeon_actions WHERE request_id='old-1'").fetchone()[0], "alice2")
+            self.assertEqual(conn.execute("SELECT id FROM users WHERE username='alice2'").fetchone()[0], user_id)
+            self.assertEqual(conn.execute("SELECT user_id FROM dungeon_beta_receipts").fetchone()[0], user_id)
+
+    def test_dungeon_active_job_blocks_rename_and_delete(self):
+        with server.database() as conn, conn:
+            conn.execute("INSERT INTO dungeon_active_jobs VALUES ('alice','sweep','job-1')")
+        for args in (("edit", "alice", "username", "alice2", "-y"),
+                     ("delete", "alice", "-y")):
+            with self.subTest(args=args), self.assertRaises(SystemExit):
+                self.run_admin(*args)
+        self.assertIsNotNone(self.user_row("alice"))
+
+    def test_delete_removes_beta_user_id_rows(self):
+        with server.database() as conn, conn:
+            dungeon_state(conn, "alice", 100)
+            user_id = conn.execute("SELECT id FROM users WHERE username='alice'").fetchone()[0]
+            conn.execute("INSERT INTO dungeon_beta_progress VALUES (?,'beta.clear.first_boss')", (user_id,))
+            conn.execute("INSERT INTO dungeon_material_balances VALUES (?,'scrap',3)", (user_id,))
+            conn.execute("INSERT INTO dungeon_beta_asset_revisions VALUES (?,2)", (user_id,))
+            conn.execute("""INSERT INTO dungeon_beta_receipts
+                (user_id,request_id,request_hash,status,result_json,created_at)
+                VALUES (?,'beta-1','digest','success','{}',100)""", (user_id,))
+        self.run_admin("delete", "alice", "-y")
+        with server.database() as conn:
+            for table in ("dungeon_beta_progress", "dungeon_material_balances",
+                          "dungeon_beta_asset_revisions", "dungeon_beta_receipts"):
+                self.assertEqual(conn.execute(f"SELECT COUNT(*) FROM {table} WHERE user_id=?", (user_id,)).fetchone()[0], 0)
+            self.assertEqual(conn.execute("SELECT COUNT(*) FROM dungeon_items WHERE owner='alice'").fetchone()[0], 0)
 
     def test_edit_rejects_unknown_field(self):
         with self.assertRaises(SystemExit):
