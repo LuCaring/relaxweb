@@ -102,23 +102,25 @@ ffmpeg -re -i 你的视频源 -c:v libx264 -c:a aac \
    "voice": {
      "enabled": true,
      "url": "wss://<公网IP或域名>/lk",
+     "api_url": "http://127.0.0.1:7880",
      "api_key": "<API_KEY>",
      "api_secret": "<API_SECRET>",
      "token_ttl": 600
    }
    ```
 
-   环境变量 `VOICE_ENABLED` / `VOICE_URL` / `VOICE_API_KEY` / `VOICE_API_SECRET` 可覆盖。
-   `url` 是浏览器实际连接的地址；生产必须走 HTTPS 站点的 `wss://`（麦克风只在
-   安全上下文可用），本地测试用 `ws://127.0.0.1:7880` 即可。启动日志出现
+   环境变量 `VOICE_ENABLED` / `VOICE_URL` / `VOICE_API_URL` / `VOICE_API_KEY` /
+   `VOICE_API_SECRET` 可覆盖。`url` 是浏览器实际连接的地址；`api_url` 是聊天服务
+   访问 LiveKit 管理 API 的内网地址，用于阶段切换踢人及解散删房。生产浏览器连接
+   必须走 HTTPS 站点的 `wss://`，本地测试用 `ws://127.0.0.1:7880` 即可。启动日志出现
    `voice enabled -> …` 即生效；若提示 `livekit-api 未安装` 回到第 3 步。
 
 5. 冒烟验证（不碰业务数据）：`node scripts/probe_voice.mjs`，双假麦浏览器直连
    生产 `wss://…/lk`，断言信令、ICE UDP 直连与音频字节流动；密钥从 `LK_SECRET` 环境变量读入。
 
-6. 权限模型：语音房间按局拆分（`ww{房间ID}-day` 公开频道、`ww{房间ID}-wolf` 狼队
-   频道），用户能否加入只由游戏进程签发的短时 JWT 决定；入夜/天亮/死亡等阶段变化
-   自动换发，出局者由服务端踢出。前端 `assets/js/room-voice.js` + 自托管的
+6. 权限模型：语音房间名包含房间 ID、局号与阶段序号（`ww{房间ID}-m{局号}-v{阶段号}-day/wolf`），
+   旧令牌无法加入新阶段频道；入夜/天亮/死亡时服务端踢出旧连接并换发短时 JWT。
+   前端 `assets/js/room-voice.js` + 自托管的
    `assets/vendor/livekit-client.umd.min.js` 完成连接、上麦与说话指示。
 
 ## 6. 数据库初始化
