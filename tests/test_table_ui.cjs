@@ -99,6 +99,8 @@ console.log(`PASS Python/JavaScript parity for ${fixtures.cases.length} hands an
   await page.addInitScript(()=>{window.WebSocket=class{static OPEN=1;constructor(){this.readyState=1;}send(){}close(){}addEventListener(){}};});
   await page.goto(process.env.TEST_BASE_URL || 'http://localhost:8000/game.html');
   await page.evaluate(async()=>{
+   const main=[...document.scripts].find(script=>script.type==='module' && script.src.includes('/assets/js/main.js'));
+   await import(main.src);
    window.core=await import('/assets/js/core.js');
    core.state.currentUser={username:'p0',nickname:'我'};
    core.state.socket={readyState:1,send:data=>{window.sent.push(JSON.parse(data));}};

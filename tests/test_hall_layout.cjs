@@ -82,30 +82,54 @@ const summaries = [
       await page.screenshot({path: path.join(process.env.HALL_SCREENSHOT_DIR, `${name}.png`), fullPage: true, animations: 'disabled'});
     }
 
-    // Responsive waiting rooms must preserve every seat and the game-specific start gate.
-    for (const game of ['holdem', 'uno', 'guandan', 'mahjong']) {
-      const capacity = ['guandan', 'mahjong'].includes(game) ? 4 : 9;
+    // Every game uses the same responsive player list and its own start condition.
+    for (const game of ['holdem', 'uno', 'guandan', 'mahjong', 'ludo', 'liarsbar', 'werewolf']) {
+      const capacity = {holdem: 9, uno: 9, guandan: 4, mahjong: 4,
+        ludo: 4, liarsbar: 6, werewolf: 12}[game];
       for (const [width, height] of sizes) {
         await page.setViewportSize({width, height});
         await showRoom(room(game, capacity));
-        await fit(`${game} waiting ${width}`, '.waiting-seat, .waiting-center');
+        await fit(`${game} waiting ${width}`, '.waiting-seat');
         assert.equal(await page.locator('#gameMain [data-username]').count(), capacity);
+        assert.equal(await page.locator('.waiting-seat').count(), capacity);
+        assert.ok(await page.locator('.waiting-rules-tags').innerText());
+        assert.match(await page.locator('.waiting-roster-count').innerText(), new RegExp(`${capacity} 人已入座`));
         if (width === 1440 || width === 390) await screenshot(`waiting-${game}-${width}`);
       }
       await showRoom(room(game, 1));
       assert.equal(await page.getByRole('button', {name: '开始游戏', exact: true}).isDisabled(), true);
       await updateRoom(room(game, 2));
-      assert.equal(await page.getByRole('button', {name: '开始游戏', exact: true}).isDisabled(), capacity === 4);
+      assert.equal(await page.getByRole('button', {name: '开始游戏', exact: true}).isDisabled(),
+        ['guandan', 'mahjong', 'werewolf'].includes(game));
       await updateRoom(room(game, capacity));
       assert.equal(await page.getByRole('button', {name: '开始游戏', exact: true}).isEnabled(), true);
-      const noChips = room(game, capacity === 4 ? 4 : 2);
+      const noChips = room(game, game === 'werewolf' ? 6
+        : ['guandan', 'mahjong'].includes(game) ? 4 : 2);
       noChips.players[1].stack = 0;
       await updateRoom(noChips);
       assert.equal(await page.getByRole('button', {name: '开始游戏', exact: true}).isDisabled(), true);
+      assert.equal(await page.locator('.waiting-no-chips-badge').count(), 1);
     }
+
+    await showRoom(room('werewolf', 4));
+    assert.equal(await page.getByRole('button', {name: '开始游戏', exact: true}).isDisabled(), true);
+    assert.match(await page.locator('.waiting-room-status').innerText(), /至少需要 6/);
+    await updateRoom(room('werewolf', 7));
+    assert.equal(await page.getByRole('button', {name: '开始游戏', exact: true}).isDisabled(), true);
+    assert.match(await page.locator('.waiting-room-status').innerText(), /没有预设板子/);
+    await updateRoom({...room('werewolf', 4), rules: {board: ['werewolf', 'seer', 'witch', 'villager']}});
+    assert.equal(await page.getByRole('button', {name: '开始游戏', exact: true}).isEnabled(), true);
+    assert.match(await page.locator('.waiting-rules-tags').innerText(), /自定义 4 人板子/);
 
     await page.setViewportSize({width: 1440, height: 900});
     await showRoom(room('guandan', 3));
+    const waitingLayout = await page.evaluate(() => {
+      const panel = document.querySelector('.waiting-room').getBoundingClientRect();
+      const main = document.getElementById('gameMain').getBoundingClientRect();
+      const chat = document.getElementById('desktopRoomChat').getBoundingClientRect();
+      return {fillsMain: Math.abs(panel.width - main.width) < 2, besideChat: panel.right < chat.left};
+    });
+    assert.deepEqual(waitingLayout, {fillsMain: true, besideChat: true});
     await page.evaluate(async () => (await import('/assets/js/room-chat.js')).openChatOverlay());
     await page.evaluate(() => {
       window.existingSeat = document.querySelector('#gameMain [data-username="p0"]');
@@ -127,8 +151,8 @@ const summaries = [
     assert.equal(await page.evaluate(() => chatInput === document.getElementById('roomChatInput')), true);
     assert.equal(await page.locator('#roomChatInput').inputValue(), '保留聊天草稿');
     await page.evaluate(() => core.handleServerMessage({type: 'room_chat', room_id: 17, username: 'p1', nickname: '玩家 2', text: '大家好'}));
-    // Bubbles live on the table to escape each seat's transform stacking context.
-    const playerBubble = page.locator('.waiting-table > .seat-bubble[data-username="p1"]');
+    // Chat bubbles follow the stable player row when room snapshots arrive.
+    const playerBubble = page.locator('.waiting-seats > .seat-bubble[data-username="p1"]');
     assert.equal(await playerBubble.innerText(), '大家好');
     await updateRoom(room('guandan', 4));
     assert.equal(await playerBubble.innerText(), '大家好');
@@ -226,7 +250,7 @@ const summaries = [
     await showHall();
     assert.equal(await page.locator('#desktopRoomChat').count(), 0);
     assert.deepEqual(errors, []);
-    console.log('PASS shared hall/create/waiting responsive layouts, four game start gates, stable seats and chat, owner actions');
+    console.log('PASS shared hall/create/waiting responsive layouts, seven game start gates, stable player rows and chat, owner actions');
   } finally {
     await browser.close();
   }
