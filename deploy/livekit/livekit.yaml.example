@@ -1,0 +1,15 @@
+# LiveKit 生产配置模板(2026-09-24 生产实装验证,server 1.13.7)
+# 复制到 /etc/livekit/livekit.yaml,替换 <公网IP>/<API_KEY>/<API_SECRET>
+# (secret 建议 openssl rand -hex 32;文件权限 root:admin 640)
+port: 7880
+rtc:
+  tcp_port: 7881
+  port_range_start: 50000
+  port_range_end: 50100
+  # NAT 云(公网 IP 与网卡 IP 不同)静态写公网 IP,不依赖 STUN。
+  # 注意 1.13.7 实测:必须是标量写法;`ips: {binds: [...], resolves: [...]}` 结构体
+  # 能通过解析但不作用于 ICE 候选(候选仍宣告私网 IP)。
+  use_external_ip: false
+  node_ip: <公网IP>
+keys:
+  <API_KEY>: <API_SECRET>

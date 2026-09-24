@@ -34,13 +34,15 @@ server {
         proxy_set_header X-Forwarded-Proto https;
     }
 
-    # LiveKit 信令(部署语音层后取消注释,LiveKit 绑 127.0.0.1:7880,
-    # 同时把 config.json 的 voice.url 设为 wss://<公网IP或域名>/lk)
+    # LiveKit 信令:443 同端口反代到 loopback(装好 LiveKit 后取消注释;
+    # config.json 的 voice.url 设为 wss://<公网IP或域名>/lk;媒体走 UDP 50000-50100 直连公网)
     #location /lk/ {
     #    proxy_pass http://127.0.0.1:7880/;
     #    proxy_http_version 1.1;
     #    proxy_set_header Upgrade $http_upgrade;
     #    proxy_set_header Connection "upgrade";
+    #    proxy_read_timeout 3600s;
+    #    proxy_send_timeout 3600s;
     #}
 }
 

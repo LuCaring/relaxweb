@@ -1,0 +1,16 @@
+[Unit]
+Description=LiveKit SFU (werewolf voice)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=admin
+Group=admin
+ExecStart=/usr/local/bin/livekit-server --config=/etc/livekit/livekit.yaml
+Restart=always
+RestartSec=3
+LimitNOFILE=65536
+
+[Install]
+WantedBy=multi-user.target

@@ -69,7 +69,10 @@ ffmpeg -re -i 你的视频源 -c:v libx264 -c:a aac \
 狼人杀等房间的实时语音走自托管 [LiveKit](https://github.com/livekit/livekit)（Apache-2.0）。
 语音关闭时整条链路为空操作，不影响其他功能。
 
-1. 安装 LiveKit 并用 systemd 常驻，最小 `livekit.yaml`：
+1. 安装 LiveKit 并用 systemd 常驻。CN 网络服务器直连 GitHub 往往不通，可在本地解析
+   release 资产的 302 直链（`objects.githubusercontent.com` 通常可达）后让服务器直接
+   `curl -L` 下载。模板见 `deploy/livekit/livekit.yaml.example`、
+   `deploy/systemd/livekit.service.example`，最小 `livekit.yaml`：
 
    ```yaml
    port: 7880
@@ -77,18 +80,28 @@ ffmpeg -re -i 你的视频源 -c:v libx264 -c:a aac \
      tcp_port: 7881
      port_range_start: 50000
      port_range_end: 50100
-     use_external_ip: true
+     # NAT 云（如阿里云）静态写公网 IP；1.13.7 实测必须用标量写法，
+     # ips: {binds, resolves} 结构体能通过解析但不作用于 ICE 候选
+     use_external_ip: false
+     node_ip: <公网IP>
    keys:
      <API_KEY>: <API_SECRET>
    ```
 
-2. 防火墙/安全组放行：TCP 7880（信令，HTTPS 后经 nginx 反代）、UDP 50000-50100（媒体）。
-3. `config.json` 增加：
+2. 防火墙/安全组放行：UDP 50000-50100（媒体；LiveKit 按**会话**从该段分配独立 UDP
+   端口，必须整段放行，不能只开起始端口）。TCP 7880 无需对公网开放：信令经 nginx
+   `/lk/` 反代（见 `deploy/nginx/relaxweb.conf.example`），7880 只绑本机。
+
+3. chat 服务运行用户安装 `livekit-api`（`server/voice_livekit.py` 签发 JWT 用）。
+   系统统 Python 部署用 `pip3 install --user livekit-api`（CN 服务器加
+   `-i https://mirrors.aliyun.com/pypi/simple/`），装完重启 live-chat。
+
+4. `config.json` 增加：
 
    ```json
    "voice": {
      "enabled": true,
-     "url": "ws://127.0.0.1:7880",
+     "url": "wss://<公网IP或域名>/lk",
      "api_key": "<API_KEY>",
      "api_secret": "<API_SECRET>",
      "token_ttl": 600
@@ -97,9 +110,13 @@ ffmpeg -re -i 你的视频源 -c:v libx264 -c:a aac \
 
    环境变量 `VOICE_ENABLED` / `VOICE_URL` / `VOICE_API_KEY` / `VOICE_API_SECRET` 可覆盖。
    `url` 是浏览器实际连接的地址；生产必须走 HTTPS 站点的 `wss://`（麦克风只在
-   安全上下文可用），本地测试用 `ws://127.0.0.1:7880` 即可。
+   安全上下文可用），本地测试用 `ws://127.0.0.1:7880` 即可。启动日志出现
+   `voice enabled -> …` 即生效；若提示 `livekit-api 未安装` 回到第 3 步。
 
-4. 权限模型：语音房间按局拆分（`ww{房间ID}-day` 公开频道、`ww{房间ID}-wolf` 狼队
+5. 冒烟验证（不碰业务数据）：`node scripts/probe_voice.mjs`，双假麦浏览器直连
+   生产 `wss://…/lk`，断言信令、ICE UDP 直连与音频字节流动；密钥从 `LK_SECRET` 环境变量读入。
+
+6. 权限模型：语音房间按局拆分（`ww{房间ID}-day` 公开频道、`ww{房间ID}-wolf` 狼队
    频道），用户能否加入只由游戏进程签发的短时 JWT 决定；入夜/天亮/死亡等阶段变化
    自动换发，出局者由服务端踢出。前端 `assets/js/room-voice.js` + 自托管的
    `assets/vendor/livekit-client.umd.min.js` 完成连接、上麦与说话指示。

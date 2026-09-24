@@ -164,3 +164,41 @@ LiveKit 与 MediaMTX 同为 SFU，出口带宽同级；混音（F）在大量观
 必要故障测试：LiveKit 进程重启后的客户端自动重连、token 过期中途的续签、上帝禁言与本地静音的状态一致性、房间解散的 `remove_participant` 清理、iOS Safari 与 Android Chrome 真机（微信内置浏览器风险最高——WKWebView 的 `getUserMedia` 支持差，产品上引导"用系统浏览器打开"）。
 
 下一步默认切片：**V0（HTTPS）→ V0.5（LiveKit 试部署，成本半天）→ V1（探针）**。V0.5 的半天试运行足以验证 E 的全部运维假设，再决定是否锁定 E，避免在 F/B 上投入后返工。
+
+## 7. V0.5 部署记录（2026-09-24，裸 IP HTTPS 已就绪后执行）
+
+前置：全站 HTTPS 已落地（`docs/https-ip-rollout.md`），`https://<公网IP>` 统一入口，
+麦克风的安全上下文前提满足。
+
+### 7.1 落地内容
+
+| 组件 | 结果 |
+| --- | --- |
+| livekit-server 1.13.7 | `/usr/local/bin/livekit-server`，systemd `livekit.service` enabled；配置 `/etc/livekit/livekit.yaml`（模板 `deploy/livekit/livekit.yaml.example`） |
+| nginx 信令反代 | `/etc/nginx/sites-available/relaxweb` 启用 `location /lk/` → `127.0.0.1:7880`（读/写超时 3600s），443 同端口对外 |
+| chat 服务语音层 | `config.json` 增 `voice` 段（`wss://<公网IP>/lk`），live-chat 重启后日志 `voice enabled -> wss://…/lk (ttl 600s)` |
+| livekit-api | 生产为系统 Python，`pip3 install --user livekit-api`（阿里云镜像），装进 `~/.local` 服务即可见 |
+| 安全组 | UDP 50000-50100 已实测放行（ICE 直连成功即证明）；TCP 7880 未对公网开放，只走反代 |
+
+### 7.2 踩坑与实测结论
+
+1. **`rtc.node_ip` 必须用标量写法**（`node_ip: <公网IP>`）。1.13.7 的 `ips: {binds, resolves}`
+   结构体虽能通过严格解析，但**不作用于 ICE 候选**（候选仍宣告私网 IP，客户端黑屏/连不上）。
+   标量写法实测候选全部变为指定公网 IP。另：`use_external_ip` 依赖境外 STUN，CN 服务器不可靠。
+2. **UDP 端口按会话分配**：每个参会者从 `port_range`（50000-50100）拿独立端口，安全组必须
+   整段放行；空闲时 `ss -ulnp` 看不到监听属正常（懒分配）。
+3. CN 服务器直连 GitHub release 不通：本地解析 302 签名直链（`objects.githubusercontent.com`
+   可达）后服务器 `curl -L` 下载，或本机下载后 scp（本机 `~/.ssh/office` 密钥已加入服务器
+   admin 的 authorized_keys）。
+4. nginx 对 `/lk/` 的 `proxy_read/send_timeout` 给到 3600s，信令长连接不被默认 60s 掐断。
+
+### 7.3 验证
+
+- 本地回归：`tests/test_voice.py` 20 passed、`tests/test_werewolf.py` 16 passed、
+  四浏览器 `tests/test_werewolf_voice.cjs` PASS（夜狼独占频道 / 天亮互听 / 假麦音轨往返）。
+- 生产冒烟：`scripts/probe_voice.mjs`（双假麦直连 `wss://<公网IP>/lk`，
+  不创建游戏房间、不碰 users.db）→ PASS 信令、PASS 订阅、
+  ICE UDP 直连 `<公网IP>:500xx`（无中继）、音频字节流动。
+  密钥经 `LK_KEY`/`LK_SECRET` 环境变量注入，不落仓库。
+- 待办：真机多端（iOS Safari / Android Chrome）真麦首局联调；按 runbook §10 在 HTTPS
+  稳定数日后关闭公网 8000。
