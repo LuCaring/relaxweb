@@ -139,6 +139,7 @@ class RoomProtocol:
         self.settlement.set_escrow(username, room.id, buy_in)
         logger.info("game room %s created by %s", room.id, username)
         await self.hub.send_json(websocket, {"type": "game_joined", "room": room.view_for(username)})
+        await self._refresh_voice(room, username)
         await self.rooms.broadcast_room_list()
 
     async def handle_join_room(self, websocket, state, data):

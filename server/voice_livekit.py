@@ -1,7 +1,7 @@
 """LiveKit 语音适配层：把房间的语音计划变成 token 签发与订阅授权。
 
 权限模型（docs/werewolf-voice-design.md）：
-  - 频道 = LiveKit 房间（werewolf: ww{room_id}-day / ww{room_id}-wolf）；
+  - 频道 = LiveKit 房间（狼人杀等待区 lobby、对局中的 day / wolf）；
   - 用户能否进某个 LiveKit 房间只由游戏进程签发的短时 JWT 决定，
     改版客户端拿不到 token 就进不去；
   - 离桌/解散由 remove_participant 尽力踢出，token 短时效兜底。

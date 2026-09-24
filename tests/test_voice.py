@@ -2,7 +2,7 @@
 """LiveKit 语音适配层单元测试：python3 tests/test_voice.py
 
 只测纯逻辑与签发差分（不起 LiveKit 服务器）：
-  - werewolf voice_plan：白天/狼夜/死亡/观战 → LiveKit 房间与发言权
+  - werewolf voice_plan：等待区/白天/狼夜/死亡/观战 → LiveKit 房间与发言权
   - VoiceService 差分签发：计划变化换发、未变化不重发、半衰期续签、
     离桌踢出、禁用时空操作
   - 真实 mint_token（livekit-api 已安装）：JWT 可解码且授予对应房间权限
@@ -123,6 +123,43 @@ def test_voice_plan():
     check("plan_key 稳定可比较", plan_key({"ww42-day": True})
           == plan_key({"ww42-day": True}) and plan_key({"a": True})
           != plan_key({"a": False}))
+
+
+def test_waiting_voice():
+    async def run():
+        hub = FakeHub()
+        service, kicks = make_service(hub)
+        room = make_room()
+        owner_view = room.view_for("a")["voice"]
+        waiting = room.voice_plan("a")
+        outsider = room.voice_plan("outsider")
+        watcher = room.voice_plan("watcher")
+        # 建房后单独给房主签发；其他玩家加入时由房间广播签发。
+        await service.sync_user(room, "a", force=True)
+        owner_token = hub.sent["a"][-1]
+        await service.sync_room(room)
+        joined = hub.sent["b"][-1]
+        await room.start()
+        await service.sync_room(room)
+        after_start = hub.sent["a"][-1]
+        return (owner_view, waiting, outsider, watcher, owner_token,
+                joined, after_start, kicks, service.rooms_seen[room.id])
+
+    (owner_view, waiting, outsider, watcher, owner_token,
+     joined, after_start, kicks, seen) = run_identity_shuffle(run)
+    check("等待区成员可发言，非成员无授权", owner_view
+          == {"channel": "lobby", "can_speak": True}
+          and waiting == {"ww42-lobby": True} and outsider == {}
+          and watcher == {})
+    check("建房房主与加入玩家立即收到等待区令牌",
+          owner_token["room"] == joined["room"] == "ww42-lobby"
+          and owner_token["can_publish"] is True
+          and joined["can_publish"] is True)
+    check("开局撤销等待区连接并切换阶段频道",
+          ("ww42-lobby", "a") in kicks
+          and ("ww42-lobby", "b") in kicks
+          and after_start["room"] != "ww42-lobby"
+          and "ww42-lobby" in seen)
 
 
 # ---- VoiceService 差分 ----
@@ -246,7 +283,7 @@ def test_admin_cleanup():
 
         service._client = FakeClient()
         await service._kick_room("ww42-m1-v1-day", "alice")
-        service.rooms_seen[42] = {"ww42-m1-v1-day", "ww42-m1-v2-wolf"}
+        service.rooms_seen[42] = {"ww42-lobby", "ww42-m1-v1-day", "ww42-m1-v2-wolf"}
         await service.close_room(42)
         await service.aclose()
         return removed, deleted
@@ -254,11 +291,12 @@ def test_admin_cleanup():
     removed, deleted = asyncio.run(run())
     check("LiveKit 管理接口可踢人与删房", removed
           == [("ww42-m1-v1-day", "alice")]
-          and set(deleted) == {"ww42-m1-v1-day", "ww42-m1-v2-wolf"})
+          and set(deleted) == {"ww42-lobby", "ww42-m1-v1-day", "ww42-m1-v2-wolf"})
 
 
 def main():
     test_voice_plan()
+    test_waiting_voice()
     test_service_diff()
     test_service_disabled()
     test_mint_token_real()

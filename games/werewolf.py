@@ -223,6 +223,7 @@ class WerewolfRoom(BaseRoom):
         g = self.game if isinstance(self.game, dict) else None
         view = self._public_view()
         if not g:
+            view["voice"] = self.voice_view(username)
             return view
         me_role = g["roles"].get(username)
         for row in view["players"]:
@@ -356,6 +357,8 @@ class WerewolfRoom(BaseRoom):
         channel = view["channel"]
         if not channel:
             return {}
+        if channel == "lobby":
+            return {f"ww{self.id}-lobby": True}
         g = self.game
         return {f"ww{self.id}-m{g['match_no']}-v{g['voice_epoch']}-{channel}":
                 bool(view["can_speak"])}
@@ -372,6 +375,8 @@ class WerewolfRoom(BaseRoom):
 
     def voice_view(self, username):
         """语音频道分配：LiveKit 适配层据此签发 token / 建立订阅（V3）。"""
+        if self.status == "waiting" and self.has_member(username):
+            return {"channel": "lobby", "can_speak": True}
         g = self.game
         if not g or self.status != "playing" or g["phase"] == "showdown":
             return {"channel": None, "can_speak": False}
