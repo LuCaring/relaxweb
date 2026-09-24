@@ -39,7 +39,7 @@ window.setInterval(refreshPhaseClock, 1000);
 document.addEventListener("voicespeakers", (event) => {
   if (state.myRoom?.game_type !== "werewolf") return;
   speakingSet = new Set(event.detail || []);
-  document.querySelectorAll("#gameMain .ww-seat").forEach((seat) => {
+  document.querySelectorAll("#gameMain .ww-seat, #gameMain .waiting-room[data-game='werewolf'] .waiting-seat").forEach((seat) => {
     seat.classList.toggle("speaking", speakingSet.has(seat.dataset.username));
   });
 });

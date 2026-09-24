@@ -13,6 +13,7 @@ let current = null;        // 当前 LiveKit Room
 let currentKey = "";       // url|room|发布权限，防止重复连接
 let canPublish = false;
 let audioBlocked = false;
+let micError = "";
 const remoteAudio = new Map();
 let updateQueue = Promise.resolve();
 
@@ -25,7 +26,17 @@ export function voiceConnected() {
 }
 
 export function voiceStatus() {
-  return { connected: Boolean(current), canPublish, audioBlocked };
+  return { connected: Boolean(current), canPublish, audioBlocked, micError };
+}
+
+function microphoneError(error) {
+  if (error?.name === "NotAllowedError" || error?.name === "PermissionDeniedError") {
+    return "麦克风权限被拒绝，请在浏览器地址栏允许后重试";
+  }
+  if (error?.name === "NotFoundError" || error?.name === "DevicesNotFoundError") {
+    return "未检测到麦克风，请检查设备连接";
+  }
+  return "麦克风无法启用，请检查设备或浏览器权限";
 }
 
 export async function enableVoiceAudio() {
@@ -68,6 +79,7 @@ export async function toggleMic() {
   // 两项浏览器授权都在点击调用栈中启动，避免等待播放后丢失用户手势。
   void enableVoiceAudio();
   mic.wanted = !mic.wanted;
+  micError = "";
   if (mic.wanted && !mic.primed) {
     // 首次上麦在点击手势里预热权限，后续自动恢复发布不再需要手势
     try {
@@ -76,8 +88,9 @@ export async function toggleMic() {
       });
       stream.getTracks().forEach((track) => track.stop());
       mic.primed = true;
-    } catch {
+    } catch (error) {
       mic.wanted = false;
+      micError = microphoneError(error);
       announceState();
       return mic.wanted;
     }
@@ -94,6 +107,7 @@ async function applyMic() {
   } catch (error) {
     console.warn("voice mic toggle failed", error);
     mic.wanted = false;
+    micError = microphoneError(error);
     announceState();
   }
 }
@@ -196,6 +210,7 @@ async function disconnect(reason) {
 
 export async function leaveVoice() {
   mic.wanted = false;
+  micError = "";
   await disconnect("left game room");
 }
 

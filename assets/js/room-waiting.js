@@ -4,6 +4,7 @@ import { elements, formatCoins, formatCoinsWhole, isRoomOwner, ratingBadge, send
 import { gameMetaById } from "./game-config.js";
 import { gameView } from "./registry.js";
 import { chatOpenButton } from "./room-chat.js";
+import { enableVoiceAudio, toggleMic, voiceMicWanted, voiceStatus } from "./room-voice.js";
 
 const FOUR_SEAT_POSITIONS = ["bottom", "left", "top", "right"];
 
@@ -123,6 +124,24 @@ function startRule(room, meta) {
   return { count: room.players.filter((player) => player.stack > 0).length, minimum: 2, text: "至少需要 2 名有筹码的玩家。" };
 }
 
+function refreshWaitingVoice(root, room) {
+  const panel = root.querySelector(".waiting-voice");
+  panel.hidden = room.game_type !== "werewolf" || !window.LIVE_CONFIG?.voice?.enabled;
+  if (panel.hidden) return;
+  const status = voiceStatus();
+  const on = status.connected && status.canPublish && voiceMicWanted();
+  const button = panel.querySelector(".waiting-voice-mic");
+  button.disabled = !status.connected || !status.canPublish;
+  button.classList.toggle("on", on);
+  button.textContent = on ? "🎙 关闭麦克风" : "🎙 开启麦克风";
+  button.setAttribute("aria-pressed", String(on));
+  panel.querySelector(".waiting-voice-status").textContent = !status.connected
+    ? "语音连接中，连接后可测试麦克风"
+    : status.micError || (on ? "麦克风已开启，可以和房内玩家交谈" : "已连接 · 麦克风关闭");
+  const audio = panel.querySelector(".waiting-voice-audio");
+  audio.hidden = !status.audioBlocked;
+}
+
 function refreshWaitingRoom(root) {
   const room = state.myRoom;
   if (!room) return;
@@ -156,6 +175,7 @@ function refreshWaitingRoom(root) {
   hint.textContent = isRoomOwner()
     ? (missing ? `${rule.text}还需 ${missing} 名有筹码的玩家，当前空位 ${waiting} 个。` : "人数已满足，可以开始游戏。")
     : (game?.waitingHint || "等待房主开局。");
+  refreshWaitingVoice(root, room);
 }
 
 export function renderRoomLobby() {
@@ -181,6 +201,31 @@ export function renderRoomLobby() {
     table.append(seats, center);
     const controls = document.createElement("div");
     controls.className = "waiting-room-controls";
+    const voice = document.createElement("div");
+    voice.className = "waiting-voice";
+    const voiceInfo = document.createElement("div");
+    voiceInfo.className = "waiting-voice-info";
+    const voiceTitle = document.createElement("strong");
+    voiceTitle.textContent = "开局前语音调试";
+    const voiceHint = document.createElement("span");
+    voiceHint.textContent = "等待区可以自由聊天；开局后会自动切换到游戏语音频道。";
+    voiceInfo.append(voiceTitle, voiceHint);
+    const voiceActions = document.createElement("div");
+    voiceActions.className = "waiting-voice-actions";
+    const voiceStatusText = document.createElement("span");
+    voiceStatusText.className = "waiting-voice-status";
+    voiceStatusText.setAttribute("aria-live", "polite");
+    const voiceAudio = document.createElement("button");
+    voiceAudio.className = "waiting-voice-audio";
+    voiceAudio.type = "button";
+    voiceAudio.textContent = "🔊 开启声音";
+    voiceAudio.addEventListener("click", () => { void enableVoiceAudio(); });
+    const voiceMic = document.createElement("button");
+    voiceMic.className = "waiting-voice-mic";
+    voiceMic.type = "button";
+    voiceMic.addEventListener("click", () => { void toggleMic(); });
+    voiceActions.append(voiceStatusText, voiceAudio, voiceMic);
+    voice.append(voiceInfo, voiceActions);
     const start = document.createElement("button");
     start.className = "login-submit waiting-start";
     start.type = "button";
@@ -188,7 +233,7 @@ export function renderRoomLobby() {
     start.addEventListener("click", () => send({ type: "start_game" }));
     const hint = document.createElement("div");
     hint.className = "game-hint waiting-room-hint";
-    controls.append(start, hint);
+    controls.append(voice, start, hint);
     root.append(info, title, table, controls);
     body.append(root);
     body.append(chatOpenButton());

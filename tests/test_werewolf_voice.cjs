@@ -1,7 +1,7 @@
 // Run: node tests/test_werewolf_voice.cjs
 // 狼人杀语音端到端：本地 livekit-server --dev + chat_server + 静态服务，
-// 四浏览器（假麦克风）真实开局：夜晚狼人独占 wolf 频道、天亮全员进
-// day 频道并互听对方假麦音轨。角色由服务端随机分发，断言以视图为准。
+// 四浏览器（假麦克风）建房后先在 lobby 频道互听，再真实开局：
+// 夜晚狼人独占 wolf 频道、天亮全员进 day 频道并互听假麦音轨。
 // livekit-server 不在 PATH 时 SKIP。
 const assert = require('node:assert/strict');
 const { execFileSync, spawn, spawnSync } = require('node:child_process');
@@ -226,10 +226,28 @@ print(json.dumps({n: accounts.create_session(n) for n in names}))
     }));
     await players.va.page.waitForFunction(() => core.state.myRoom?.room_id);
     const roomId = await players.va.page.evaluate(() => core.state.myRoom.room_id);
+    await players.va.page.waitForFunction(() => voice.voiceDebug().room?.endsWith('-lobby'));
+    assert.equal(await players.va.page.locator('.waiting-voice').isVisible(), true);
+    assert.equal(await players.va.page.locator('.waiting-voice-mic').isDisabled(), false);
     for (const name of ['vb', 'vc', 'vd']) {
       await players[name].page.evaluate((id) => core.send({ type: 'join_room', room_id: id }), roomId);
       await players[name].page.waitForFunction((id) => core.state.myRoom?.room_id === id, roomId);
     }
+    for (const name of Object.keys(players)) {
+      await players[name].page.waitForFunction(() => voice.voiceDebug().room?.endsWith('-lobby'));
+    }
+    // 等待区就能开启麦克风，并实际收到另一名玩家发布的音轨。
+    for (const name of ['va', 'vb']) {
+      await players[name].page.locator('.waiting-voice-mic').click();
+      await players[name].page.waitForFunction(() => voice.voiceDebug().micPublished);
+    }
+    for (const name of ['va', 'vb']) {
+      await players[name].page.waitForFunction(() => voice.voiceDebug().remoteAudio >= 1
+        && [...document.querySelectorAll('audio[data-voice-peer]')]
+          .some((element) => !element.paused && element.readyState >= 2));
+      assert.match(await players[name].page.locator('.waiting-voice-status').innerText(), /麦克风已开启/);
+    }
+    console.log('PASS lobby: creator and joiners share voice; two microphones publish and play audio');
 
     // 开局 → 第一夜
     await players.va.page.evaluate(() => core.send({ type: 'start_game' }));
@@ -253,7 +271,7 @@ print(json.dumps({n: accounts.create_session(n) for n in names}))
     await players[wolf].page.waitForFunction(
       () => voice.voiceDebug().connected && voice.voiceDebug().room.endsWith('-wolf'));
     await sleep(600);
-    for (const name of ['vb', 'vc', 'vd']) {
+    for (const name of Object.keys(players)) {
       if (name === wolf) continue;
       const state = await players[name].page.evaluate(() => voice.voiceDebug());
       assert.equal(state.connected, false, `${name}(${roleOf[name]}) must hold no voice token at night`);
@@ -281,7 +299,7 @@ print(json.dumps({n: accounts.create_session(n) for n in names}))
     // 狼人与预言家上麦（假麦克风）：发布本机麦克风并订阅到对方音轨
     for (const name of [wolf, seer]) {
       const wanted = await players[name].page.evaluate(async () => {
-        const result = await voice.toggleMic();
+        const result = voice.voiceMicWanted() || await voice.toggleMic();
         return { wanted: result, debug: voice.voiceDebug() };
       });
       console.log(`[mic ${name}]`, JSON.stringify(wanted));

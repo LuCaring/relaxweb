@@ -21,7 +21,7 @@ import "./games/guandan.js";
 import "./games/mahjong.js";
 import "./games/ludo.js?v=2";
 import "./games/liarsbar.js?v=2";
-import "./games/werewolf.js?v=2";
+import "./games/werewolf.js?v=3";
 import "./estate/view.js";
 
 initializeGameAudio();

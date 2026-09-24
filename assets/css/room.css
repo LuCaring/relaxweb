@@ -878,6 +878,18 @@
 .waiting-seat-stack { color:#8b6418; font-size:12px; font-weight:750; font-variant-numeric:tabular-nums; white-space:nowrap; }
 .waiting-center { position:absolute; left:28%; top:39%; display:flex; align-items:center; justify-content:center; width:44%; min-height:54px; padding:10px; border:1px solid #ffffff91; border-radius:14px; background:#ffffffb5; color:#4b6860; font-size:13px; font-weight:700; text-align:center; line-height:1.5; }
 .waiting-room-controls { display:flex; flex-direction:column; gap:8px; margin-top:14px; padding:15px 17px; border:1px solid #e4e9eb; border-radius:14px; background:#fff; }
+.waiting-voice { display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:10px 16px; padding:12px 14px; border:1px solid #d6e9df; border-radius:11px; background:#f3fbf7; }
+.waiting-voice[hidden], .waiting-voice-audio[hidden] { display:none; }
+.waiting-voice-info { display:flex; flex-direction:column; gap:3px; color:#285841; font-size:12px; }
+.waiting-voice-info strong { font-size:14px; }
+.waiting-voice-actions { display:flex; align-items:center; flex-wrap:wrap; gap:8px; }
+.waiting-voice-status { color:#486457; font-size:12px; }
+.waiting-voice-mic, .waiting-voice-audio { min-height:34px; padding:6px 12px; border:1px solid #91b9a4; border-radius:8px; background:#fff; color:#285841; font:inherit; font-size:12px; font-weight:750; cursor:pointer; }
+.waiting-voice-mic:hover, .waiting-voice-audio:hover { background:#e5f4eb; }
+.waiting-voice-mic:disabled { opacity:.55; cursor:default; }
+.waiting-voice-mic.on { border-color:#1d6b4c; background:#1d6b4c; color:#fff; }
+.waiting-voice-mic:focus-visible, .waiting-voice-audio:focus-visible { outline:3px solid #b491ff; outline-offset:2px; }
+.waiting-room[data-game="werewolf"] .waiting-seat.speaking { border-color:#36b879; box-shadow:0 0 0 3px #5fd39a88, 0 5px 16px #183b2d20; }
 .waiting-start { width:100%; margin:0; }
 .waiting-start:disabled { opacity:.5; cursor:not-allowed; }
 .waiting-room-hint { margin:0; }
