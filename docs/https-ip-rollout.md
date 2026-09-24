@@ -154,6 +154,14 @@ server {
 }
 
 # ---- LiveKit 信令：占位已并入上方 443 server 块的 /lk/ ----
+
+# ---- 老入口 http://IP:8000 → 302 跳转 HTTPS ----
+# live-web 配 servers.web_host=127.0.0.1 后，8000 公网面由此块接管。
+# 用 302 而非 301：临时跳转不被浏览器缓存，保住 §10 的明文回滚路径。
+server {
+    listen <私网IP>:8000;
+    return 302 https://<公网IP>$request_uri;
+}
 ```
 
 LiveKit 启用时的配置对齐（语音层 `server/voice_livekit.py` 已实现并合入）：nginx 挂上
@@ -250,11 +258,13 @@ fi
   安全上下文门槛已过，真机上将正常弹权限框，V0 目标达成。
 - 已知非问题：`OPTIONS /xiaopang/whep` 返回 500，TLS 前后行为一致（MediaMTX +
   http auth 的固有行为），浏览器拉流流程不受影响。
-- **老入口半失效（预期行为，需引导用户切换）**：`http://IP:8000` 仍能打开静态页，
-  但页面协议为 http 时前端会发起 `ws://IP:8765` 与 `http://IP:8889` 明文请求，
-  撞上 nginx 的 TLS 监听返回 400——聊天/游戏/直播在老入口不可用。8000 只是
-  **静态页回退通道**；完整回滚按 §10（后端绑回 0.0.0.0）。正常使用一律走
-  `https://<公网IP>`（切换后需重新登录一次）。
+- **老入口跳转（2026-09-24 二次变更）**：`deploy/serve.py` 新增 `servers.web_host`
+  配置（commit c799819，默认仍 0.0.0.0），生产配 127.0.0.1；nginx 绑私网 IP:8000
+  对老地址返回 **302** `https://<公网IP>$request_uri`（路径/参数保留，实测
+  浏览器从 `http://IP:8000/game` 落地 `https://IP/game` 且 WSS 正常）。选 302 不选
+  301 是为了浏览器不缓存，§10 回滚时老入口可立即恢复明文。其余进程端口零改动
+  （chat 8765 / auth 8001 / MediaMTX 8889 / ACME 80 均未动）。
+  注意：§10 收尾关闭安全组 8000 后此跳转随之消失，属预期。
 - 续期链自检记录（2026-09-24 复核）：socat 的 cap_net_bind_service 在位、五个
   systemd 单元均 enabled（重启存活）、acme.sh cron 每天 4 次、看门狗每日 9 点。
   唯一断链向量：apt 升级 socat 会替换二进制并丢失 setcap → 续期开始失败，
