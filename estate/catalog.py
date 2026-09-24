@@ -89,7 +89,7 @@ FERTILIZER_MINE_CHANCE = .01
 LAND_UPGRADE_TICKET = "supply:land_upgrade_ticket"
 LOTTERY_PRICE = 3000.0
 LOTTERY_PRIZES = ("thanks", "coins_250", "coins_1000", "coins_2000",
-                  "legendary_seed", "missing_collectible", "fertilizer_5", "grand")
+                  "legendary_seed", "missing_collectible", "fertilizer_2", "grand")
 LOTTERY_GRAND_PRIZES = (
     ("coins_100000", 10), ("reroll", 40), ("land_ticket", 10),
     ("coins_5000", 20), ("coins_10000", 20),

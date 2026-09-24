@@ -25,7 +25,7 @@ def draw_lottery(conn, username, request_id, now, adjust_coins):
     def mutate():
         profile = load_profile(conn, username)
         # 所有奖项统一要求足够存下最大的实物奖，避免满仓玩家筛掉实物奖。
-        require_capacity(conn, username, profile, 5)
+        require_capacity(conn, username, profile, 2)
         debit(adjust_coins, conn, username, LOTTERY_PRICE,
               "休闲庄园抽奖马戏团", request_id)
         spins = []
@@ -53,9 +53,9 @@ def draw_lottery(conn, username, request_id, now, adjust_coins):
         elif award == "legendary_seed":
             change_inventory(conn, username, seed_item("legendary_flower"), 1)
             result.update({"item_id": seed_item("legendary_flower"), "quantity": 1})
-        elif award == "fertilizer_5":
-            change_inventory(conn, username, FERTILIZER_ITEM, 5)
-            result.update({"item_id": FERTILIZER_ITEM, "quantity": 5})
+        elif award == "fertilizer_2":
+            change_inventory(conn, username, FERTILIZER_ITEM, 2)
+            result.update({"item_id": FERTILIZER_ITEM, "quantity": 2})
         elif award == "land_ticket":
             change_inventory(conn, username, LAND_UPGRADE_TICKET, 1)
             result.update({"item_id": LAND_UPGRADE_TICKET, "quantity": 1})
