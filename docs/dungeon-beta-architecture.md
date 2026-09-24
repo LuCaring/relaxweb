@@ -4,31 +4,22 @@
 
 目标：在现有 Python＋SQLite＋WebSocket＋原生ES Module 部署内，建立与庄园平级的地下城模块。保留共享账号/金币，支持权威动作模拟、参数化成长与玩家资产交易。以小步迁移换取可并行开发，先不引入微服务、消息中间件、通用脚本语言或全站引擎重写。
 
-## 1. 当前基线与具体缺口
+## 1. 当前底座与剩余约束
 
-检查基线：`dev/dungeon-core@97ca8f8`。UI参考是本地缓存 `origin/dev/dungeon-ui@fecd439`，公共祖先 `35ddde7`；未在本次任务中拉取远端或变更分支。
+公共底座提交为 `8309c0e`，三条现行分支和合并规则见[开发指南](dungeon-beta-development-guide.md#7-分支与合并规则)。旧UI参考保存在 `archive/dungeon-ui-before-beta`，不能将其旧目录实现覆盖到新的兼容入口。
 
-| 现有位置 | 已有能力 | 重构动作 |
+| 位置 | 已实现 | 后续工作 |
 | --- | --- | --- |
-| `estate/dungeon/combat.py` | 单玩家/单敌人的确定性时间轴与快照 | 保留旧模拟器；动作版新增空间/输入/碰撞模拟器，不继续往旧循环塞分支 |
-| `estate/dungeon/effects.py` | 仅passive、stat_flat、stat_add_bp | 抽出规则类型，增加纯机制注册接口；未知效果仍须拒绝 |
-| `estate/dungeon/catalog.py` | Python内嵌目录、配置校验与公开裁剪 | 旧目录保留；Beta读schema校验后的内容包，再编译为只读规则集 |
-| `estate/dungeon/actions.py`、`receipts.py` | 单账号幂等、装备操作和版本检查 | 提炼应用用例与仓储，补跨账号成交、物品预留及新回执版本 |
-| `estate/dungeon/runs.py` | 服务器现实时间补算、暂停/倍速、一次性战斗发奖 | 旧语义留给旧局；Beta独立run表与运行宿主，分房奖励 |
-| `estate/dungeon/schema.py` | 装备/穿戴/旧局/奖励/回执等表，部分ALTER兼容 | 引入有编号的迁移，保留既有数据和旧回执 |
-| `server/estate/dungeon.py` | 鉴权、异步入口、线程执行SQLite、事务与推送 | 迁出庄园目录，拆旧协议适配与Beta协议适配 |
-| `server/wallet.py` | `adjust_coins(conn, ...)`在调用方事务中改余额和记流水 | 经钱包端口复用，不能在插件里直调或另开事务 |
-| `server/app.py`、`schema.py` | 显式模块装配、重复handler拒绝、数据库初始化 | 注册独立地下城模块、启动/关闭运行宿主、迁移入口 |
-| `assets/js/game-config.js`、`hall.js` | 游戏厅入口；solo卡片文案写死“进入庄园” | 加地下城链接型入口和通用入口文案，不走庄园view |
-| UI分支 `/dungeon`、`dgn-*`、views | 独立登录/连接、准备/装备/旧战斗/结算 | 复用导航与页面；用传输适配层接Beta合同，动作页替换旧事件播放器 |
+| `dungeon/legacy/`、`server/dungeon/legacy_protocol.py` | 旧实现迁出庄园；旧import保持同模块别名 | 保持旧局结算兼容，新玩法走独立协议 |
+| `dungeon/content/`、`plugins/`、`contracts/` | 规则包加载、可信机制校验、Simulator Protocol | 扩充合同和可执行fixture；实现动作模拟与宿主 |
+| `dungeon/application/`、`domain/` | 共享钱包、纯升级策略、事务升级和成功回执 | 正式鉴权协议、奖励事务、原子成交 |
+| `dungeon/storage/` | 编号迁移、预留门禁、旧表兼容 | Beta局、房间结算与交易表 |
+| `server/app.py`、`server/schema.py`、`admin.py` | 新命名空间装配、迁移、改名/删除关联修正 | 运行宿主生命周期与交易注销流程 |
+| 客户端 | 旧UI提交可供复用 | 大厅平级入口、动作页、升级/交易交互 |
 
-三个必须在框架阶段处理的实际约束：
+仍需尊重三个现有约束：共享钱包存储为REAL，Beta通过整数分适配并校验往返精度；物品location与装备槽受SQL CHECK限制，新状态必须有迁移；旧装备owner依赖用户名，Beta关联使用稳定user_id，管理工具已覆盖现有表，新增交易关联仍需补齐。
 
-1. **共享钱包是REAL金额。** `users.coins`与流水为SQLite REAL，当前函数四舍五入到2位；仅新建一个整数交易表不会让全站余额自动变成精确整数钱。
-2. **物品状态和穿戴槽有SQL CHECK。** 当前物品location只有bag/pending/sold，loadout只有六部位；不能只在Python增加escrow或resonance字符串就认为迁移完成。
-3. **账号关联混用可变名称。** 旧表大量以username/owner文本关联；当前管理工具改名表清单未覆盖地下城表，且通用循环不处理owner列。Beta交易增加跨账号归属后必须补这一链路；不能依赖改名永远不发生。
-
-当前连接工厂也没有全局启用外键，旧删除依靠触发器。新表不能只写`REFERENCES`就假设删除已可靠处理；需明确迁移、连接配置与管理服务行为。
+当前连接工厂没有全局启用外键。现有删除触发器和Beta删除触发器负责清理；新表不能仅声明REFERENCES就假设关联行为有效。
 
 ## 2. 目标结构与依赖方向
 
@@ -82,18 +73,11 @@ flowchart TD
 - runtime负责调度和存档，不编写每把武器的效果。传输层处理鉴权和序列化，不拥有伤害公式。
 - 客户端运动预测只为交互；伤害、掉落与正式成长由服务端决定。不要维护两套互不核对的完整战斗规则。
 
-### 2.1 第一轮文件迁移映射
+### 2.1 兼容边界
 
-| 当前路径 | 第一轮目标 | 兼容处理 |
-| --- | --- | --- |
-| `estate/dungeon/combat.py`、`catalog.py`、`effects.py`、`runs.py` | `dungeon/legacy/`下同名模块 | 先只调整内部import，不同时改旧结算语义 |
-| `estate/dungeon/actions.py`、`service.py`、`receipts.py` | `dungeon/legacy/`下同名模块 | 后续由旧协议适配新的资产门禁；旧回执算法保留 |
-| `estate/dungeon/schema.py` | `dungeon/storage/legacy_schema.py` | 新migration runner调用旧初始化，再执行有序Beta迁移 |
-| `server/estate/dungeon.py` | `server/dungeon/legacy_protocol.py` | 旧消息名不变；另建beta_protocol，不挤进旧handler |
-| `estate/dungeon/__init__.py`及旧模块路径 | 临时兼容导入薄层 | 指向新位置，无反向依赖；待所有调用方更新后再移除 |
-| `server/app.py`、`server/schema.py` | 调用新装配/初始化入口 | 旧测试先验证行为一致，再启用新协议 |
+命名空间迁移已经完成：`estate.dungeon.*` 和 `server.estate.dungeon` 只保留临时模块别名，实际实现位于 `dungeon/legacy/`、`dungeon/storage/legacy_schema.py`、`server/dungeon/legacy_protocol.py`。新代码使用新路径；兼容层对象身份与mock路径由 `tests/test_dungeon_namespace.py` 保护。
 
-Beta的新应用服务与动作模拟器从新目录开始写，不通过复制一整套旧业务再各自修改来维持双版本。R1只搬迁和建立兼容，R3再集中改写资产入口，方便追踪回归来源。
+旧装备动作和开局已经接入共享预留门禁。Beta新增用例从新目录开发，原公式、活动局快照和旧回执摘要继续由旧实现维护。
 
 ### 2.2 大厅与独立页面接入
 
@@ -296,11 +280,11 @@ B实现纯模拟接口 `create(initial, rules, rng)`、`step(state, ordered_inpu
 
 Beta表以稳定`users.id`作为账号外键语义。旧物品owner仍为名称时由仓储在事务内解析ID与当前规范名称；后续通过一次性迁移补owner_id并切成单一权威关联，不长期让两种owner字段各自可写。账号改名期间需停止该账号活动局或拒绝改名并给出可操作原因，防止运行容器保留过期身份。
 
-管理命令需要新增明确映射，而非只扫描列名：旧地下城username列和items.owner都要迁；交易以user_id关联不受改名影响。删除账号先撤销其未成交报价并解除预留，处理活动局，再删除账号和私有数据；已成交对手方拥有的装备不能被卖家注销连带删除。审计记录采用保留稳定ID/脱敏展示策略，不能依赖未启用的ON DELETE CASCADE自然正确。
+管理命令已覆盖旧地下城username列和items.owner；后续交易以user_id关联，新增表须接入明确的管理映射。删除账号先撤销其未成交报价并解除预留，处理活动局，再删除账号和私有数据；已成交对手方拥有的装备不能被卖家注销连带删除。审计记录采用保留稳定ID/脱敏展示策略，不能依赖未启用的ON DELETE CASCADE自然正确。
 
 ### 8.2 旧入口的保护
 
-两种兼容方式择其一逐步落地：旧装备动作适配到新的InventoryService；对已经迁到Beta的账号，旧写协议明确返回`mode_migrated`，前端刷新进入Beta。不能让旧`dungeon_sell_item`在报价中仍直接修改dungeon_items。
+当前采用共享门禁：旧穿戴、锁定、出售、领取和开局调用 `dungeon.storage.assets.ensure_available`。后续Beta起局/交易使用同一预留表，必要时再增加账号模式迁移限制；不能让旧`dungeon_sell_item`绕过报价中的预留。
 
 旧活动局允许在其原模拟器完成后迁入Beta，或由明确的维护操作结算；不要在迁移时隐式重新抽掉落。原型物品默认不可交易，旧正式物品是否进入Beta掉落强度需迁移映射，不自动全部变成高价值货币来源。
 
@@ -314,27 +298,23 @@ Beta表以稳定`users.id`作为账号外键语义。旧物品owner仍为名称�
 
 不要在三个开发分支各自分配相同迁移编号；A统一分配与合并，B/C只有迁移需求没有自行覆盖schema的权限。
 
-## 9. 可实施的重构PR顺序
+## 9. 后续实施顺序
 
 | PR | 工作范围 | 完成后可以解锁什么 | 必须验收 |
 | --- | --- | --- | --- |
-| R0 基线和分工 | 记录当前测试结果，盘点UI分支，补本指南/合同fixture | B/C开始针对同一接口工作 | 不冒称未运行测试通过；未提交成员文件不被覆盖 |
-| R1 命名空间解耦 | 建顶层dungeon、server/dungeon；迁旧代码到legacy/适当模块，旧import临时转发 | 地下城不依赖庄园入口，旧功能仍运行 | 不改旧公式/数据/回执摘要；旧测试通过、无循环import |
-| R2 合同与内容加载 | 模型、错误码、schema、registry、规则集版本、一个最小包、fixture适配器 | C可独立填配置；B可实现模拟器/页面 | 正反例校验、引用/版本/重复ID拒绝；固定包能加载 |
-| R3 资产与金币用例 | 同连接UoW、仓储、WalletPort、幂等、预留、升级、旧入口门禁 | B接真升级；交易与起局共用保护 | 金币/材料不足、重复升级、旧接口绕过与故障回滚 |
 | R4 运行时和权威奖励 | 有界宿主、控制权、输入、检查点、房间结算、生命周期 | B的模拟器进入正式闭环 | 断线/重启、双标签控制、重复房间完成、无客户端造奖 |
 | R5 玩家交易 | 定向报价、预留、接受/撤销/过期、余额/所有权原子交割 | 两账号真实交易 | 并发、满包、金额守恒、共享经济竞争与故障注入 |
 | R6 合流与开放 | 真实短局、成长/交易UI、内容经济、迁移演练、运行指标 | 对玩家开放Beta | 开发指南整体验收；已知限制与配置版本完整 |
 
 R4和R5在R2/R3边界稳定后可并行；B无需等R5写完才做战斗。每个PR都有可用纵向路径，不要求先把整个目标目录创建完。
 
-第一批由我们完成的框架重点是R1～R3：让成员“知道往哪里写、怎么运行、怎么验证”，随后按实际瓶颈推进R4/R5。后台执行与交易属于同一A线的不同任务，分工人数增加时可拆给独立成员，但核心合同仍由一处维护。
+R1～R3的首批公共底座已经完成，具体范围和剩余协议工作以实现状态为准；下一阶段推进R4/R5。后台执行与交易属于同一A线的不同任务，分工人数增加时可拆给独立成员，但核心合同仍由一处维护。
 
 ## 10. 验证与开发工具
 
 ### 10.1 现有命令与拟建命令分开
 
-现有基础回归入口（本次仅文档工作，未运行这些业务测试）：
+现有基础回归入口（最近执行结果见实现状态，浏览器验收尚待客户端接入）：
 
 ```sh
 uv run --locked python tests/test_dungeon_foundation.py
@@ -348,7 +328,7 @@ npm run test:browser
 
 其中全量测试用于集成阶段；单功能开发先跑受影响集合。浏览器测试脚本要求8000端口可用，避免抢占他人的预览。UI分支自带的测试在其合入后再作为主分支入口，不提前宣称当前分支已有。
 
-A需要补的工具：内容包validate、固定种子headless短局、生成/校验公开合同fixture、测试库两账号与余额初始化、规则集差异报告。建议统一CLI如`python -m dungeon.tools validate-content ...`，但在实际提交前只是拟定名称，不能作为现有可执行说明分发。
+内容校验已可运行：`uv run --locked python -m dungeon.tools validate-content content/dungeon/release.json`。仍需补动作版固定种子headless短局、完整运行/交易fixture、测试库两账号初始化与规则集差异报告。
 
 ### 10.2 必须补的测试矩阵
 

@@ -8,8 +8,14 @@
 | B：战斗和客户端 | 服务端动作实现在 `dungeon/simulation/`，遵循 `Simulator` 合同；客户端在 `assets/js/dungeon/`，页面在 `dungeon.html` | 模拟器只消费冻结规则和有序输入，不能写金币、永久装备或数据库；客户端只提交输入，正式奖励由服务端确认。 |
 | C：内容和经济 | `content/dungeon/packs/`、`content/dungeon/release.json`；schema 在 `contracts/dungeon/schemas/` | 内容包使用已注册机制并经 `load_ruleset` 校验；新机制需先与 A/B 约定，不在内容里放可执行脚本。 |
 
-B 线可从现有本地 `origin/dev/dungeon-ui` 参考 `dungeon.html`、`assets/css/dungeon.css`、`assets/js/dungeon/dgn-*.js`、`views/` 和 `deploy/serve.py` 的 `/dungeon` 路由，逐项迁入导航、准备页、装备页和素材。旧 UI 的 `dgn-protocol.js` 对接旧消息，接 Beta 时以新合同替换传输映射；旧事件播放器不能当作动作模拟器。无需整支合入，避免覆盖当前框架与资源改动。
+B 线可从本地归档标签 `archive/dungeon-ui-before-beta` 参考 `dungeon.html`、`assets/css/dungeon.css`、`assets/js/dungeon/dgn-*.js`、`views/` 和 `deploy/serve.py` 的 `/dungeon` 路由，逐项迁入导航、准备页、装备页和素材。旧 UI 的 `dgn-protocol.js` 对接旧消息，接 Beta 时以新合同替换传输映射；旧事件播放器不能当作动作模拟器。无需整支合入，避免覆盖当前框架与资源改动。
 
 升级策略使用 `FixedLevelPolicy(rules.ruleset_id, rules.mutable_content("progression"))`。`AssetService` 持有事务，钱包和存储操作共用连接；预留/释放也必须在调用方写事务内执行。当前只有成功操作持久化回执，失败操作全部回滚、不保存回执；状态变化后可用原请求号重试。正式协议接入前须沿用这一明确语义，或通过新回执版本扩展。
 
 已实现范围与测试结果见 [交接记录](../docs/dungeon-beta-implementation-status.md)。完整目标见 `docs/dungeon-beta-architecture.md` 和 `docs/dungeon-beta-development-guide.md`。
+
+## 旧功能维护
+
+旧协议的实际消息注册见 `server/dungeon/legacy_protocol.py`，装备动作见 `dungeon/legacy/actions.py`，旧局/奖励事务见 `dungeon/legacy/runs.py`。旧回执与Beta成功回执使用不同表和格式，不互相转换。旧局按原规则完成，新动作流程通过独立Beta协议接入。
+
+修改兼容路径至少运行 `tests/test_dungeon_namespace.py`、`tests/test_dungeon_equipment.py`、`tests/test_dungeon_runs.py` 与 `tests/test_dungeon_protocol.py`；涉及资产时同时运行 `tests/test_dungeon_beta_assets.py`。旧部署与当前Beta目标不能混用。

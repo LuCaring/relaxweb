@@ -1,4 +1,4 @@
-# 地下城 Beta 公共底座交接与审阅记录
+# 地下城 Beta 公共底座交接与实现状态
 
 日期：2026-09-25。本轮范围：按架构方案实施 R1～R3 的公共底座，供三条开发线并行开工。编码使用 GPT-6-sol / high；主代理负责代码审阅、回归验收和分支交接。
 
@@ -19,15 +19,15 @@
 
 ## 三条开发线的起点
 
-保留 `dev/dungeon-core` 作为集成分支。本轮交付从共同底座建立三个本地分支，尚未推送远端：
+以 `dev/dungeon-beta-foundation` 同时承担A线与Beta集成。原本地 `dev/dungeon-core` 在提交完整保留后删除，三个Beta分支均有各自开工提交，尚未推送远端：
 
 | 分支 | 负责人工作范围 | 第一项后续任务 |
 | --- | --- | --- |
-| `codex/dungeon-beta-foundation` | A：框架、资产、协议、宿主与交易 | 实现权威运行宿主和升级协议，再完成定向原子成交 |
-| `codex/dungeon-beta-client` | B：动作模拟、输入、渲染与页面 | 按Simulator合同完成短局，选择性复用现有UI页面 |
-| `codex/dungeon-beta-content` | C：内容、成长和经济数据 | 增加两种打法与最小关卡包，验证金币产消 |
+| `dev/dungeon-beta-foundation` | A：框架、资产、协议、宿主与交易 | 实现权威运行宿主和升级协议，再完成定向原子成交 |
+| `dev/dungeon-beta-client` | B：动作模拟、输入、渲染与页面 | 按Simulator合同完成短局，选择性复用现有UI页面 |
+| `dev/dungeon-beta-content` | C：内容、成长和经济数据 | 增加两种打法与最小关卡包，验证金币产消 |
 
-三线共享同一代码基线；没有强制合并或改写现有 `origin/dev/dungeon-ui` 历史。该UI分支的 `catalog.py` 扩充应转成新内容包，不能直接覆盖兼容别名文件。
+三线共享 `8309c0e` 公共底座及后续文档整理提交。旧UI独有提交由本地标签 `archive/dungeon-ui-before-beta` 保留；远端旧core/UI引用没有改写或删除。旧UI的 `catalog.py` 扩充应转成新内容包，不能直接覆盖兼容别名文件。
 
 分配成员时分别检出对应分支；同机并行请用独立 worktree，避免多人修改同一工作目录。A负责合并公共合同变更到集成分支，B/C同步后再改调用方。B/C的首个PR保持在各自目录内；新增机制先给出参数、事件、状态和输出的fixture，再实现代码。
 
@@ -44,20 +44,7 @@ uv run --locked python scripts/run_python_tests.py
 
 内容schema在 `contracts/dungeon/schemas/`，可执行fixture在 `contracts/dungeon/fixtures/`。当前只实现这里实际存在并通过测试的子集；[合同草案](dungeon-beta-contracts.md)中尚未实现的消息不是可调用服务。公共运行入口和Python API见 [dungeon/README](../dungeon/README.md)。
 
-## 审阅重点
-
-审阅期间要求修正并补回归的边界包括：
-
-- 旧import的对象身份和mock路径保持一致，不出现两份运行状态。
-- 资产归属使用数据库账号比较规则；预留错误不被误捕获为存档错误。
-- 数据库迁移在有/无外层事务时都不能留下半套表；管理操作的活动检查与变更同事务。
-- 金额、tick等严格拒绝浮点和布尔；策略输出在扣费前经过核心校验。
-- 插件支持一个提供器注册多个机制；使用的机制必须声明依赖版本。
-- 内容包可以增量扩展，冻结配置可以直接参与策略/机制调用。
-- 派生来源、每行动限次、冷却和输出操作预算实际执行。
-- 新测试通过仓库现有单文件unittest入口运行，不依赖未声明的pytest。
-
-## 验证结果与边界
+## 公共底座验证结果与边界（8309c0e）
 
 - `uv run --locked python scripts/run_python_tests.py`：48/49个测试文件通过，包括旧地下城、庄园、共享钱包、管理员和各游戏服务回归。
 - 新增专用测试：命名空间3项、内容/插件21项、资产10项，共34项通过；内容测试还在Python 3.9下通过。
