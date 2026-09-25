@@ -308,7 +308,6 @@ export class Arena {
       emoji: weapon.emoji,
     });
   }
-  }
 
   updateProjectiles(dt) {
     for (const proj of this.projectiles) {
