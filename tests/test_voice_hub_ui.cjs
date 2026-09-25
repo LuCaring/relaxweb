@@ -57,10 +57,10 @@ const baseChannels = () => [
       core.setSignedIn({ username: 'alice', nickname: 'Alice', coins: 1000 });
     });
 
-    // 1. 大厅渲染“语音聊天室”卡片；点击进入 voicehall 并发出订阅
-    assert.equal(await page.locator('.hall-voice-card').count(), 1);
+    // 1. 入口在顶栏，下拉菜单可选频道；大厅仍保留庄园与排行榜布局
+    assert.equal(await page.locator('.hall-voice-card').count(), 0);
     assert.equal(await page.locator('.hall-feature-grid .hall-estate-card').count(), 1);
-    assert.equal(await page.locator('.hall-feature-grid .hall-voice-card').count(), 1);
+    assert.equal(await page.locator('#voiceQuickToggle').count(), 1);
     assert.equal(await page.locator('.hall-grid .hall-game-card').count(), 7,
       '小游戏区域不重复展示庄园');
     assert.equal(await page.locator('.hall-rankings-grid .rating-card').count(), 2);
@@ -76,19 +76,39 @@ const baseChannels = () => [
     assert.ok(hallLayout.top < hallLayout.middle && hallLayout.middle < hallLayout.bottom);
     assert.equal(hallLayout.widths[0], hallLayout.widths[1]);
     assert.equal(hallLayout.heights[0], hallLayout.heights[1]);
-    assert.match(await page.locator('.hall-voice-card').innerText(), /语音聊天室/);
-    assert.match(await page.locator('.hall-voice-card').innerText(), /随时开麦的语音频道/);
-    await page.locator('.hall-voice-card').click();
+    assert.equal(await page.locator('#voiceQuickToggle').isVisible(), true);
+    assert.equal(await page.locator('#voiceQuickMenu').isHidden(), true);
+    await page.locator('#voiceQuickToggle').click();
+    assert.equal(await page.locator('#voiceQuickMenu').isVisible(), true);
+    assert.equal(await page.locator('#voiceQuickJoin').isDisabled(), true);
+    await page.evaluate(snapshot => core.handleServerMessage(snapshot),
+      { type: 'voice_hub_state', channels: baseChannels(), my_channel: null });
+    assert.equal(await page.locator('#voiceQuickChannel option').count(), 6);
+    assert.equal(await page.locator('#voiceQuickStatus').innerText(), '未加入语音频道');
+    assert.equal(await page.locator('#voiceQuickMic').isDisabled(), true);
+    assert.equal(await page.evaluate(() => sent.filter(msg => msg.type === 'voice_hub_join').length), 0,
+      '打开下拉菜单不自动加入');
+    await page.locator('#voiceQuickChannel').selectOption('2');
+    await page.locator('#voiceQuickJoin').click();
+    assert.deepEqual(await page.evaluate(() => sent.at(-1)), { type: 'voice_hub_join', channel: '2' });
+    assert.equal(await page.locator('#voiceQuickStatus').innerText(), '正在加入频道…');
+    await page.evaluate(snapshot => core.handleServerMessage(snapshot),
+      { type: 'voice_hub_state', channels: baseChannels(), my_channel: '2' });
+    assert.equal(await page.locator('#voiceQuickLeave').isVisible(), true);
+    await page.locator('#voiceQuickLeave').click();
+    assert.deepEqual(await page.evaluate(() => sent.at(-1)), { type: 'voice_hub_leave' });
+    await page.evaluate(snapshot => core.handleServerMessage(snapshot),
+      { type: 'voice_hub_state', channels: baseChannels(), my_channel: null });
+    await page.locator('#voiceQuickDetail').click();
     assert.equal(await page.evaluate(() => core.state.hallPage), 'voicehall');
     assert.equal(await page.locator('.voicehall').count(), 1);
-    assert.equal(await page.locator('.voicehall-hint').innerText(), '正在获取频道状态…');
-    assert.equal(await page.locator('.voicehall-mic .waiting-voice-status').innerText(),
-      '正在获取频道状态…');
+    assert.equal(await page.locator('.voicehall-hint').innerText(), '未加入语音频道');
     assert.equal(await page.locator('.voicehall-retry').isHidden(), true);
     assert.deepEqual(await page.evaluate(() => window.sent.filter(msg => msg.type === 'voice_hub_state')),
       [{ type: 'voice_hub_state' }]);
 
-    // 2. 无 my_channel 的快照 → 自动加入默认频道；完整快照 → 六行频道 + 当前高亮 + 成员条目
+    // 2. 已在快捷面板手动加入/退出，进入详细页面也不擅自重入
+    await page.evaluate(() => { core.state.voiceHub.joinedOnce = false; });
     await page.evaluate(snapshot => core.handleServerMessage(snapshot),
       { type: 'voice_hub_state', channels: baseChannels(), my_channel: null });
     assert.equal(await page.locator('.voicehall-hint').innerText(), '正在加入频道…');
@@ -177,6 +197,14 @@ const baseChannels = () => [
     // 6. 齿轮：其他成员有，自己没有；拖动滑杆写入 localStorage voicePeerVolumes
     assert.equal(await page.locator('.voicehub-member[data-voice-peer="carol"] .seat-volume-gear').count(), 1);
     assert.equal(await page.locator('.voicehub-member[data-voice-peer="alice"] .seat-volume-gear').count(), 0);
+    await page.locator('#voiceQuickToggle').click();
+    assert.equal(await page.locator('#voiceQuickMembers [data-voice-peer="alice"] input').count(), 0);
+    await page.locator('#voiceQuickMembers [data-voice-peer="carol"] input').evaluate(node => {
+      node.value = '60';
+      node.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+    assert.equal(await page.locator('#voiceQuickMembers [data-voice-peer="carol"] output').innerText(), '60%');
+    await page.locator('#voiceQuickToggle').click();
     await page.locator('.voicehub-member[data-voice-peer="carol"] .seat-volume-gear').click();
     assert.equal(await page.locator('.voicehub-member[data-voice-peer="carol"] .peer-volume-popover').isHidden(), false);
     await page.locator('.voicehub-member[data-voice-peer="carol"] .peer-volume-range')
@@ -231,15 +259,16 @@ const baseChannels = () => [
       { type: 'voice_hub_state', channels: renamed, my_channel: '2' });
     assert.equal(await page.locator('.voicehall-hint').innerText(), '语音已连接');
 
-    // 返回大厅：订阅保持（不重复发 voice_hub_state），标题行出现返回频道的胶囊
+    // 返回大厅：订阅保持，顶栏始终能返回频道
     await page.locator('.voicehall-head .hall-back').click();
     assert.equal(await page.evaluate(() => core.state.hallPage), null);
     assert.equal(await page.locator('.voicehall').count(), 0);
     assert.equal(await page.evaluate(() => window.sent.filter(msg => msg.type === 'voice_hub_state').length),
       beforeRetry + 1,
       '订阅在整个会话保持，重进视图不重复发送');
-    assert.match(await page.locator('.hall-voice-pill').innerText(), /开黑房 · 返回/);
-    await page.locator('.hall-voice-pill').click();
+    assert.match(await page.locator('#voiceQuickToggle').getAttribute('aria-label'), /开黑房/);
+    await page.locator('#voiceQuickToggle').click();
+    await page.locator('#voiceQuickDetail').click();
     assert.equal(await page.evaluate(() => core.state.hallPage), 'voicehall');
     assert.equal(await page.locator('.voicehall').count(), 1);
 
@@ -257,9 +286,15 @@ const baseChannels = () => [
     }));
     assert.equal(mobileColumns.features.split(' ').length, 1);
     assert.equal(mobileColumns.rankings.split(' ').length, 1);
+    await page.locator('#voiceQuickToggle').click();
+    const mobileMenu = await page.locator('#voiceQuickMenu').boundingBox();
+    assert.ok(mobileMenu.x >= 0 && mobileMenu.x + mobileMenu.width <= 390,
+      '窄屏快捷面板应完整落在视口内');
+    await page.locator('#voiceQuickToggle').click();
 
     // 已加入频道但一直没有授权时，等待超时才出现重试入口。
-    await page.locator('.hall-voice-card').click();
+    await page.locator('#voiceQuickToggle').click();
+    await page.locator('#voiceQuickDetail').click();
     await page.clock.install();
     await page.evaluate(async () => {
       const voice = await import('/assets/js/room-voice.js');
@@ -275,7 +310,7 @@ const baseChannels = () => [
     assert.equal(await page.locator('.voicehall-hint').innerText(), '语音服务暂不可用');
     assert.equal(await page.locator('.voicehall-retry').isHidden(), true);
 
-    console.log('PASS voice hall entry card, channel tree with members, rename flow, per-channel chat, peer volume gear, hall pill, narrow viewport');
+    console.log('PASS header voice dropdown, quick channel and volume controls, detailed voice hall, narrow viewport');
   } finally {
     await browser.close();
   }

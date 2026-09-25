@@ -8,7 +8,8 @@ import { alertDialog } from "./dialog.js";
 import { elements, formatClock, playerAvatarNode, renderGameView, send, state } from "./core.js";
 import { onMessage, registerView } from "./registry.js";
 import { attachPeerVolumeMenu } from "./peer-volume-menu.js";
-import { voiceStatus } from "./room-voice.js";
+import { getPeerVolume, micGateOpen, micLevel, setPeerVolume } from "./voice-mic.js";
+import { toggleMic, voiceMicPublishing, voiceMicWanted, voiceStatus } from "./room-voice.js";
 import { mountVoiceControls } from "./voice-controls.js";
 
 // 视图 DOM 引用：voice_hub_state 只重建频道树与头部，保住聊天输入焦点
@@ -21,6 +22,28 @@ let chatInput = null;
 let micPanel = null;       // { root, controls }，voicestate 时刷新
 let speakers = new Set();  // 最近一次 voicespeakers 名单，重建频道树后补高亮
 let authorizationTimer = 0;
+const quick = {
+  root: document.getElementById("voiceQuick"),
+  toggle: document.getElementById("voiceQuickToggle"),
+  menu: document.getElementById("voiceQuickMenu"),
+  status: document.getElementById("voiceQuickStatus"),
+  channel: document.getElementById("voiceQuickChannel"),
+  join: document.getElementById("voiceQuickJoin"),
+  leave: document.getElementById("voiceQuickLeave"),
+  mic: document.getElementById("voiceQuickMic"),
+  members: document.getElementById("voiceQuickMembers"),
+  detail: document.getElementById("voiceQuickDetail"),
+};
+let quickSelection = "";
+let glowTimer = 0;
+
+function ensureHub() {
+  state.voiceHub ||= { channels: [], myChannel: null, subscribed: false,
+    joinedOnce: false, chat: [], restoreChannel: null,
+    snapshotReceived: false, voiceEnabled: true, pendingChannel: undefined,
+    authorizationTimedOut: false };
+  return state.voiceHub;
+}
 
 function el(tag, className, text) {
   const node = document.createElement(tag);
@@ -92,6 +115,7 @@ function refreshConnectionUi() {
   if (micPanel?.root.isConnected) micPanel.controls.refresh({
     ...status, connected: channel.connected, waitingText: voiceHintText(),
   });
+  refreshQuickUi();
 }
 
 function requestHubState(force = false) {
@@ -104,6 +128,143 @@ function requestHubState(force = false) {
     }
   }
 }
+
+function closeQuick() {
+  quick.menu.hidden = true;
+  quick.toggle.setAttribute("aria-expanded", "false");
+}
+
+function refreshGlow() {
+  const active = !quick.root.hidden && document.visibilityState === "visible"
+    && channelVoiceState().connected && voiceMicPublishing() && micGateOpen();
+  const strength = active ? Math.min(1, Math.max(0, (micLevel() - 0.008) * 14)) : 0;
+  quick.toggle.classList.toggle("transmitting", strength > 0);
+  quick.toggle.style.setProperty("--voice-glow", strength.toFixed(3));
+  if (active && !glowTimer) glowTimer = window.setInterval(refreshGlow, 80);
+  if (!active && glowTimer) {
+    clearInterval(glowTimer);
+    glowTimer = 0;
+  }
+}
+
+function refreshQuickUi() {
+  const hub = state.voiceHub;
+  const signedIn = Boolean(state.currentUser);
+  quick.root.hidden = !signedIn;
+  if (!signedIn) {
+    closeQuick();
+    refreshGlow();
+    return;
+  }
+  const voice = channelVoiceState();
+  const status = voiceStatus();
+  quick.status.textContent = `${voiceHintText()}${status.micError && voice.connected ? ` · ${status.micError}` : ""}`;
+  const channel = hub?.myChannel ? channelName(hub.myChannel) : "语音聊天室";
+  quick.toggle.querySelector(".voice-quick-label").textContent = channel;
+  quick.toggle.setAttribute("aria-label", `${channel}，${voiceHintText()}，打开快捷设置`);
+  quick.toggle.title = `${channel} · ${voiceHintText()}`;
+  const busy = hub?.pendingChannel !== undefined;
+  const ready = hub?.snapshotReceived && state.socket?.readyState === WebSocket.OPEN;
+  quick.channel.disabled = !ready || busy;
+  quick.join.disabled = !ready || busy || !quickSelection || quickSelection === hub?.myChannel;
+  quick.join.textContent = hub?.myChannel ? "切换频道" : "加入频道";
+  quick.leave.hidden = !hub?.myChannel;
+  quick.leave.disabled = !ready || busy;
+  quick.mic.disabled = !voice.connected || !status.canPublish;
+  quick.mic.textContent = voiceMicWanted()
+    ? (voiceMicPublishing() ? "关闭麦克风" : "麦克风开启中…") : "开启麦克风";
+  quick.mic.classList.toggle("is-on", voiceMicWanted() && voice.connected);
+  refreshGlow();
+}
+
+function renderQuickChannels() {
+  const hub = ensureHub();
+  const valid = hub.channels.some((channel) => channel.id === quickSelection);
+  if (!valid || (hub.myChannel && quick.menu.hidden)) quickSelection = hub.myChannel || hub.channels[0]?.id || "";
+  quick.channel.replaceChildren(...hub.channels.map((channel) => {
+    const option = el("option", "", `${channel.name} · ${channel.members.length} 人`);
+    option.value = channel.id;
+    return option;
+  }));
+  quick.channel.value = quickSelection;
+  const current = hub.channels.find((channel) => channel.id === hub.myChannel);
+  if (!current) {
+    quick.members.replaceChildren(el("div", "voice-quick-empty", "加入频道后可调节成员音量"));
+  } else {
+    quick.members.replaceChildren(...current.members.map((member) => {
+      const row = el("label", "voice-quick-member");
+      row.dataset.voicePeer = member.username;
+      const name = el("span", "", member.nickname || member.username);
+      row.append(name);
+      if (member.username === state.currentUser?.username) {
+        row.append(el("span", "voice-quick-self", "自己"));
+      } else {
+        const range = el("input");
+        range.type = "range";
+        range.min = "0";
+        range.max = "100";
+        range.step = "5";
+        range.value = String(getPeerVolume(member.username));
+        range.setAttribute("aria-label", `${member.nickname || member.username} 音量`);
+        const value = el("output", "", `${range.value}%`);
+        range.addEventListener("input", () => {
+          value.textContent = `${setPeerVolume(member.username, Number(range.value))}%`;
+        });
+        row.append(range, value);
+      }
+      return row;
+    }));
+  }
+  refreshQuickUi();
+}
+
+quick.toggle.addEventListener("click", () => {
+  quick.menu.hidden = !quick.menu.hidden;
+  quick.toggle.setAttribute("aria-expanded", String(!quick.menu.hidden));
+  if (!quick.menu.hidden) {
+    requestHubState();
+    renderQuickChannels();
+  }
+});
+quick.channel.addEventListener("change", () => {
+  quickSelection = quick.channel.value;
+  refreshQuickUi();
+});
+quick.join.addEventListener("click", () => {
+  if (quick.join.disabled || !quickSelection) return;
+  if (send({ type: "voice_hub_join", channel: quickSelection })) {
+    ensureHub().joinedOnce = true;
+    state.voiceHub.pendingChannel = quickSelection;
+    refreshConnectionUi();
+  }
+});
+quick.leave.addEventListener("click", () => {
+  if (quick.leave.disabled) return;
+  if (send({ type: "voice_hub_leave" })) {
+    state.voiceHub.restoreChannel = null;
+    state.voiceHub.pendingChannel = null;
+    refreshConnectionUi();
+  }
+});
+quick.mic.addEventListener("click", () => { void toggleMic(); });
+quick.detail.addEventListener("click", () => {
+  closeQuick();
+  state.hallPage = "voicehall";
+  renderGameView();
+});
+document.addEventListener("click", (event) => {
+  if (!quick.root.contains(event.target)) closeQuick();
+});
+document.addEventListener("keydown", (event) => {
+  if (event.key === "Escape" && !quick.menu.hidden) {
+    closeQuick();
+    quick.toggle.focus();
+  }
+});
+document.addEventListener("visibilitychange", refreshGlow);
+document.addEventListener("gameviewchange", () => {
+  if (state.myRoom) closeQuick();
+});
 
 function channelRow(channel) {
   const current = channel.id === state.voiceHub.myChannel;
@@ -233,11 +394,12 @@ function sendChat() {
 }
 
 function renderVoiceHall() {
-  state.voiceHub ||= { channels: [], myChannel: null, subscribed: false,
-    joinedOnce: false, chat: [], restoreChannel: null,
-    snapshotReceived: false, voiceEnabled: true, pendingChannel: undefined,
-    authorizationTimedOut: false };
+  const hub = ensureHub();
   requestHubState();
+  if (hub.snapshotReceived && !hub.myChannel && !hub.joinedOnce && hub.pendingChannel === undefined) {
+    hub.joinedOnce = true;
+    if (send({ type: "voice_hub_join", channel: "default" })) hub.pendingChannel = "default";
+  }
   const root = el("section", "voicehall");
   const head = el("header", "voicehall-head");
   const back = el("button", "online-stat hall-back", "← 游戏厅");
@@ -318,12 +480,15 @@ document.addEventListener("gamesocketclose", () => {
 });
 
 document.addEventListener("authstatechange", (event) => {
-  if (!state.voiceHub) return;
   if (!event.detail?.user) {
     state.voiceHub = null;
+    quickSelection = "";
+    refreshQuickUi();
     return;
   }
-  if (state.hallPage === "voicehall" || state.voiceHub.joinedOnce) requestHubState();
+  ensureHub();
+  requestHubState();
+  renderQuickChannels();
 });
 
 // 说话指示：detail 为 identity（username）数组
@@ -333,10 +498,7 @@ document.addEventListener("voicespeakers", (event) => {
 });
 
 onMessage("voice_hub_state", (data) => {
-  state.voiceHub ||= { channels: [], myChannel: null, subscribed: false,
-    joinedOnce: false, chat: [], restoreChannel: null,
-    snapshotReceived: false, voiceEnabled: true, pendingChannel: undefined,
-    authorizationTimedOut: false };
+  ensureHub();
   const previousChannel = state.voiceHub.myChannel;
   state.voiceHub.snapshotReceived = true;
   state.voiceHub.voiceEnabled = data.voice_enabled !== false;
@@ -357,7 +519,8 @@ onMessage("voice_hub_state", (data) => {
     const channel = state.voiceHub.restoreChannel;
     state.voiceHub.restoreChannel = null;
     if (send({ type: "voice_hub_join", channel })) state.voiceHub.pendingChannel = channel;
-  } else if (!state.voiceHub.myChannel && !state.voiceHub.joinedOnce) {
+  } else if (!state.voiceHub.myChannel && !state.voiceHub.joinedOnce
+    && state.hallPage === "voicehall" && state.voiceHub.pendingChannel === undefined) {
     state.voiceHub.joinedOnce = true;
     if (send({ type: "voice_hub_join", channel: "default" })) {
       state.voiceHub.pendingChannel = "default";
@@ -365,6 +528,7 @@ onMessage("voice_hub_state", (data) => {
   }
   renderChannels();
   renderChat();
+  renderQuickChannels();
   refreshConnectionUi();
 });
 
@@ -388,3 +552,4 @@ onMessage("voice_hub_error", (data) => {
 });
 
 registerView("voicehall", renderVoiceHall);
+refreshQuickUi();

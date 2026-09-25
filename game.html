@@ -18,7 +18,7 @@
 <link rel="stylesheet" href="assets/css/games/poker.css?v=31">
 <link rel="stylesheet" href="assets/css/game-page.css?v=33">
 <link rel="stylesheet" href="assets/css/room.css?v=42">
-<link rel="stylesheet" href="assets/css/voicehall.css?v=2">
+<link rel="stylesheet" href="assets/css/voicehall.css?v=3">
 <link rel="stylesheet" href="assets/css/table.css?v=30">
 <link rel="stylesheet" href="assets/css/games/uno.css?v=31">
 <link rel="stylesheet" href="assets/css/dialog.css?v=30">
@@ -50,6 +50,27 @@
 
     <div class="logo">
         游戏厅
+    </div>
+
+    <div class="voice-quick" id="voiceQuick" hidden>
+        <button class="online-stat voice-quick-toggle" id="voiceQuickToggle" type="button"
+            aria-label="语音聊天室" aria-haspopup="dialog" aria-controls="voiceQuickMenu" aria-expanded="false">
+            <span class="voice-quick-icon" aria-hidden="true">🎙️</span><span class="voice-quick-label">语音聊天室</span>
+        </button>
+        <div class="voice-quick-menu" id="voiceQuickMenu" role="dialog" aria-label="语音聊天室快捷设置" hidden>
+            <div class="voice-quick-heading">语音聊天室</div>
+            <div class="voice-quick-status" id="voiceQuickStatus" role="status">正在获取频道状态…</div>
+            <label class="voice-quick-field" for="voiceQuickChannel">频道</label>
+            <select id="voiceQuickChannel" aria-label="选择语音频道"></select>
+            <div class="voice-quick-actions">
+                <button id="voiceQuickJoin" type="button">加入频道</button>
+                <button id="voiceQuickLeave" type="button" hidden>退出频道</button>
+                <button id="voiceQuickMic" type="button" disabled>开启麦克风</button>
+            </div>
+            <div class="voice-quick-field">当前频道成员 · 音量</div>
+            <div class="voice-quick-members" id="voiceQuickMembers"></div>
+            <button class="voice-quick-detail" id="voiceQuickDetail" type="button">进入语音聊天室 · 详细设置 →</button>
+        </div>
     </div>
 
     <a

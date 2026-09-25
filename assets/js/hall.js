@@ -61,40 +61,6 @@ function selectGame(gameId) {
   renderGameView();
 }
 
-function enterVoiceHall() {
-  state.hallPage = "voicehall";
-  renderGameView();
-}
-
-function voiceChannelName(channelId) {
-  return state.voiceHub?.channels?.find((channel) => channel.id === channelId)?.name || channelId;
-}
-
-function voiceCard() {
-  const card = button("", "hall-game-card hall-feature-card hall-voice-card", enterVoiceHall);
-  const icon = document.createElement("div");
-  icon.className = "hall-game-icon";
-  icon.textContent = "🎙️";
-  const info = document.createElement("div");
-  const name = document.createElement("div");
-  name.className = "hall-game-name";
-  name.textContent = "语音聊天室";
-  const desc = document.createElement("div");
-  desc.className = "hall-game-desc";
-  desc.textContent = "随时开麦的语音频道，测试与畅聊两相宜。";
-  const meta = document.createElement("div");
-  meta.className = "hall-voice-meta";
-  const members = state.voiceHub?.channels?.reduce((count, channel) =>
-    count + channel.members.length, 0) || 0;
-  meta.textContent = `6 个频道 · ${members} 人在线`;
-  info.append(name, desc, meta);
-  const go = document.createElement("div");
-  go.className = "hall-game-go";
-  go.textContent = state.voiceHub?.myChannel ? "返回频道 →" : "进入频道 →";
-  card.append(icon, info, go);
-  return card;
-}
-
 function gameCard(game, extraClass = "") {
   const card = button("", `hall-game-card${extraClass ? ` ${extraClass}` : ""}`,
     () => selectGame(game.id));
@@ -125,25 +91,16 @@ function renderHall() {
   heading.className = "hall-page-title";
   heading.textContent = "一起玩";
   titleRow.append(heading);
-  // 已在语音频道时，标题行右侧给一枚随时返回频道的胶囊
-  if (state.voiceHub?.myChannel) {
-    titleRow.append(button(
-      `🎙️ ${voiceChannelName(state.voiceHub.myChannel)} · 返回`,
-      "hall-voice-pill",
-      enterVoiceHall,
-    ));
-  }
   body.append(titleRow);
 
   const features = document.createElement("section");
   features.className = "hall-feature-section";
   const featureHeading = document.createElement("h2");
   featureHeading.className = "hall-section-heading";
-  featureHeading.textContent = "庄园与聊天";
+  featureHeading.textContent = "庄园";
   const featureGrid = document.createElement("div");
   featureGrid.className = "hall-feature-grid";
-  featureGrid.append(gameCard(gameMetaById("estate"), "hall-feature-card hall-estate-card"),
-    voiceCard());
+  featureGrid.append(gameCard(gameMetaById("estate"), "hall-feature-card hall-estate-card"));
   features.append(featureHeading, featureGrid);
 
   const games = document.createElement("section");

@@ -224,10 +224,11 @@ print(json.dumps({n: accounts.create_session(n) for n in names}))
     }
 
     try {
-      // 1. 三人从大厅「语音聊天室」卡片进入视图，初次快照后自动落入默认频道
+      // 1. 三人从顶栏快捷入口进入视图，初次快照后自动落入默认频道
       for (const name of NAMES) {
         const { page } = players[name];
-        await page.locator('.hall-voice-card').click();
+        await page.locator('#voiceQuickToggle').click();
+        await page.locator('#voiceQuickDetail').click();
         await page.waitForFunction(() => Boolean(document.querySelector('.voicehall')));
       }
       for (const name of NAMES) {
@@ -240,6 +241,11 @@ print(json.dumps({n: accounts.create_session(n) for n in names}))
         await players[name].page.waitForFunction(() => voice.voiceDebug().micPublished === true,
           null, { timeout: 20000, polling: 100 });
       }
+      await players.ua.page.waitForFunction(() => {
+        const button = document.querySelector('#voiceQuickToggle');
+        return button.classList.contains('transmitting')
+          && Number(button.style.getPropertyValue('--voice-glow')) > 0;
+      }, null, { timeout: 10000, polling: 100 });
       for (const name of NAMES) {
         const debug = await players[name].page.evaluate(() => voice.voiceDebug());
         assert.equal(debug.connected, true, `${name} should be connected`);
@@ -343,7 +349,8 @@ print(json.dumps({n: accounts.create_session(n) for n in names}))
         window.voiceMic = await import('/assets/js/voice-mic.js');
       });
       await players.uc.page.waitForFunction(() => core.state.currentUser?.username, null, { timeout: 30000 });
-      await players.uc.page.locator('.hall-voice-card').click();
+      await players.uc.page.locator('#voiceQuickToggle').click();
+      await players.uc.page.locator('#voiceQuickDetail').click();
       await players.uc.page.waitForFunction(() => Boolean(core.state.voiceHub?.myChannel)
         && document.querySelectorAll('.voicehub-channel').length === 6,
         null, { timeout: 15000, polling: 100 });

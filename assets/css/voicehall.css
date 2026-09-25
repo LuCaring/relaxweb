@@ -1,7 +1,46 @@
-/* =========================================================
-   语音聊天室：左栏（麦克风 + 频道树）/ 右栏（分频道文字聊天），
-   以及大厅标题行的返回频道胶囊；配色圆角跟随 room.css / hall.css 卡片风格
-========================================================= */
+/* 语音聊天室与顶栏快捷设置 */
+
+.voice-quick { position: relative; flex: none; }
+.voice-quick[hidden], .voice-quick-menu[hidden] { display: none; }
+.voice-quick-toggle { align-items: center; gap: 7px; color: #155f45; font-weight: 700; white-space: nowrap;
+    background: #e8f5ed; transition: box-shadow .08s linear, background .15s; }
+.voice-quick-toggle:hover, .voice-quick-toggle[aria-expanded="true"] { background: #dcefe5; }
+.voice-quick-toggle.transmitting {
+    box-shadow: 0 0 calc(5px + 24px * var(--voice-glow)) calc(1px + 5px * var(--voice-glow))
+      rgba(29, 201, 103, calc(.16 + .65 * var(--voice-glow)));
+}
+.voice-quick-icon { font-size: 17px; line-height: 1; }
+.voice-quick-menu { position: absolute; z-index: 110; top: calc(100% + 14px); left: 0;
+    width: min(340px, calc(100vw - 24px)); padding: 16px; border: 1px solid #d5e8da;
+    border-radius: 17px; background: #fff; box-shadow: 0 18px 48px #19382b2b;
+    color: #263b30; }
+.voice-quick-heading { font-size: 16px; font-weight: 750; }
+.voice-quick-status { margin: 4px 0 14px; color: #62766b; font-size: 12px; }
+.voice-quick-field { display: block; margin: 12px 0 6px; color: #456252; font-size: 12px; font-weight: 700; }
+.voice-quick-menu select { width: 100%; min-height: 38px; padding: 6px 10px; border: 1px solid #cbded1;
+    border-radius: 9px; background: #fff; color: #243c30; }
+.voice-quick-actions { display: flex; gap: 7px; margin-top: 9px; }
+.voice-quick-actions button, .voice-quick-detail { min-height: 36px; padding: 7px 10px; border: 0;
+    border-radius: 9px; background: #e9f5ed; color: #176445; font: inherit; font-size: 12px;
+    font-weight: 700; cursor: pointer; }
+.voice-quick-actions button:disabled { opacity: .45; cursor: default; }
+.voice-quick-actions button.is-on { background: #177c50; color: white; }
+.voice-quick-members { max-height: 176px; overflow-y: auto; }
+.voice-quick-empty { padding: 8px 0; color: #87948a; font-size: 12px; }
+.voice-quick-member { display: grid; grid-template-columns: minmax(70px, 1fr) minmax(80px, 1.2fr) 35px;
+    align-items: center; gap: 7px; padding: 6px 0; font-size: 12px; }
+.voice-quick-member > span:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.voice-quick-member input { width: 100%; accent-color: #16865d; }
+.voice-quick-member output, .voice-quick-self { color: #60816d; text-align: right; }
+.voice-quick-self { grid-column: 3; }
+.voice-quick-detail { width: 100%; margin-top: 13px; background: #eff3f0; }
+.voice-quick-detail:hover, .voice-quick-actions button:not(:disabled):hover { filter: brightness(.96); }
+.voice-quick-toggle:focus-visible, .voice-quick-menu button:focus-visible,
+.voice-quick-menu select:focus-visible, .voice-quick-menu input:focus-visible {
+    outline: 2px solid #36a56a; outline-offset: 2px;
+}
+
+/* 详细视图与大厅内容 */
 
 /* ---- 大厅：标题行与返回频道胶囊 ---- */
 
@@ -21,32 +60,6 @@
     margin: 0;
 }
 
-.hall-voice-pill {
-    padding: 8px 16px;
-
-    border: 1px solid #bfe3d2;
-
-    border-radius: 999px;
-
-    background: #e9f6f0;
-
-    color: #126b4b;
-
-    font: inherit;
-
-    font-size: 13px;
-
-    font-weight: 700;
-
-    white-space: nowrap;
-
-    cursor: pointer;
-}
-
-.hall-voice-pill:hover {
-    background: #dcefe6;
-}
-
 .hall-feature-section,
 .hall-games-section { margin-bottom: 24px; }
 
@@ -57,13 +70,14 @@
     font-weight: 750;
 }
 
-.hall-feature-grid,
 .hall-rankings-grid {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 12px;
     align-items: stretch;
 }
+
+.hall-feature-grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px; }
 
 .hall-feature-grid .hall-game-card {
     min-width: 0;
@@ -83,16 +97,6 @@
 .hall-estate-card .hall-game-icon { background: #be8a31; }
 .hall-estate-card .hall-game-name { color: #705521; }
 .hall-estate-card .hall-game-go { color: #9c7127; }
-
-.hall-voice-card {
-    border-color: #b6e2ce;
-    background: linear-gradient(115deg, #edfaf3, #f5fbff);
-}
-
-.hall-voice-card .hall-game-icon { background: #177d55; }
-.hall-voice-card .hall-game-name { color: #145a3e; }
-.hall-voice-card .hall-game-go { color: #14714a; font-weight: 750; }
-.hall-voice-meta { margin-top: 7px; color: #49846a; font-size: 12px; font-weight: 650; }
 
 .hall-rankings-grid .rating-card {
     min-width: 0;
@@ -355,8 +359,7 @@
 }
 
 .voicehub-channel-leave:focus-visible,
-.voicehub-channel-rename:focus-visible,
-.hall-voice-pill:focus-visible {
+.voicehub-channel-rename:focus-visible {
     outline: 3px solid #b491ff;
 
     outline-offset: 2px;
@@ -591,9 +594,16 @@
     .voicehall-retry { margin-left: auto; }
 }
 
+@media (max-width:650px) {
+    .game-header .left-header > .voice-quick { display: block; }
+    .game-header .left-header > .voice-quick[hidden] { display: none; }
+    .voice-quick-label { display: none; }
+    .voice-quick-toggle { padding: 7px 9px; }
+    .voice-quick-menu { position: fixed; top: 58px; left: 12px; right: 12px; width: auto; }
+}
+
 @media (prefers-reduced-motion:reduce) {
-    .voicehub-channel,
-    .hall-voice-pill {
+    .voicehub-channel {
         transition: none;
     }
 }

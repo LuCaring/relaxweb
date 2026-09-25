@@ -41,6 +41,16 @@ export function voiceStatus() {
     canPublish, audioBlocked, micError };
 }
 
+/** LiveKit 已发布且未静音的本机麦克风；仅有“想开麦”意愿不算发送中。 */
+export function voiceMicPublishing() {
+  if (!current || !mic.wanted || !canPublish) return false;
+  const participant = current.localParticipant;
+  const source = window.LivekitClient?.Track?.Source?.Microphone;
+  const publication = (source && participant.getTrackPublication?.(source))
+    || [...(participant.trackPublications?.values() || [])].find((pub) => pub.kind === "audio");
+  return Boolean(publication && !publication.isMuted);
+}
+
 function scheduleRetry(update) {
   if (retryTimer || latestUpdate !== update || !update.token) return;
   retryTimer = window.setTimeout(() => {
