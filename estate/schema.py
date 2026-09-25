@@ -172,6 +172,24 @@ def init_estate(conn):
         minute INTEGER PRIMARY KEY,
         price_cents INTEGER NOT NULL CHECK(price_cents > 0)
     )""")
+    candles_exist = conn.execute("SELECT 1 FROM sqlite_master WHERE type='table' "
+                                 "AND name='estate_market_candles'").fetchone()
+    conn.execute("""CREATE TABLE IF NOT EXISTS estate_market_candles (
+        period TEXT NOT NULL CHECK(period IN ('minute','hour','day')),
+        start_minute INTEGER NOT NULL,
+        open_cents INTEGER NOT NULL,
+        high_cents INTEGER NOT NULL,
+        low_cents INTEGER NOT NULL,
+        close_cents INTEGER NOT NULL,
+        PRIMARY KEY(period,start_minute)
+    )""")
+    if not candles_exist:
+        from estate.market import record_market_candles
+        previous = None
+        for minute, close in conn.execute(
+                "SELECT minute,price_cents FROM estate_market_ticks ORDER BY minute"):
+            record_market_candles(conn, minute, previous if previous is not None else close, close)
+            previous = close
     conn.execute("""CREATE TABLE IF NOT EXISTS estate_market_positions (
         username TEXT PRIMARY KEY COLLATE NOCASE,
         shares_milli INTEGER NOT NULL DEFAULT 0 CHECK(shares_milli >= 0),

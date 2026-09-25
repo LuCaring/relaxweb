@@ -60,13 +60,24 @@ print(json.dumps(estate_state(conn,'alice',int(time.time()))))
     const market = {name: '星潮模拟指数', price: 1000, quote_minute: 123,
       available: true, source: '游戏内模拟', source_kind: 'simulated', fee_rate: 0.005, shares: 0,
       cost_basis: 0, market_value: 0, realized_pnl: 0,
-      history: [{time: 60, price: 995}, {time: 120, price: 1000}]};
+      history: [{time: 60, price: 995}, {time: 120, price: 1000}],
+      candles: {
+        minute: [{time: 60, open: 990, high: 995, low: 990, close: 995},
+          {time: 120, open: 995, high: 1002, low: 995, close: 1000}],
+        hour: [{time: 0, open: 990, high: 1002, low: 990, close: 1000}],
+        day: [{time: 0, open: 990, high: 1002, low: 990, close: 1000}],
+      }};
     await page.evaluate(({request, market}) => core.handleServerMessage({
       type: 'estate_market_state', request_id: request.request_id, market,
     }), {request, market});
     assert.match(await page.locator('.estate-market .estate-sheet-note').innerText(), /当前使用游戏内模拟走势/);
+    assert.equal(await page.getByRole('img', {name: '分钟K线图'}).count(), 1);
+    await page.getByRole('button', {name: '小时K线'}).click();
+    assert.equal(await page.getByRole('img', {name: '小时K线图'}).count(), 1);
+    await page.getByRole('button', {name: '日K线'}).click();
+    assert.equal(await page.getByRole('img', {name: '日K线图'}).count(), 1);
     await page.getByRole('spinbutton', {name: '交易份额'}).fill('0.125');
-    assert.match(await page.locator('.estate-market-disclosure').first().innerText(), /125/);
+    assert.match(await page.locator('.estate-market-estimate').innerText(), /125/);
     await page.getByRole('button', {name: '买入'}).click();
     const trade = await page.evaluate(() => sent.find(message => message.type === 'estate_market_trade'));
     assert.deepEqual([trade.side, trade.quantity], ['buy', '0.125']);

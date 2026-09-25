@@ -4,7 +4,7 @@ import unittest
 from decimal import Decimal
 from unittest.mock import patch
 
-from estate.market import market_snapshot, trade_market
+from estate.market import market_snapshot, record_market_candles, trade_market
 from estate.schema import init_estate
 from estate.store import EstateError, ensure_estate
 
@@ -42,6 +42,40 @@ class MarketTests(unittest.TestCase):
         self.assertEqual(second["price"], 1007)
         self.assertEqual(market_snapshot(self.conn, "alice", NOW + 61, None)["price"], 1007)
         self.assertEqual(len(second["history"]), 2)
+
+    def test_candles_aggregate_sampled_open_high_low_close(self):
+        boundary = (NOW // 3600 + 1) * 3600
+        first = market_snapshot(self.conn, "alice", boundary - 60, Decimal("100"))
+        with patch("estate.market.secrets.randbelow", return_value=600):
+            second = market_snapshot(self.conn, "alice", boundary, Decimal("101"))
+        self.assertEqual(first["candles"]["minute"][-1]["close"], 1000)
+        self.assertEqual(second["candles"]["minute"][-1], {
+            "time": boundary, "open": 1000, "high": 1007,
+            "low": 1000, "close": 1007,
+        })
+        self.assertEqual(len(second["candles"]["hour"]), 2)
+        self.assertEqual(second["candles"]["hour"][-1]["open"], 1000)
+        self.assertEqual(second["candles"]["hour"][-1]["close"], 1007)
+
+    def test_existing_ticks_backfill_candles_on_migration(self):
+        self.conn.execute("DROP TABLE estate_market_candles")
+        self.conn.executemany("INSERT INTO estate_market_ticks VALUES (?,?)",
+                              ((NOW // 60 - 1, 100000), (NOW // 60, 100700)))
+        init_estate(self.conn)
+        rows = self.conn.execute("SELECT open_cents,close_cents FROM estate_market_candles "
+                                 "WHERE period='minute' ORDER BY start_minute").fetchall()
+        self.assertEqual(rows, [(100000, 100000), (100000, 100700)])
+
+    def test_daily_candles_roll_over_at_china_midnight(self):
+        boundary = (NOW // 60 + 480) // 1440 * 1440 - 480 + 1440
+        record_market_candles(self.conn, boundary - 1, 100000, 101000)
+        record_market_candles(self.conn, boundary, 101000, 99000)
+        record_market_candles(self.conn, boundary + 1, 99000, 102000)
+        rows = self.conn.execute("SELECT start_minute,open_cents,high_cents,low_cents,close_cents "
+                                 "FROM estate_market_candles WHERE period='day' "
+                                 "ORDER BY start_minute").fetchall()
+        self.assertEqual(rows, [(boundary - 1440, 100000, 101000, 100000, 101000),
+                                (boundary, 101000, 102000, 99000, 102000)])
 
     def test_fractional_t0_roundtrip_costs_fee_and_replay_does_not_double_spend(self):
         market_snapshot(self.conn, "alice", NOW, Decimal("100"))

@@ -15,6 +15,45 @@ MIN_PRICE_CENTS = 10000
 MAX_PRICE_CENTS = 1000000
 QUANTITY_PATTERN = re.compile(r"^[0-9]+(?:\.[0-9]{1,3})?$")
 UNFETCHED = object()
+CANDLE_LIMITS = {"minute": 60, "hour": 72, "day": 90}
+
+
+def record_market_candles(conn, minute, open_cents, close_cents):
+    """按服务端每分钟采样构成 K 线；缺失的分钟不伪造行情。"""
+    high = max(open_cents, close_cents)
+    low = min(open_cents, close_cents)
+    for period, start in (("minute", minute), ("hour", minute // 60 * 60),
+                          ("day", (minute + 480) // 1440 * 1440 - 480)):
+        conn.execute("INSERT INTO estate_market_candles "
+                     "(period,start_minute,open_cents,high_cents,low_cents,close_cents) "
+                     "VALUES (?,?,?,?,?,?) ON CONFLICT(period,start_minute) DO UPDATE SET "
+                     "high_cents=MAX(high_cents,excluded.high_cents),"
+                     "low_cents=MIN(low_cents,excluded.low_cents),"
+                     "close_cents=excluded.close_cents",
+                     (period, start, open_cents, high, low, close_cents))
+
+
+def _store_market_tick(conn, minute, opening_price, closing_price):
+    conn.execute("INSERT OR REPLACE INTO estate_market_ticks(minute,price_cents) VALUES (?,?)",
+                 (minute, closing_price))
+    conn.execute("DELETE FROM estate_market_ticks WHERE minute<?", (minute - 1440,))
+    record_market_candles(conn, minute, opening_price, closing_price)
+    for period, age in (("minute", 2 * 1440), ("hour", 14 * 1440), ("day", 90 * 1440)):
+        conn.execute("DELETE FROM estate_market_candles WHERE period=? AND start_minute<?",
+                     (period, minute - age))
+
+
+def _market_candles(conn):
+    result = {}
+    for period, limit in CANDLE_LIMITS.items():
+        rows = conn.execute("SELECT start_minute,open_cents,high_cents,low_cents,close_cents "
+                            "FROM estate_market_candles WHERE period=? "
+                            "ORDER BY start_minute DESC LIMIT ?", (period, limit)).fetchall()
+        result[period] = [
+            {"time": start * 60, "open": opening / 100, "high": high / 100,
+             "low": low / 100, "close": closing / 100}
+            for start, opening, high, low, closing in reversed(rows)]
+    return result
 
 
 def fetch_source_price():
@@ -52,6 +91,7 @@ def _advance(conn, now, source_price=UNFETCHED):
     if attempt >= minute:
         return price_cents, bool(available)
     source = fetch_source_price() if source_price is UNFETCHED else source_price
+    opening_price = price_cents
     if source is None:
         # 每分钟只生成一次全服共享的报价；不按离线时长补算，避免无人访问时跳价。
         change = Decimal(secrets.randbelow(1601) - 800) / Decimal(100000)
@@ -60,9 +100,7 @@ def _advance(conn, now, source_price=UNFETCHED):
         conn.execute("UPDATE estate_market_index SET attempted_minute=?,price_cents=?,"
                      "source_kind='simulated',available=1 WHERE id=1",
                      (minute, price_cents))
-        conn.execute("INSERT OR REPLACE INTO estate_market_ticks(minute,price_cents) VALUES (?,?)",
-                     (minute, price_cents))
-        conn.execute("DELETE FROM estate_market_ticks WHERE minute<?", (minute - 1440,))
+        _store_market_tick(conn, minute, opening_price, price_cents)
         return price_cents, True
     previous = Decimal(old_source)
     if previous > 0 and source_kind == "live":
@@ -79,9 +117,7 @@ def _advance(conn, now, source_price=UNFETCHED):
         "source_kind='live',available=1 WHERE id=1",
         (minute, price_cents, str(source), minute),
     )
-    conn.execute("INSERT OR REPLACE INTO estate_market_ticks(minute,price_cents) VALUES (?,?)",
-                 (minute, price_cents))
-    conn.execute("DELETE FROM estate_market_ticks WHERE minute<?", (minute - 1440,))
+    _store_market_tick(conn, minute, opening_price, price_cents)
     return price_cents, True
 
 
@@ -114,7 +150,8 @@ def market_snapshot(conn, username, now, source_price=UNFETCHED):
             "market_value": round(price_cents * shares / 100000, 2),
             "realized_pnl": realized / 100,
             "history": [{"time": minute * 60, "price": value / 100}
-                        for minute, value in reversed(history)]}
+                        for minute, value in reversed(history)],
+            "candles": _market_candles(conn)}
 
 
 def _quantity_milli(value):
