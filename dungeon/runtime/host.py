@@ -55,9 +55,10 @@ class RunHost:
     def __init__(self, service, *, max_queue=64, max_step_ticks=4,
                  max_inputs_per_tick=8, checkpoint_ticks=30,
                  max_events_per_tick=64, max_event_bytes=8192,
-                 max_snapshot_bytes=262144):
+                 max_snapshot_bytes=262144, max_frame_bytes=16384):
         for value in (max_queue, max_step_ticks, max_inputs_per_tick, checkpoint_ticks,
-                      max_events_per_tick, max_event_bytes, max_snapshot_bytes):
+                      max_events_per_tick, max_event_bytes, max_snapshot_bytes,
+                      max_frame_bytes):
             if type(value) is not int or value < 1:
                 raise ValueError("host budgets must be positive integers")
         self.service = service
@@ -69,6 +70,7 @@ class RunHost:
         self.max_events_per_tick = max_events_per_tick
         self.max_event_bytes = max_event_bytes
         self.max_snapshot_bytes = max_snapshot_bytes
+        self.max_frame_bytes = max_frame_bytes
         self._runs = {}
 
     def _snapshot(self, state):
@@ -126,6 +128,28 @@ class RunHost:
                 "server_tick": entry["tick"] if entry else run["server_tick"],
                 "durable_tick": run["durable_tick"], "control_epoch": run["control_epoch"],
                 "acked_input_seq": entry["applied_seq"] if entry else run["last_input_seq"]}
+
+    def frame(self, run_id):
+        """Render-oriented push frame; never persisted and never a save."""
+        entry = self._runs.get(run_id)
+        if entry is None or entry["run"]["status"] != "running":
+            raise DungeonError("run_paused", "挑战未运行")
+        view_builder = getattr(self.simulator, "view", None)
+        if view_builder is not None:
+            view = view_builder(entry["state"])
+            if not isinstance(view, Mapping):
+                raise DungeonError("invalid_event", "模拟视图必须是对象")
+            raw = canonical(dict(view))
+        else:
+            # Simulators predating the view contract fall back to a full save.
+            raw = canonical(self._snapshot(entry["state"]))
+        if len(raw.encode("utf-8")) > self.max_frame_bytes:
+            raise DungeonError("snapshot_budget", "模拟视图超出预算")
+        run = entry["run"]
+        return {"run_id": run_id, "status": "running", "room_index": run["room_index"],
+                "server_tick": entry["tick"], "durable_tick": run["durable_tick"],
+                "control_epoch": run["control_epoch"], "acked_input_seq": entry["applied_seq"],
+                "view": json.loads(raw)}
 
     def _change_status(self, run_id, before, after, *, increment_epoch=False):
         with self.service.database() as conn, conn:
