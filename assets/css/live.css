@@ -325,6 +325,36 @@
    聊天室
 ========================================================= */
 
+.voicehall-nav {
+    align-items: center;
+    text-decoration: none;
+    background: #e8f6ef;
+}
+
+.voicehall-nav .online-stat-name { color: #176e4c; font-weight: 700; }
+.voicehall-nav:hover { background: #d7f0e3; }
+
+.live-voice-entry {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin: 12px;
+    padding: 12px 14px;
+    border: 1px solid #c7ead8;
+    border-radius: 14px;
+    background: linear-gradient(120deg, #eaf8f0, #f5fbff);
+    color: #195e43;
+    text-decoration: none;
+}
+
+.live-voice-entry:hover { border-color: #8fd6af; background: #e3f6ec; }
+.live-voice-entry:focus-visible { outline: 3px solid #64bb91; outline-offset: 2px; }
+.live-voice-entry-icon { font-size: 25px; line-height: 1; }
+.live-voice-entry-copy { display: grid; flex: 1; gap: 2px; min-width: 0; }
+.live-voice-entry-copy strong { font-size: 14px; }
+.live-voice-entry-copy small { color: #54816b; font-size: 11px; }
+.live-voice-entry-arrow { font-size: 19px; }
+
 .chat-card {
     min-height: 0;
 

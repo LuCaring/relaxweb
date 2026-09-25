@@ -71,7 +71,7 @@ function voiceChannelName(channelId) {
 }
 
 function voiceCard() {
-  const card = button("", "hall-game-card hall-voice-card", enterVoiceHall);
+  const card = button("", "hall-game-card hall-feature-card hall-voice-card", enterVoiceHall);
   const icon = document.createElement("div");
   icon.className = "hall-game-icon";
   icon.textContent = "🎙️";
@@ -82,10 +82,36 @@ function voiceCard() {
   const desc = document.createElement("div");
   desc.className = "hall-game-desc";
   desc.textContent = "随时开麦的语音频道，测试与畅聊两相宜。";
+  const meta = document.createElement("div");
+  meta.className = "hall-voice-meta";
+  const members = state.voiceHub?.channels?.reduce((count, channel) =>
+    count + channel.members.length, 0) || 0;
+  meta.textContent = `6 个频道 · ${members} 人在线`;
+  info.append(name, desc, meta);
+  const go = document.createElement("div");
+  go.className = "hall-game-go";
+  go.textContent = state.voiceHub?.myChannel ? "返回频道 →" : "进入频道 →";
+  card.append(icon, info, go);
+  return card;
+}
+
+function gameCard(game, extraClass = "") {
+  const card = button("", `hall-game-card${extraClass ? ` ${extraClass}` : ""}`,
+    () => selectGame(game.id));
+  const icon = document.createElement("div");
+  icon.className = "hall-game-icon";
+  icon.textContent = game.icon;
+  const info = document.createElement("div");
+  const name = document.createElement("div");
+  name.className = "hall-game-name";
+  name.textContent = game.name;
+  const desc = document.createElement("div");
+  desc.className = "hall-game-desc";
+  desc.textContent = game.desc;
   info.append(name, desc);
   const go = document.createElement("div");
   go.className = "hall-game-go";
-  go.textContent = "进入频道 →";
+  go.textContent = game.mode === "solo" ? "进入庄园 →" : "查看房间 →";
   card.append(icon, info, go);
   return card;
 }
@@ -97,7 +123,7 @@ function renderHall() {
   titleRow.className = "hall-title-row";
   const heading = document.createElement("div");
   heading.className = "hall-page-title";
-  heading.textContent = "选择小游戏";
+  heading.textContent = "一起玩";
   titleRow.append(heading);
   // 已在语音频道时，标题行右侧给一枚随时返回频道的胶囊
   if (state.voiceHub?.myChannel) {
@@ -108,28 +134,38 @@ function renderHall() {
     ));
   }
   body.append(titleRow);
+
+  const features = document.createElement("section");
+  features.className = "hall-feature-section";
+  const featureHeading = document.createElement("h2");
+  featureHeading.className = "hall-section-heading";
+  featureHeading.textContent = "庄园与聊天";
+  const featureGrid = document.createElement("div");
+  featureGrid.className = "hall-feature-grid";
+  featureGrid.append(gameCard(gameMetaById("estate"), "hall-feature-card hall-estate-card"),
+    voiceCard());
+  features.append(featureHeading, featureGrid);
+
+  const games = document.createElement("section");
+  games.className = "hall-games-section";
+  const gamesHeading = document.createElement("h2");
+  gamesHeading.className = "hall-section-heading";
+  gamesHeading.textContent = "小游戏";
   const grid = document.createElement("div");
   grid.className = "hall-grid";
-  for (const game of GAME_TYPES) {
-    const card = button("", "hall-game-card", () => selectGame(game.id));
-    const icon = document.createElement("div");
-    icon.className = "hall-game-icon";
-    icon.textContent = game.icon;
-    const info = document.createElement("div");
-    const name = document.createElement("div");
-    name.className = "hall-game-name";
-    name.textContent = game.name;
-    const desc = document.createElement("div");
-    desc.className = "hall-game-desc";
-    desc.textContent = game.desc;
-    info.append(name, desc);
-    const go = document.createElement("div");
-    go.className = "hall-game-go";
-    go.textContent = game.mode === "solo" ? "进入庄园 →" : "查看房间 →";
-    card.append(icon, info, go);
-    grid.append(card);
-  }
-  body.append(grid, voiceCard(), ratingCard(), assetCard());
+  for (const game of ROOM_GAME_TYPES) grid.append(gameCard(game));
+  games.append(gamesHeading, grid);
+
+  const rankings = document.createElement("section");
+  rankings.className = "hall-rankings-section";
+  const rankingsHeading = document.createElement("h2");
+  rankingsHeading.className = "hall-section-heading";
+  rankingsHeading.textContent = "排行榜";
+  const rankingsGrid = document.createElement("div");
+  rankingsGrid.className = "hall-rankings-grid";
+  rankingsGrid.append(ratingCard(), assetCard());
+  rankings.append(rankingsHeading, rankingsGrid);
+  body.append(features, games, rankings);
 }
 
 function roomKey(room) {

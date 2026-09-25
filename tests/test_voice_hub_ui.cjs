@@ -59,6 +59,23 @@ const baseChannels = () => [
 
     // 1. 大厅渲染“语音聊天室”卡片；点击进入 voicehall 并发出订阅
     assert.equal(await page.locator('.hall-voice-card').count(), 1);
+    assert.equal(await page.locator('.hall-feature-grid .hall-estate-card').count(), 1);
+    assert.equal(await page.locator('.hall-feature-grid .hall-voice-card').count(), 1);
+    assert.equal(await page.locator('.hall-grid .hall-game-card').count(), 7,
+      '小游戏区域不重复展示庄园');
+    assert.equal(await page.locator('.hall-rankings-grid .rating-card').count(), 2);
+    const hallLayout = await page.evaluate(() => {
+      const top = document.querySelector('.hall-feature-grid').getBoundingClientRect();
+      const middle = document.querySelector('.hall-grid').getBoundingClientRect();
+      const bottom = document.querySelector('.hall-rankings-grid').getBoundingClientRect();
+      const cards = [...document.querySelectorAll('.hall-rankings-grid .rating-card')]
+        .map(node => node.getBoundingClientRect());
+      return { top: top.top, middle: middle.top, bottom: bottom.top,
+        widths: cards.map(card => card.width), heights: cards.map(card => card.height) };
+    });
+    assert.ok(hallLayout.top < hallLayout.middle && hallLayout.middle < hallLayout.bottom);
+    assert.equal(hallLayout.widths[0], hallLayout.widths[1]);
+    assert.equal(hallLayout.heights[0], hallLayout.heights[1]);
     assert.match(await page.locator('.hall-voice-card').innerText(), /语音聊天室/);
     assert.match(await page.locator('.hall-voice-card').innerText(), /随时开麦的语音频道/);
     await page.locator('.hall-voice-card').click();
@@ -180,6 +197,14 @@ const baseChannels = () => [
     assert.equal(await page.locator('.voicehall').count(), 1);
     await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
     assert.deepEqual(errors, []);
+
+    await page.locator('.voicehall-head .hall-back').click();
+    const mobileColumns = await page.evaluate(() => ({
+      features: getComputedStyle(document.querySelector('.hall-feature-grid')).gridTemplateColumns,
+      rankings: getComputedStyle(document.querySelector('.hall-rankings-grid')).gridTemplateColumns,
+    }));
+    assert.equal(mobileColumns.features.split(' ').length, 1);
+    assert.equal(mobileColumns.rankings.split(' ').length, 1);
 
     console.log('PASS voice hall entry card, channel tree with members, rename flow, per-channel chat, peer volume gear, hall pill, narrow viewport');
   } finally {

@@ -8,7 +8,7 @@
 <title>我的直播间</title>
 
 <link rel="stylesheet" href="assets/css/base.css?v=27">
-<link rel="stylesheet" href="assets/css/live.css?v=27">
+<link rel="stylesheet" href="assets/css/live.css?v=28">
 <link rel="stylesheet" href="assets/css/auth.css?v=34">
 <link rel="stylesheet" href="assets/css/finance.css?v=28">
 <link rel="stylesheet" href="assets/css/rewards.css?v=36">
@@ -79,6 +79,11 @@
             <span class="header-menu-icon">🎮</span>
             游戏厅
         </a>
+
+        <a class="header-menu-item" href="game.html?view=voicehall">
+            <span class="header-menu-icon">🎙️</span>
+            语音聊天室
+        </a>
     </div>
 
     <div class="online-stat" id="onlineStat">
@@ -103,6 +108,11 @@
     >
         <span class="hall-stat-icon">🎮</span>
         <span class="online-stat-name bet-stat-title" id="gameHallTitle">游戏厅</span>
+    </a>
+
+    <a class="online-stat voicehall-nav" href="game.html?view=voicehall" title="进入语音聊天室">
+        <span aria-hidden="true">🎙️</span>
+        <span class="online-stat-name">语音聊天室</span>
     </a>
 
     <div
@@ -338,6 +348,12 @@
 ====================================================== -->
 
 <div class="chat-card" id="chatCard">
+
+<a class="live-voice-entry" href="game.html?view=voicehall">
+    <span class="live-voice-entry-icon" aria-hidden="true">🎙️</span>
+    <span class="live-voice-entry-copy"><strong>一起开麦聊天</strong><small>进入 6 个语音频道，边看边聊</small></span>
+    <span class="live-voice-entry-arrow" aria-hidden="true">→</span>
+</a>
 
 
 <div class="chat-header">

@@ -47,6 +47,59 @@
     background: #dcefe6;
 }
 
+.hall-feature-section,
+.hall-games-section { margin-bottom: 24px; }
+
+.hall-section-heading {
+    margin: 0 2px 11px;
+    color: #34443b;
+    font-size: 14px;
+    font-weight: 750;
+}
+
+.hall-feature-grid,
+.hall-rankings-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px;
+    align-items: stretch;
+}
+
+.hall-feature-grid .hall-game-card {
+    min-width: 0;
+    min-height: 166px;
+    padding: 18px 20px;
+}
+
+.hall-feature-grid .hall-game-card .hall-game-desc { min-height: 0; }
+.hall-feature-grid .hall-game-go { margin-top: auto; }
+.hall-feature-grid .hall-game-name { font-size: 17px; }
+
+.hall-estate-card {
+    border-color: #f0dbad;
+    background: linear-gradient(120deg, #fff9e9, #f7fbef);
+}
+
+.hall-estate-card .hall-game-icon { background: #be8a31; }
+.hall-estate-card .hall-game-name { color: #705521; }
+.hall-estate-card .hall-game-go { color: #9c7127; }
+
+.hall-voice-card {
+    border-color: #b6e2ce;
+    background: linear-gradient(115deg, #edfaf3, #f5fbff);
+}
+
+.hall-voice-card .hall-game-icon { background: #177d55; }
+.hall-voice-card .hall-game-name { color: #145a3e; }
+.hall-voice-card .hall-game-go { color: #14714a; font-weight: 750; }
+.hall-voice-meta { margin-top: 7px; color: #49846a; font-size: 12px; font-weight: 650; }
+
+.hall-rankings-grid .rating-card {
+    min-width: 0;
+    min-height: 190px;
+    margin-top: 0;
+}
+
 /* ---- 视图骨架：头部 + 两栏 ---- */
 
 .voicehall {
@@ -100,6 +153,34 @@
 
     font-size: 12px;
 }
+
+.voicehall-retry {
+    flex: none;
+    padding: 7px 10px;
+    border: 1px solid #bfe3d2;
+    border-radius: 9px;
+    background: #ecf8f1;
+    color: #176e4c;
+    font: inherit;
+    font-size: 12px;
+    font-weight: 700;
+    cursor: pointer;
+}
+
+.voicehall-retry:hover { background: #dcf0e5; }
+.voicehall-retry:focus-visible { outline: 3px solid #91d5af; outline-offset: 2px; }
+
+.voicehall-section-heading {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 8px;
+    padding: 0 4px;
+    color: #244b38;
+    font-size: 13px;
+}
+
+.voicehall-section-heading span { color: #789184; font-size: 11px; }
 
 .voicehall-body {
     display: grid;
@@ -499,6 +580,15 @@
     .voicehub-members {
         margin-left: 10px;
     }
+}
+
+@media (max-width:600px) {
+    .hall-feature-grid,
+    .hall-rankings-grid { grid-template-columns: minmax(0, 1fr); }
+    .voicehall-head { flex-wrap: wrap; gap: 8px; }
+    .voicehall-title { flex-basis: calc(100% - 130px); }
+    .voicehall-hint { flex: 1; }
+    .voicehall-retry { margin-left: auto; }
 }
 
 @media (prefers-reduced-motion:reduce) {
