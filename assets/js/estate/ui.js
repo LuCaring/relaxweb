@@ -8,6 +8,7 @@ import { catalogEntry, formatDuration, repairCost, reservedSlots } from "./rules
 import { estateCommand, estateRequest, pendingEstateAction, requestEstateOnlineUsers } from "./protocol.js";
 import { estateNow, estateStore } from "./state.js";
 import { renderLotteryGame } from "./lottery.js";
+import { renderMarketGame } from "./market.js";
 
 /**
  * 面板按钮。`disabled` 由内部与 pending 状态合并，调用方不必再写 `||=`。
@@ -74,6 +75,10 @@ export function createEstateUI(root, activities = {}) {
   const close = root.querySelector(".estate-sheet-close");
   let active = null;
   let lotterySpinning = false;
+  let marketData = null;
+  let marketNotice = "";
+  let marketLoading = false;
+  let marketLastRefresh = 0;
   let timer = 0;
 
   function closeSheet() {
@@ -185,7 +190,40 @@ export function createEstateUI(root, activities = {}) {
   function renderLottery() {
     const snapshot = estateStore.snapshot; if (!snapshot) return;
     show("抽奖马戏团");
-    renderLotteryGame(sheetBody, snapshot, (busy) => { lotterySpinning = busy; });
+    const layout = document.createElement("div"); layout.className = "estate-circus-layout";
+    const sidebar = document.createElement("nav"); sidebar.className = "estate-circus-sidebar";
+    sidebar.setAttribute("aria-label", "马戏团项目");
+    const content = document.createElement("div"); content.className = "estate-circus-content";
+    for (const [tab, label] of [["draw", "抽奖转盘"], ["market", "模拟交易"]]) {
+      const tabButton = button(label, () => {
+        if (lotterySpinning || active?.tab === tab) return;
+        active.tab = tab; renderLottery();
+        if (tab === "market") void loadMarket();
+      });
+      tabButton.setAttribute("aria-current", (active?.tab || "draw") === tab ? "page" : "false");
+      sidebar.append(tabButton);
+    }
+    layout.append(sidebar, content); sheetBody.append(layout);
+    if (active?.tab === "market") {
+      renderMarketGame(content, marketData, (result) => {
+        marketData = result.market;
+        marketNotice = `已按 ${formatCoins(result.price)} 点${result.side === "buy" ? "买入" : "卖出"} ${result.quantity} 份，${result.side === "buy" ? "支出" : "收入"} ${formatCoins(result.amount)} 金币。`;
+        renderLottery();
+      }, marketNotice);
+    } else {
+      renderLotteryGame(content, snapshot, (busy) => { lotterySpinning = busy; });
+    }
+  }
+
+  async function loadMarket() {
+    if (marketLoading) return;
+    marketLoading = true;
+    try {
+      marketData = await estateRequest("estate_market_get", {}, { timeoutMs: 12000 });
+      marketLastRefresh = Date.now();
+      if (active?.kind === "lottery" && active.tab === "market" && !sheet.hidden) renderLottery();
+    } catch { /* 协议层统一显示错误，保留最近一次报价。 */ }
+    finally { marketLoading = false; }
   }
 
   function renderWarehouse() {
@@ -515,7 +553,8 @@ export function createEstateUI(root, activities = {}) {
   };
 
   function openPanel(kind, plot) {
-    active = kind === "plot" ? { kind, index: plot.index } : { kind };
+    active = kind === "plot" ? { kind, index: plot.index }
+      : kind === "lottery" ? { kind, tab: "draw" } : { kind };
     PANELS[kind]?.(plot);
   }
 
@@ -547,6 +586,8 @@ export function createEstateUI(root, activities = {}) {
       const plot = activePlot();
       if (plot?.crop_id) renderPlot(plot);
     }
+    if (!sheet.hidden && active?.kind === "lottery" && active.tab === "market"
+      && !marketLoading && Date.now() - marketLastRefresh >= 60_000) void loadMarket();
   }, 1000);
 
   return {

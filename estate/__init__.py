@@ -10,6 +10,7 @@ from estate.store import EstateError, ensure_estate, estate_state
 from estate.skins import buy_skin, set_skin
 from estate.farming import buy, harvest, plant, sell, sell_all, use_land_upgrade_ticket
 from estate.lottery import draw_lottery
+from estate.market import market_snapshot, trade_market
 from estate.activities import (
     buy_tool, finish_fishing, finish_mining, mine_cell, repair_tool,
     simulate_fishing, start_fishing, start_mining, upgrade_tool,
@@ -27,7 +28,7 @@ __all__ = [
     "set_skin", "buy_skin",
     # 农场
     "buy", "plant", "harvest", "sell", "sell_all", "use_land_upgrade_ticket",
-    "draw_lottery",
+    "draw_lottery", "market_snapshot", "trade_market",
     # 工具
     "buy_tool", "upgrade_tool", "repair_tool",
     "buy_or_upgrade_pet", "buy_or_upgrade_penguin",

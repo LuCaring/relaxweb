@@ -153,6 +153,24 @@ def init_estate(conn):
     if "reserved_slots" not in mining_columns:
         conn.execute("ALTER TABLE estate_mining_runs ADD COLUMN reserved_slots INTEGER NOT NULL DEFAULT 12")
     conn.execute("CREATE INDEX IF NOT EXISTS idx_mining_user ON estate_mining_runs(username,status)")
+    conn.execute("""CREATE TABLE IF NOT EXISTS estate_market_index (
+        id INTEGER PRIMARY KEY CHECK(id=1),
+        attempted_minute INTEGER NOT NULL DEFAULT -1,
+        price_cents INTEGER NOT NULL DEFAULT 100000,
+        source_price TEXT NOT NULL DEFAULT '0',
+        source_minute INTEGER NOT NULL DEFAULT -1,
+        available INTEGER NOT NULL DEFAULT 0 CHECK(available IN (0,1))
+    )""")
+    conn.execute("""CREATE TABLE IF NOT EXISTS estate_market_ticks (
+        minute INTEGER PRIMARY KEY,
+        price_cents INTEGER NOT NULL CHECK(price_cents > 0)
+    )""")
+    conn.execute("""CREATE TABLE IF NOT EXISTS estate_market_positions (
+        username TEXT PRIMARY KEY COLLATE NOCASE,
+        shares_milli INTEGER NOT NULL DEFAULT 0 CHECK(shares_milli >= 0),
+        cost_basis_cents INTEGER NOT NULL DEFAULT 0 CHECK(cost_basis_cents >= 0),
+        realized_pnl_cents INTEGER NOT NULL DEFAULT 0
+    )""")
     conn.execute("""
         CREATE TABLE IF NOT EXISTS estate_thefts (
             id INTEGER PRIMARY KEY AUTOINCREMENT,

@@ -20,6 +20,7 @@ const SOUND_CUES = {
   estate_finish_mining: "mine",
   estate_buy: "shop",
   estate_lottery_draw: "shop",
+  estate_market_trade: "shop",
   estate_use_land_upgrade_ticket: "shop",
   estate_buy_skin: "shop",
   estate_sell: "shop",
@@ -98,6 +99,10 @@ onMessage("estate_error", (data) => {
 
 onMessage("estate_visit_list", (data) => {
   settleRequest(data.request_id, { result: data.estates || [] });
+});
+
+onMessage("estate_market_state", (data) => {
+  settleRequest(data.request_id, { result: data.market });
 });
 
 onMessage("online_users", (data) => {

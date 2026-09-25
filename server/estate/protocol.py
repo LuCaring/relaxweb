@@ -1,4 +1,5 @@
 """庄园 WebSocket 协议与事务编排；对应前端 estate/protocol.js。"""
+import asyncio
 import json
 import logging
 import math
@@ -6,6 +7,7 @@ import sqlite3
 import time
 
 from server.wallet import adjust_coins
+from estate.market import fetch_source_price, quote_refresh_due, refresh_market_quote
 from server.estate.presence import ESTATE_PLOT_POSITIONS
 from estate import (
     EstateError,
@@ -15,6 +17,8 @@ from estate import (
     buy_or_upgrade_penguin as estate_buy_or_upgrade_penguin,
     estate_state,
     draw_lottery as estate_draw_lottery,
+    market_snapshot as estate_market_snapshot,
+    trade_market as estate_trade_market,
     fertilize as estate_fertilize,
     finish_fishing as estate_finish_fishing,
     finish_mining as estate_finish_mining,
@@ -47,6 +51,17 @@ class EstateProtocol:
         self.send_json = send_json
         self.send_encoded = send_encoded
         self.presence = presence
+        self._market_quote_lock = asyncio.Lock()
+
+    async def refresh_market_quote(self, now):
+        async with self._market_quote_lock:
+            with self.database() as conn:
+                if not quote_refresh_due(conn, now):
+                    return None
+            source = await asyncio.to_thread(fetch_source_price)
+            with self.database() as conn:
+                refresh_market_quote(conn, now, source)
+            return source
 
     def handlers(self):
         return {
@@ -55,6 +70,8 @@ class EstateProtocol:
             "estate_buy_skin": self.handle_estate_buy_skin,
             "estate_buy": self.handle_estate_buy,
             "estate_lottery_draw": self.handle_estate_lottery_draw,
+            "estate_market_get": self.handle_estate_market_get,
+            "estate_market_trade": self.handle_estate_market_trade,
             "estate_use_land_upgrade_ticket": self.handle_estate_use_land_upgrade_ticket,
             "estate_plant": self.handle_estate_plant,
             "estate_harvest": self.handle_estate_harvest,
@@ -235,7 +252,8 @@ class EstateProtocol:
         await self.send_json(websocket, {"type": "estate_notifications_read", "result": result,
                                     "request_id": data.get("request_id")})
 
-    async def handle_estate_action(self, websocket, state, data, action):
+    async def handle_estate_action(self, websocket, state, data, action,
+                                   now_override=None, market_source=None, execution_source=None):
         user = state.get("user")
         if not user:
             await self.send_json(websocket, {
@@ -247,7 +265,7 @@ class EstateProtocol:
         request_id = data.get("request_id")
         try:
             with self.database() as conn, conn:
-                now = int(time.time())
+                now = int(time.time()) if now_override is None else now_override
                 result = None
                 if action != "get":
                     conn.execute("BEGIN IMMEDIATE")
@@ -263,6 +281,10 @@ class EstateProtocol:
                     )
                 elif action == "lottery_draw":
                     result = estate_draw_lottery(conn, username, request_id, now, adjust_coins)
+                elif action == "market_trade":
+                    result = estate_trade_market(conn, username, request_id,
+                                                 data.get("side"), data.get("quantity"), now,
+                                                 adjust_coins, market_source, execution_source)
                 elif action == "use_land_upgrade_ticket":
                     result = estate_use_land_upgrade_ticket(
                         conn, username, request_id, data.get("plot_id"), now)
@@ -367,6 +389,44 @@ class EstateProtocol:
 
     async def handle_estate_lottery_draw(self, websocket, state, data):
         await self.handle_estate_action(websocket, state, data, "lottery_draw")
+
+    async def handle_estate_market_get(self, websocket, state, data):
+        user = state.get("user")
+        if not user:
+            await self.send_json(websocket, {"type": "estate_error", "code": "auth_required",
+                                            "message": "请先登录", "request_id": data.get("request_id")})
+            return
+        try:
+            now = int(time.time())
+            await self.refresh_market_quote(now)
+            with self.database() as conn:
+                snapshot = estate_market_snapshot(conn, user["username"], now, None)
+            await self.send_json(websocket, {"type": "estate_market_state", "market": snapshot,
+                                            "request_id": data.get("request_id")})
+        except sqlite3.Error:
+            logger.exception("estate market unavailable for %s", user["username"])
+            await self.send_json(websocket, {"type": "estate_error", "code": "estate_failed",
+                                            "message": "行情暂不可用，请稍后重试",
+                                            "request_id": data.get("request_id")})
+
+    async def handle_estate_market_trade(self, websocket, state, data):
+        if not state.get("user"):
+            await self.handle_estate_action(websocket, state, data, "market_trade")
+            return
+        now = int(time.time())
+        try:
+            execution_source = await self.refresh_market_quote(now)
+        except sqlite3.Error:
+            logger.exception("estate market lookup failed")
+            await self.send_json(websocket, {"type": "estate_error", "code": "estate_failed",
+                                            "message": "行情暂不可用，请稍后重试",
+                                            "request_id": data.get("request_id")})
+            return
+        if execution_source is None:
+            execution_source = await asyncio.to_thread(fetch_source_price)
+        await self.handle_estate_action(websocket, state, data, "market_trade",
+                                        now_override=now, market_source=None,
+                                        execution_source=execution_source)
 
     async def handle_estate_use_land_upgrade_ticket(self, websocket, state, data):
         await self.handle_estate_action(websocket, state, data, "use_land_upgrade_ticket")
