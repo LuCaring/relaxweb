@@ -1,0 +1,59 @@
+{
+  "scenario": "beta.sword.basic upgrade: quote, commit, replay; changed quote must be re-confirmed",
+  "notes": "Figures match beta-core economy (upgrade costs 200 minor) and are the same samples the protocol tests replay; wallet_at_commit is the balance at commit time, not the current balance.",
+  "requests": {
+    "quote_upgrade_request": {
+      "type": "dungeon_beta_quote_upgrade",
+      "protocol_version": 1,
+      "request_id": "up_quote_0001",
+      "item_id": "item_example_01",
+      "target_level": 1
+    },
+    "upgrade_request": {
+      "type": "dungeon_beta_upgrade",
+      "protocol_version": 1,
+      "request_id": "up_example_0001",
+      "item_id": "item_example_01",
+      "target_level": 1,
+      "expected_item_version": 1,
+      "expected_ruleset_id": "beta-20260925-f0",
+      "expected_costs": [{"resource_id": "wallet:coins", "amount": 200}]
+    }
+  },
+  "results": {
+    "result_envelope": {
+      "type": "dungeon_beta_result",
+      "protocol_version": 1,
+      "request_id": "up_example_0001",
+      "result_kind": "upgrade",
+      "replayed": false,
+      "asset_revision": 2,
+      "result": {
+        "item_id": "item_example_01",
+        "item_version": 2,
+        "upgrade_level": 1,
+        "stats": {"atk": 32},
+        "spent": [{"resource_id": "wallet:coins", "amount": 200}],
+        "wallet_at_commit": {"coin_minor": 800}
+      }
+    }
+  },
+  "errors": {
+    "error_envelope": {
+      "type": "dungeon_beta_error",
+      "protocol_version": 1,
+      "request_id": "up_example_0002",
+      "code": "quote_changed",
+      "message": "升级报价已变化，请重新确认",
+      "retryable": false,
+      "details": {"item_id": "item_example_01"}
+    }
+  },
+  "pushes": {
+    "invalidate_push": {
+      "type": "dungeon_beta_invalidate",
+      "protocol_version": 1,
+      "asset_revision": 2
+    }
+  }
+}

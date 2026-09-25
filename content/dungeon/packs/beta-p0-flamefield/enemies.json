@@ -1,0 +1,6 @@
+[
+  {"id": "beta.p0.enemy.softbug", "name": "软壳虫", "visual_id": "beta.p0.visual.softbug", "hp": 60, "attack": 3, "boss": false},
+  {"id": "beta.p0.enemy.seedpuff", "name": "草籽团", "visual_id": "beta.p0.visual.seedpuff", "hp": 60, "attack": 3, "boss": false},
+  {"id": "beta.p0.enemy.moth", "name": "夜蛾", "visual_id": "beta.p0.visual.moth", "hp": 400, "attack": 11, "boss": false},
+  {"id": "beta.p0.enemy.mossqueen", "name": "苔冠母虫", "visual_id": "beta.p0.visual.mossqueen", "hp": 1200, "attack": 12, "boss": true}
+]

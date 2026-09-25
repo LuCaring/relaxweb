@@ -1,0 +1,52 @@
+[
+  {
+    "id": "beta.p0.progression.bulwark",
+    "template_id": "beta.p0.weapon.bulwark_blade",
+    "strategy": "fixed_level_table",
+    "rows": [
+      {
+        "from_level": 0, "to_level": 1,
+        "requires_progress": "beta.p0.clear.rm01",
+        "costs": [{"resource_id": "wallet:coins", "amount": 5000}],
+        "changes": [{"operation": "item.stat_flat", "stat": "atk", "value": 2}]
+      },
+      {
+        "from_level": 1, "to_level": 2,
+        "requires_progress": "beta.p0.clear.rm03",
+        "costs": [{"resource_id": "wallet:coins", "amount": 15000}],
+        "changes": [{"operation": "item.stat_flat", "stat": "atk", "value": 2}]
+      },
+      {
+        "from_level": 2, "to_level": 3,
+        "requires_progress": "beta.p0.clear.rm04",
+        "costs": [{"resource_id": "wallet:coins", "amount": 40000}],
+        "changes": [{"operation": "item.stat_flat", "stat": "atk", "value": 3}]
+      }
+    ]
+  },
+  {
+    "id": "beta.p0.progression.tempo",
+    "template_id": "beta.p0.weapon.tempo_blade",
+    "strategy": "fixed_level_table",
+    "rows": [
+      {
+        "from_level": 0, "to_level": 1,
+        "requires_progress": "beta.p0.clear.rm01",
+        "costs": [{"resource_id": "wallet:coins", "amount": 5000}],
+        "changes": [{"operation": "item.stat_flat", "stat": "atk", "value": 2}]
+      },
+      {
+        "from_level": 1, "to_level": 2,
+        "requires_progress": "beta.p0.clear.rm03",
+        "costs": [{"resource_id": "wallet:coins", "amount": 15000}],
+        "changes": [{"operation": "item.stat_flat", "stat": "atk", "value": 2}]
+      },
+      {
+        "from_level": 2, "to_level": 3,
+        "requires_progress": "beta.p0.clear.rm04",
+        "costs": [{"resource_id": "wallet:coins", "amount": 40000}],
+        "changes": [{"operation": "item.stat_flat", "stat": "atk", "value": 3}]
+      }
+    ]
+  }
+]

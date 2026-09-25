@@ -14,7 +14,7 @@
       "weapons": {"$ref": "#/$defs/file"}, "enemies": {"$ref": "#/$defs/file"},
       "encounters": {"$ref": "#/$defs/file"}, "effects": {"$ref": "#/$defs/file"},
       "progression": {"$ref": "#/$defs/file"}, "economy": {"$ref": "#/$defs/file"},
-      "loot": {"$ref": "#/$defs/file"}
+      "loot": {"$ref": "#/$defs/file"}, "routes": {"$ref": "#/$defs/file"}
     }, "additionalProperties": false}
   },
   "$defs": {"file": {"type": "string", "pattern": "^[a-z][a-z0-9_-]*\\.json$"}},

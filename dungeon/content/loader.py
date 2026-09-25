@@ -17,7 +17,7 @@ class ContentError(ValueError):
 
 
 SCHEMA_DIR = Path(__file__).resolve().parents[2] / "contracts" / "dungeon" / "schemas"
-KINDS = ("weapons", "enemies", "encounters", "effects", "progression", "economy", "loot")
+KINDS = ("weapons", "enemies", "encounters", "routes", "effects", "progression", "economy", "loot")
 
 
 def _pairs_unique(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
@@ -114,6 +114,12 @@ class Ruleset:
                 {"id": encounter["id"], "name": encounter["name"]}
                 for encounter in self.content("encounters")
             ],
+            "routes": [
+                {"id": route["id"], "name": route["name"],
+                 "entry_encounter_id": route["encounter_ids"][0],
+                 "room_count": len(route["encounter_ids"])}
+                for route in self.content("routes")
+            ],
             "trade_policy": dict(self.content("economy")["trade_policy"]),
         }
 
@@ -191,8 +197,12 @@ def load_ruleset(release_path: str | Path, registry: Registry | None = None) -> 
             raise ContentError(f"missing required content: {kind}")
     contents["economy"] = economy
     _check_semantics(contents, registry, required_plugins)
+    # An older release has no routes file. Keep its canonical payload (and
+    # pinned hash) byte-for-byte compatible with the original loader.
+    canonical_contents = {kind: value for kind, value in contents.items()
+                          if kind != "routes" or value}
     canonical = json.dumps({"release": release, "manifests": manifests,
-                            "contents": contents, "plugins": required_plugins},
+                            "contents": canonical_contents, "plugins": required_plugins},
                            sort_keys=True, separators=(",", ":"), ensure_ascii=False,
                            allow_nan=False).encode("utf-8")
     digest = "sha256-" + hashlib.sha256(canonical).hexdigest()
@@ -206,11 +216,11 @@ def load_ruleset(release_path: str | Path, registry: Registry | None = None) -> 
 def _check_semantics(content: Mapping[str, Any], registry: Registry,
                      required_plugins: Mapping[str, str]) -> None:
     weapons = {entry["id"] for entry in content["weapons"]}
-    enemies = {entry["id"] for entry in content["enemies"]}
+    enemies = {entry["id"]: entry for entry in content["enemies"]}
+    encounters = {entry["id"]: entry for entry in content["encounters"]}
     pools = {entry["id"] for entry in content["loot"]}
     effects = {entry["id"] for entry in content["effects"]}
-    progress = {encounter["clear_progress_id"] for encounter in content["encounters"]
-                if "clear_progress_id" in encounter}
+    progress: set[str] = set()
     for weapon in content["weapons"]:
         for effect_id in weapon["effects"]:
             if effect_id not in effects:
@@ -220,11 +230,46 @@ def _check_semantics(content: Mapping[str, Any], registry: Registry,
         if not weapon["trade"]["allowed"] and not weapon["trade"]["reason"]:
             raise ContentError(f"missing trade reason: {weapon['id']}")
     for encounter in content["encounters"]:
+        if len(encounter["enemies"]) > 64:
+            raise ContentError(f"too many encounter enemies: {encounter['id']}")
         for enemy_id in encounter["enemies"]:
             if enemy_id not in enemies:
                 raise ContentError(f"unknown enemy reference: {enemy_id}")
+        if "spawn_groups" in encounter:
+            groups = encounter["spawn_groups"]
+            group_ids = [group["enemy_id"] for group in groups]
+            if len(group_ids) != len(set(group_ids)):
+                raise ContentError(f"duplicate spawn group enemy: {encounter['id']}")
+            expanded = [group["enemy_id"] for group in groups for _ in range(group["count"])]
+            if len(expanded) > 64 or expanded != encounter["enemies"]:
+                raise ContentError(f"spawn groups do not match enemies: {encounter['id']}")
         if encounter["loot_pool_id"] not in pools:
             raise ContentError(f"unknown loot pool: {encounter['loot_pool_id']}")
+        clear_progress = encounter.get("clear_progress_id")
+        if clear_progress:
+            if clear_progress in progress:
+                raise ContentError(f"duplicate clear progress: {clear_progress}")
+            progress.add(clear_progress)
+        rewards = encounter.get("rewards")
+        if rewards:
+            reward_progress = rewards["permanent"]["progress_ids"]
+            if reward_progress != ([clear_progress] if clear_progress else []):
+                raise ContentError(f"reward progress does not match clear progress: {encounter['id']}")
+    for route in content["routes"]:
+        route_encounters = route["encounter_ids"]
+        if len(route_encounters) != len(set(route_encounters)):
+            raise ContentError(f"duplicate route encounter: {route['id']}")
+        for encounter_id in route_encounters:
+            if encounter_id not in encounters:
+                raise ContentError(f"unknown route encounter: {encounter_id}")
+            if "rewards" not in encounters[encounter_id]:
+                raise ContentError(f"route encounter missing reward plan: {encounter_id}")
+        for encounter_id in route_encounters[:-1]:
+            if any(enemies[enemy_id]["boss"] for enemy_id in encounters[encounter_id]["enemies"]):
+                raise ContentError(f"boss before final room: {route['id']}")
+        final = encounters[route_encounters[-1]]
+        if not any(enemies[enemy_id]["boss"] for enemy_id in final["enemies"]):
+            raise ContentError(f"route has no final boss: {route['id']}")
     for pool in content["loot"]:
         for entry in pool["entries"]:
             if entry["item_template_id"] not in weapons:

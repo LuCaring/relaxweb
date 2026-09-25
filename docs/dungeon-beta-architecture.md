@@ -11,13 +11,13 @@
 | 位置 | 已实现 | 后续工作 |
 | --- | --- | --- |
 | `dungeon/legacy/`、`server/dungeon/legacy_protocol.py` | 旧实现迁出庄园；旧import保持同模块别名 | 保持旧局结算兼容，新玩法走独立协议 |
-| `dungeon/content/`、`plugins/`、`contracts/` | 规则包加载、可信机制校验、Simulator Protocol | 扩充合同和可执行fixture；实现动作模拟与宿主 |
-| `dungeon/application/`、`domain/` | 共享钱包、纯升级策略、事务升级和成功回执 | 正式鉴权协议、奖励事务、原子成交 |
-| `dungeon/storage/` | 编号迁移、预留门禁、旧表兼容 | Beta局、房间结算与交易表 |
-| `server/app.py`、`server/schema.py`、`admin.py` | 新命名空间装配、迁移、改名/删除关联修正 | 运行宿主生命周期与交易注销流程 |
+| `dungeon/content/`、`plugins/`、`contracts/` | 规则包加载、可信机制校验、Simulator Protocol | P0路线/奖励合同已补齐；真实动作模拟待B接入 |
+| `dungeon/application/`、`domain/` | 共享钱包、升级/交易、装备工厂、一致性状态查询、内部运行与奖励事务 | 动作协议与正式生命周期集成 |
+| `dungeon/storage/` | 迁移1～4、预留门禁、装备冻结元数据、交易/run/房间结算表 | 生产副本迁移演练 |
+| `server/app.py`、`server/schema.py`、`admin.py` | 新命名空间装配、迁移、改名/删除关联修正 | 运行宿主生命周期；交易注销释放已补回归 |
 | 客户端 | 旧UI提交可供复用 | 大厅平级入口、动作页、升级/交易交互 |
 
-仍需尊重三个现有约束：共享钱包存储为REAL，Beta通过整数分适配并校验往返精度；物品location与装备槽受SQL CHECK限制，新状态必须有迁移；旧装备owner依赖用户名，Beta关联使用稳定user_id，管理工具已覆盖现有表，新增交易关联仍需补齐。
+仍需尊重三个现有约束：共享钱包存储为REAL，Beta通过整数分适配并校验往返精度；物品location与装备槽受SQL CHECK限制，新状态必须有迁移；旧装备owner依赖用户名，Beta关联使用稳定user_id，管理工具已覆盖现有表，新增表继续保持改名/删除兼容。
 
 当前连接工厂没有全局启用外键。现有删除触发器和Beta删除触发器负责清理；新表不能仅声明REFERENCES就假设关联行为有效。
 
@@ -229,7 +229,9 @@ Beta新增`dungeon_asset_reservations`，以`(asset_type, asset_id)`唯一标识
 
 ### 7.1 模拟器和宿主分工
 
-B实现纯模拟接口 `create(initial, rules, rng)`、`step(state, ordered_inputs, ticks)`、`snapshot(state)`、`restore(snapshot, rules)`。A提供每局独立的运行容器、顺序输入、随机源、时间推进、持久化和推送。具体签名见合同文档。
+当前已实现 `RunService` 与同步、手动推进的 `RunHost`，入口见[运行接入说明](../dungeon/runtime/README.md)。下述30Hz调度、10Hz推送、失联检测、专用执行器和Application生命周期仍为接入目标；只有内部状态机、输入预算、恢复和原子奖励已有测试。不要将手动pump直接暴露给客户端。
+
+B实现 `dungeon.contracts.simulator.Simulator`：`create(initial, rules, services)`、`step(state, ordered_inputs, services)`（固定推进1 tick）、`snapshot(state)`、`restore(snapshot, rules, services)`。A提供每局独立的运行容器、顺序输入、可恢复的命名随机流、时间推进和持久化；传输层另行接入推送。以可导入Protocol为准，不另设按任意ticks推进的接口。
 
 初始测试档位：30Hz模拟、60fps前端渲染、10Hz状态推送、每1秒检查点，实际以测量调整。模拟内部以整数tick计时，不每帧把1000/30四舍五入累计造成时钟漂移；秒数转换为tick的规则统一声明。位置可用1格=1024子单位；客户端插值允许浮点，权威碰撞只认服务端结果。
 
@@ -256,13 +258,15 @@ B实现纯模拟接口 `create(initial, rules, rng)`、`step(state, ordered_inpu
 
 房间完成时：运行容器停止进入下一房，生成内部`RoomOutcome`；A验证它来自当前权威容器及预期房间版本，按规则生成奖励，在**同一事务**中保存房间完成检查点、唯一奖励凭据、物品/金币/进度及回执。提交成功后才能向客户端确认完成和推进下一房。不存在“先宣布奖励、稍后另存物品”的中间状态。
 
-奖励唯一键建议`(run_id, room_index, reward_kind)`；每个普通房/首领的奖励计划明确类别，重放只返回原结果，不重新抽奖。最终通关奖与房间奖用不同kind，杜绝最终结算页再发一次各房奖励。
+已采用奖励唯一键`(run_id, room_index, reward_kind)`；每个普通房/首领的奖励计划明确类别，重放只返回原结果，不重新抽奖。最终通关奖与房间奖用不同kind，杜绝最终结算页再发一次各房奖励。
 
 临时断线后不补算离线杀怪，服务器在失联策略触发后暂停；连接失联检测窗口内仍可能继续模拟，UI与测试必须承认此边界。重启后Beta活动局一律以PAUSED恢复，客户端重新申请控制权；旧版本自动战斗仍按旧规则，不混用。
 
 ## 8. 数据结构与迁移
 
 ### 8.1 复用与新增表
+
+迁移1/2保持原SQL校验和；迁移3增加装备冻结字段和报价删除释放触发器，迁移4创建运行及房间奖励表。下表同时包含未实施的远期结构，以迁移代码为准；尚未引入resonance槽、账号模式迁移或持久化规则归档表。
 
 | 数据 | 建议方式 | 核心约束 |
 | --- | --- | --- |
@@ -271,7 +275,7 @@ B实现纯模拟接口 `create(initial, rules, rng)`、`step(state, ordered_inpu
 | 穿戴 | 复用或有序重建dungeon_loadout约束以支持resonance槽 | 同一实例不能重复穿戴；物品slot仍是weapon而非resonance |
 | 档案 | 增加mode/迁移标志与新的成长payload、资产版本 | 旧客户端不得越过Beta资产门禁 |
 | Beta局 | 新建dungeon_beta_runs | 一个活动局、固定规则集与完整检查点，旧局表不重解释 |
-| Beta房间结算 | 新建dungeon_beta_rewards | run/room/kind唯一，与资产同事务 |
+| Beta房间结算 | 已建dungeon_beta_room_rewards | run/room/kind唯一，与资产同事务 |
 | Beta写回执 | 新建dungeon_beta_receipts | user_id/request_id唯一；参数摘要、结果、状态码、格式版本 |
 | 物品预留 | 新建dungeon_asset_reservations | asset_type/asset_id唯一，reservation_ref可追踪 |
 | 报价与成交 | 新建dungeon_trade_offers、dungeon_trade_settlements | 一个订单最多一次结算；不可变双方/价格/规则快照 |
@@ -302,13 +306,13 @@ Beta表以稳定`users.id`作为账号外键语义。旧物品owner仍为名称�
 
 | PR | 工作范围 | 完成后可以解锁什么 | 必须验收 |
 | --- | --- | --- | --- |
-| R4 运行时和权威奖励 | 有界宿主、控制权、输入、检查点、房间结算、生命周期 | B的模拟器进入正式闭环 | 断线/重启、双标签控制、重复房间完成、无客户端造奖 |
-| R5 玩家交易 | 定向报价、预留、接受/撤销/过期、余额/所有权原子交割 | 两账号真实交易 | 并发、满包、金额守恒、共享经济竞争与故障注入 |
+| R4 运行时接入收尾 | 内部宿主/奖励已完成；补真实模拟器、调度、生命周期和动作协议 | B的模拟器进入正式闭环 | 断线/重启、双标签控制、重复房间完成、无客户端造奖 |
+| R5 玩家交易收尾 | 服务与协议已落地；补列表分页、客户端两账号联调 | 两账号通过UI完成真实交易 | 并发、满包、金额守恒、共享经济竞争与故障注入 |
 | R6 合流与开放 | 真实短局、成长/交易UI、内容经济、迁移演练、运行指标 | 对玩家开放Beta | 开发指南整体验收；已知限制与配置版本完整 |
 
-R4和R5在R2/R3边界稳定后可并行；B无需等R5写完才做战斗。每个PR都有可用纵向路径，不要求先把整个目标目录创建完。
+当前重点为R4的真实模拟与传输集成；R5剩余联调可并行，B无需等待全部交易页面完成才做战斗。每个PR都有可用纵向路径，不要求先把整个目标目录创建完。
 
-R1～R3的首批公共底座已经完成，具体范围和剩余协议工作以实现状态为准；下一阶段推进R4/R5。后台执行与交易属于同一A线的不同任务，分工人数增加时可拆给独立成员，但核心合同仍由一处维护。
+R1～R3的首批公共底座已经完成，具体范围和剩余协议工作以实现状态为准；下一阶段完成R4集成与R5页面联调。后台执行与交易属于同一A线的不同任务，分工人数增加时可拆给独立成员，但核心合同仍由一处维护。
 
 ## 10. 验证与开发工具
 
@@ -328,7 +332,7 @@ npm run test:browser
 
 其中全量测试用于集成阶段；单功能开发先跑受影响集合。浏览器测试脚本要求8000端口可用，避免抢占他人的预览。UI分支自带的测试在其合入后再作为主分支入口，不提前宣称当前分支已有。
 
-内容校验已可运行：`uv run --locked python -m dungeon.tools validate-content content/dungeon/release.json`。仍需补动作版固定种子headless短局、完整运行/交易fixture、测试库两账号初始化与规则集差异报告。
+内容校验已可运行：`uv run --locked python -m dungeon.tools validate-content content/dungeon/release.json`。交易fixture与测试库两账号初始化工具已落地；仍需动作版固定种子短局、完整运行fixture与规则集差异报告。
 
 ### 10.2 必须补的测试矩阵
 

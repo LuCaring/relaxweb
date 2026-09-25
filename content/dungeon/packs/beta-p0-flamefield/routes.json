@@ -1,0 +1,12 @@
+[
+  {
+    "id": "beta.p0.route.flamefield",
+    "name": "火苗原野",
+    "encounter_ids": [
+      "beta.p0.encounter.rm01",
+      "beta.p0.encounter.rm02",
+      "beta.p0.encounter.rm03",
+      "beta.p0.encounter.rm04"
+    ]
+  }
+]

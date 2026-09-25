@@ -14,7 +14,7 @@ from dungeon.legacy.combat import (BattleSnapshot, CombatError, advance,
 from dungeon.legacy.receipts import (REQUEST_ID_PATTERN, load_receipt,
                                      request_digest, save_receipt)
 from dungeon.legacy.service import DungeonError, dungeon_state
-from dungeon.storage.assets import ensure_available
+from dungeon.storage.assets import bump_asset_revision, ensure_available
 
 
 RUN_COLUMNS = ("battle_id", "username", "challenge_id", "difficulty_id", "status",
@@ -125,6 +125,11 @@ def start_run(conn, username, request_id, challenge_id, difficulty_id,
         raise DungeonError("pending_items", "请先领取待领取装备")
     if state["active_job"]:
         raise DungeonError("active_job", "已有进行中的挑战或扫荡")
+    if conn.execute("""SELECT 1 FROM sqlite_master WHERE type='table'
+            AND name='dungeon_beta_runs'""").fetchone() and conn.execute("""SELECT 1
+            FROM dungeon_beta_runs WHERE user_id=(SELECT id FROM users WHERE username=?)
+            AND status IN ('ready','running','paused')""", (username,)).fetchone():
+        raise DungeonError("active_job", "已有进行中的地下城挑战")
     equipped_ids = set(state["loadout"].values())
     for item_id in equipped_ids:
         ensure_available(conn, username, item_id)
@@ -262,6 +267,8 @@ def _award(conn, run, now_ms, adjust_coins):
              _json(item["stats"]), _json(item["tags"]),
              _json(item["effects"]), _json(item["affixes"]), item.get("item_level", 1), item["sell_coins"],
              item["location"], now_ms // 1000))
+    user_id = conn.execute("SELECT id FROM users WHERE username=?", (run["username"],)).fetchone()[0]
+    bump_asset_revision(conn, user_id)
     conn.execute("""UPDATE dungeon_progress
         SET clear_count=clear_count+1,first_clear_at=COALESCE(first_clear_at,?)
         WHERE username=? AND challenge_id=? AND difficulty_id=?""",

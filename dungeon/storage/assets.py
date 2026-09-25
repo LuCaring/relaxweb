@@ -43,12 +43,16 @@ def reserve_item(conn, username, item_id, purpose, ref, now):
     if purpose not in ("active_run", "trade_offer") or not isinstance(ref, str) or not ref:
         raise DungeonError("invalid_request", "预留参数无效")
     ensure_available(conn, username, item_id)
-    item = conn.execute("""SELECT location,locked,template_id,beta_bound_reason,beta_source
-        FROM dungeon_items WHERE item_id=? AND owner=?""", (item_id, username)).fetchone()
+    beta_trade_column = "beta_trade_allowed" if any(
+        row[1] == "beta_trade_allowed" for row in conn.execute("PRAGMA table_info(dungeon_items)")) else "NULL"
+    item = conn.execute("""SELECT location,locked,template_id,beta_bound_reason,beta_source,
+        %s FROM dungeon_items WHERE item_id=? AND owner=?""" % beta_trade_column,
+        (item_id, username)).fetchone()
     if item[0] != "bag":
         raise DungeonError("asset_not_tradable" if purpose == "trade_offer" else "forbidden", "装备位置不可预留")
     if purpose == "trade_offer":
-        if item[1] or item[3] or item[2].startswith("starter_") or item[4] in ("starter", "test"):
+        if (item[1] or item[3] or item[2].startswith("starter_") or
+                item[4] in ("starter", "test") or item[5] == 0):
             raise DungeonError("asset_not_tradable", "该装备不能交易")
         if conn.execute("SELECT 1 FROM dungeon_loadout WHERE item_id=? AND username=?",
                         (item_id, username)).fetchone():

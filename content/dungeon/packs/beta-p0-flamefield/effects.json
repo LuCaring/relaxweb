@@ -1,0 +1,22 @@
+[
+  {
+    "id": "beta.p0.effect.bulwark_guard",
+    "kind": "sword.shield_on_spend",
+    "trigger": "sword.momentum_spent",
+    "filter": {"origin": "main_weapon"},
+    "params": {"minimum_spent": 2, "shield_max_hp_bp": 1500, "duration_ms": 3000, "cooldown_ms": 8000},
+    "limits": {"per_action": 1, "max_proc_depth": 1},
+    "stacking": "refresh_max",
+    "remove_policy": "remove_owned_state"
+  },
+  {
+    "id": "beta.p0.effect.tempo_guard",
+    "kind": "sword.shield_on_spend",
+    "trigger": "sword.momentum_spent",
+    "filter": {"origin": "main_weapon"},
+    "params": {"minimum_spent": 2, "shield_max_hp_bp": 500, "duration_ms": 1200, "cooldown_ms": 3000},
+    "limits": {"per_action": 1, "max_proc_depth": 1},
+    "stacking": "refresh_max",
+    "remove_policy": "remove_owned_state"
+  }
+]

@@ -2,9 +2,49 @@ from __future__ import annotations
 
 import argparse
 import json
+from functools import partial
+from pathlib import Path
 import sys
+import time
 
 from dungeon.content import ContentError, load_ruleset
+
+
+def _init_test_db(path, coins, password):
+    """Create the two B/C integration accounts; safe to rerun."""
+    from server.accounts import hash_password
+    from server.database import database
+    from server.schema import init_db
+    from dungeon.legacy.service import ensure_dungeon
+    from dungeon.application.items import create_item
+
+    factory = partial(database, str(Path(path)))
+    init_db(factory)
+    ruleset = load_ruleset(Path(__file__).resolve().parents[2] / "content/dungeon/release.json")
+    created, skipped = [], []
+    with factory() as conn, conn:
+        now = int(time.time())
+        for username, tradable in (("beta_seller", True), ("beta_buyer", False)):
+            if conn.execute("SELECT 1 FROM users WHERE username=?", (username,)).fetchone():
+                skipped.append(username)
+                continue
+            digest, salt = hash_password(password)
+            conn.execute("""INSERT INTO users(username,password_hash,salt,created_at,coins)
+                VALUES (?,?,?,?,?)""", (username, digest, salt, now, float(coins)))
+            user_id = conn.execute("SELECT id FROM users WHERE username=?",
+                                   (username,)).fetchone()[0]
+            ensure_dungeon(conn, username, now)
+            if tradable:
+                create_item(conn, ruleset, username, "beta.sword.basic",
+                            source="integration_fixture", now=now)
+                conn.execute("""INSERT INTO dungeon_beta_progress(user_id,progress_id)
+                    VALUES (?,'beta.clear.first_boss')""", (user_id,))
+            created.append(username)
+    print(json.dumps({"path": str(path), "created": created, "skipped_existing": skipped,
+                      "coins_each": coins, "password": password,
+                      "note": "integration_fixture sword is tradable only in this dedicated test DB;"
+                              " source=test and starter gear are bound"},
+                     ensure_ascii=False))
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -12,7 +52,14 @@ def main(argv: list[str] | None = None) -> int:
     subparsers = parser.add_subparsers(dest="command", required=True)
     validate = subparsers.add_parser("validate-content", help="validate and hash a release")
     validate.add_argument("release", help="path to release.json")
+    init = subparsers.add_parser("init-test-db", help="create B/C integration accounts")
+    init.add_argument("path", help="database file to create or extend")
+    init.add_argument("--coins", type=int, default=1000, help="coins per account")
+    init.add_argument("--password", default="dungeon-beta", help="login password")
     args = parser.parse_args(argv)
+    if args.command == "init-test-db":
+        _init_test_db(args.path, args.coins, args.password)
+        return 0
     try:
         ruleset = load_ruleset(args.release)
     except ContentError as exc:

@@ -5,7 +5,7 @@
 1. [开发指南](dungeon-beta-development-guide.md)：产品方向、团队边界、分支协作及开放验收。
 2. [当前实现状态](dungeon-beta-implementation-status.md)：已有能力、剩余任务与验证结果。
 3. [架构方案](dungeon-beta-architecture.md)：模块边界、运行宿主、共享资产、交易和迁移。
-4. [接口与插件合同草案](dungeon-beta-contracts.md)：待实现的完整协议；可执行子集见[合同目录](../contracts/dungeon/README.md)。
+4. [接口与插件合同草案](dungeon-beta-contracts.md)：已实施的永久操作与待实施的动作协议；可执行合同见[合同目录](../contracts/dungeon/README.md)。
 
 代码入口见 [dungeon/README](../dungeon/README.md)。A/B/C分别使用 `dev/dungeon-beta-foundation`、`dev/dungeon-beta-client`、`dev/dungeon-beta-content`。分支开工说明随各线提交维护，变更公共合同须同步开发指南与可执行fixture。
 
