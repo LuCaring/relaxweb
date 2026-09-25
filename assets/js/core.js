@@ -61,7 +61,7 @@ export const state = {
   hallTimer: 0,
   hallDeadlineAt: 0,
   currentGameId: null,
-  hallPage: null,
+  hallPage: new URLSearchParams(location.search).get("view") === "voicehall" ? "voicehall" : null,
   roomChat: [],
   roomChatDraft: "",
   ratingEntries: [],
@@ -162,6 +162,7 @@ export function connectGame() {
   });
   state.socket.addEventListener("error", () => {});
   state.socket.addEventListener("close", () => {
+    document.dispatchEvent(new Event("gamesocketclose"));
     state.reconnectTimer = window.setTimeout(connectGame, 2000);
   });
   state.socket.addEventListener("message", ({ data }) => {

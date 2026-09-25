@@ -180,6 +180,7 @@ onMessage("resume_success", (data) => {
     username: data.username, nickname: data.nickname, avatar: data.avatar,
     coins: data.coins, rating: data.rating,
   });
+  send({ type: "get_room" });
 });
 
 onMessage("profile", (data) => {

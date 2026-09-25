@@ -120,8 +120,12 @@ class VoiceHubTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(facade.voice_plan("stranger"), {})
         self.assertEqual(self.hub.sent["alice"][-1]["room"], "vh-default")
         self.assertTrue(self.hub.sent["alice"][-1]["can_publish"])
+        issued_before = len(self.hub.sent["alice"])
         # 订阅后的个性化快照与空聊天历史
         await self.vh.handle_state(ws, state, {})
+        self.assertEqual(len(self.hub.sent["alice"]), issued_before + 1,
+                         "重新订阅必须补发语音 token")
+        self.assertEqual(self.hub.sent["alice"][-1]["room"], "vh-default")
         snapshot = self.last_message(ws, "voice_hub_state")
         self.assertEqual(snapshot["my_channel"], "default")
         self.assertEqual([channel["id"] for channel in snapshot["channels"]],

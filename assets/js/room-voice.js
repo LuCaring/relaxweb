@@ -16,6 +16,11 @@ let currentKey = "";       // url|room|发布权限，防止重复连接
 let canPublish = false;
 let audioBlocked = false;
 let micError = "";
+let connectError = "";
+let connecting = false;
+let latestUpdate = null;
+let retryTimer = 0;
+let retryDelay = 2000;
 const remoteAudio = new Map();
 let updateQueue = Promise.resolve();
 
@@ -28,7 +33,20 @@ export function voiceConnected() {
 }
 
 export function voiceStatus() {
-  return { connected: Boolean(current), canPublish, audioBlocked, micError };
+  return { connected: Boolean(current), connecting, connectError,
+    canPublish, audioBlocked, micError };
+}
+
+function scheduleRetry(update) {
+  if (retryTimer || latestUpdate !== update || !update.token) return;
+  retryTimer = window.setTimeout(() => {
+    retryTimer = 0;
+    if (latestUpdate !== update) return;
+    updateQueue = updateQueue.then(() => applyUpdate(update)).catch((error) => {
+      console.warn("voice retry failed", error);
+    });
+  }, retryDelay);
+  retryDelay = Math.min(retryDelay * 2, 30000);
 }
 
 function microphoneError(error) {
@@ -175,8 +193,12 @@ function clearAudio() {
 }
 
 async function applyUpdate(update) {
+  clearTimeout(retryTimer);
+  retryTimer = 0;
   const LK = window.LivekitClient;
   if (!LK || !update.token || !update.room) {
+    connectError = "";
+    connecting = false;
     await disconnect("server cleared voice");
     return;
   }
@@ -186,6 +208,9 @@ async function applyUpdate(update) {
     return;
   }
   await disconnect("switching voice room");
+  connecting = true;
+  connectError = "";
+  announceState();
   const room = new LK.Room({ adaptiveStream: false, dynacast: false });
   room.on(LK.RoomEvent.ActiveSpeakersChanged, (speakers) => {
     document.dispatchEvent(new CustomEvent("voicespeakers", {
@@ -217,20 +242,29 @@ async function applyUpdate(update) {
       current = null;
       currentKey = "";
       canPublish = false;
+      connectError = "语音连接已断开，正在重试…";
       announceState();
+      scheduleRetry(update);
     }
   });
   try {
     await room.connect(update.url, update.token);
   } catch (error) {
     console.warn("voice connect failed", error);
+    try { await room.disconnect(); } catch { /* 连接尚未建立 */ }
     current = null;
     currentKey = "";
+    connecting = false;
+    connectError = "语音连接失败，正在重试…";
     announceState();
+    scheduleRetry(update);
     return;
   }
   current = room;
   currentKey = key;
+  connecting = false;
+  connectError = "";
+  retryDelay = 2000;
   canPublish = Boolean(update.can_publish);
   if (mic.wanted) await applyMic();
   announceState();
@@ -251,6 +285,11 @@ async function disconnect(reason) {
 }
 
 export async function leaveVoice() {
+  latestUpdate = null;
+  clearTimeout(retryTimer);
+  retryTimer = 0;
+  connecting = false;
+  connectError = "";
   mic.wanted = false;
   mic.primed = false;
   mic.processing = false;
@@ -269,6 +308,7 @@ document.addEventListener("voicemicstreamended", () => {
 });
 
 onMessage("voice_update", (msg) => {
+  latestUpdate = msg;
   updateQueue = updateQueue.then(() => applyUpdate(msg)).catch((error) => {
     console.warn("voice update failed", error);
   });

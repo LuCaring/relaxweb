@@ -69,8 +69,10 @@ onMessage("hand_result", () => {});
 onMessage("game_restart", () => {});
 
 onMessage("room_closed", (data) => {
-  void leaveVoice();
   const hadRoom = Boolean(state.myRoom);
+  // 登录恢复时 get_room 对未进游戏的用户也会返回 room_closed；
+  // 此时可能正在语音聊天室，不能误断开其 LiveKit 连接。
+  if (hadRoom) void leaveVoice();
   resetGameAudioRoom();
   state.myRoom = null;
   resetRoomChat();

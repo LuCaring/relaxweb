@@ -204,6 +204,9 @@ class VoiceHub:
         await self.hub.send_json(websocket, self._snapshot(user["username"]))
         channel_id = self._member_channel(user["username"])
         if channel_id is not None:
+            # 新 WebSocket 不会继承上一个连接收到的 token；即使签发计划
+            # 尚未变化，也要在重新订阅时补发，供 LiveKit 断线恢复。
+            await self.voice.sync_user(self._facade, user["username"], force=True)
             await self.hub.send_json(websocket, {
                 "type": "voice_hub_chat_history",
                 "channel": channel_id,

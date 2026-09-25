@@ -14,6 +14,7 @@ import { mountVoiceControls } from "./voice-controls.js";
 // 视图 DOM 引用：voice_hub_state 只重建频道树与头部，保住聊天输入焦点
 let tree = null;
 let headHint = null;
+let retryButton = null;
 let chatHead = null;
 let chatList = null;
 let chatInput = null;
@@ -33,7 +34,22 @@ function channelName(channelId) {
 
 function voiceHintText() {
   if (!window.LIVE_CONFIG?.voice?.enabled) return "管理员未启用语音";
-  return voiceStatus().connected ? "语音已连接" : "语音连接中…";
+  if (state.socket?.readyState !== WebSocket.OPEN) return "游戏厅重连中…";
+  const status = voiceStatus();
+  if (status.connected) return "语音已连接";
+  if (status.connectError) return status.connectError;
+  return "语音连接中…";
+}
+
+function refreshConnectionUi() {
+  if (headHint?.isConnected) headHint.textContent = voiceHintText();
+  if (retryButton?.isConnected) retryButton.hidden = voiceStatus().connected
+    || !window.LIVE_CONFIG?.voice?.enabled;
+}
+
+function requestHubState(force = false) {
+  if (!state.voiceHub || (!force && state.voiceHub.subscribed)) return;
+  if (send({ type: "voice_hub_state" })) state.voiceHub.subscribed = true;
 }
 
 function channelRow(channel) {
@@ -51,7 +67,7 @@ function channelRow(channel) {
   leave.type = "button";
   leave.addEventListener("click", (event) => {
     event.stopPropagation();
-    send({ type: "voice_hub_leave" });
+    if (send({ type: "voice_hub_leave" })) state.voiceHub.restoreChannel = null;
   });
   row.append(leave);
   if (channel.id !== "default") {
@@ -155,11 +171,9 @@ function sendChat() {
 }
 
 function renderVoiceHall() {
-  state.voiceHub ||= { channels: [], myChannel: null, subscribed: false, joinedOnce: false, chat: [] };
-  if (!state.voiceHub.subscribed) {
-    state.voiceHub.subscribed = true;
-    send({ type: "voice_hub_state" });
-  }
+  state.voiceHub ||= { channels: [], myChannel: null, subscribed: false,
+    joinedOnce: false, chat: [], restoreChannel: null };
+  requestHubState();
   const root = el("section", "voicehall");
   const head = el("header", "voicehall-head");
   const back = el("button", "online-stat hall-back", "← 游戏厅");
@@ -169,7 +183,12 @@ function renderVoiceHall() {
     renderGameView();
   });
   headHint = el("span", "voicehall-hint", voiceHintText());
-  head.append(back, el("h1", "voicehall-title", "语音聊天室"), headHint);
+  headHint.setAttribute("role", "status");
+  retryButton = el("button", "voicehall-retry", "重试连接");
+  retryButton.type = "button";
+  retryButton.hidden = voiceStatus().connected || !window.LIVE_CONFIG?.voice?.enabled;
+  retryButton.addEventListener("click", () => requestHubState(true));
+  head.append(back, el("h1", "voicehall-title", "语音聊天室"), headHint, retryButton);
 
   const side = el("aside", "voicehall-side");
   const mic = el("div", "voicehall-mic");
@@ -184,7 +203,10 @@ function renderVoiceHall() {
     mic.append(el("div", "voicehall-voice-disabled", "管理员未启用语音，这里只提供频道文字聊天。"));
   }
   tree = el("div", "voicehall-channels");
-  side.append(mic, tree);
+  const channelHeader = el("div", "voicehall-section-heading");
+  channelHeader.append(el("strong", "", "语音频道"),
+    el("span", "", "选择频道后即可加入"));
+  side.append(mic, channelHeader, tree);
 
   chatHead = el("header", "voicehall-chat-head");
   chatList = el("div", "room-chat-list voicehall-chat-list");
@@ -215,8 +237,24 @@ function renderVoiceHall() {
 }
 
 document.addEventListener("voicestate", () => {
-  if (headHint?.isConnected) headHint.textContent = voiceHintText();
+  refreshConnectionUi();
   if (micPanel?.root.isConnected) micPanel.controls.refresh(voiceStatus());
+});
+
+document.addEventListener("gamesocketclose", () => {
+  if (!state.voiceHub) return;
+  state.voiceHub.restoreChannel = state.voiceHub.myChannel;
+  state.voiceHub.subscribed = false;
+  refreshConnectionUi();
+});
+
+document.addEventListener("authstatechange", (event) => {
+  if (!state.voiceHub) return;
+  if (!event.detail?.user) {
+    state.voiceHub = null;
+    return;
+  }
+  if (state.hallPage === "voicehall" || state.voiceHub.joinedOnce) requestHubState();
 });
 
 // 说话指示：detail 为 identity（username）数组
@@ -226,14 +264,19 @@ document.addEventListener("voicespeakers", (event) => {
 });
 
 onMessage("voice_hub_state", (data) => {
-  state.voiceHub ||= { channels: [], myChannel: null, subscribed: false, joinedOnce: false, chat: [] };
+  state.voiceHub ||= { channels: [], myChannel: null, subscribed: false,
+    joinedOnce: false, chat: [], restoreChannel: null };
   const previousChannel = state.voiceHub.myChannel;
   state.voiceHub.channels = data.channels || [];
   state.voiceHub.myChannel = data.my_channel || null;
   // 换频道（含离开）先清空旧频道消息，加入后服务端会补发新频道历史
   if (previousChannel !== state.voiceHub.myChannel) state.voiceHub.chat = [];
   // 初次拿到快照还没进频道：整个会话自动加入一次默认频道
-  if (!state.voiceHub.myChannel && !state.voiceHub.joinedOnce) {
+  if (!state.voiceHub.myChannel && state.voiceHub.restoreChannel) {
+    const channel = state.voiceHub.restoreChannel;
+    state.voiceHub.restoreChannel = null;
+    send({ type: "voice_hub_join", channel });
+  } else if (!state.voiceHub.myChannel && !state.voiceHub.joinedOnce) {
     state.voiceHub.joinedOnce = true;
     send({ type: "voice_hub_join", channel: "default" });
   }

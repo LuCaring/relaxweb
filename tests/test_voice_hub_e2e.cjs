@@ -320,7 +320,19 @@ print(json.dumps({n: accounts.create_session(n) for n in names}))
         'B 应仍在默认频道');
       console.log('PASS rename: subscriber B sees the custom channel name immediately');
 
-      // 6. 断线兜底：C 刷新后自动 resume，重新拿到状态且频道树渲染、页面不抛错
+      // 6. 同一页面的聊天 WebSocket 重连：重新订阅频道并补发 LiveKit 授权
+      await players.ub.page.evaluate(async () => {
+        await voice.leaveVoice();
+        core.state.socket.close();
+      });
+      await players.ub.page.waitForFunction(() => core.state.socket?.readyState === WebSocket.OPEN
+        && core.state.voiceHub?.subscribed && voice.voiceDebug().connected
+        && voice.voiceDebug().room === 'vh-default',
+      null, { timeout: 30000, polling: 100 });
+      assert.equal(await players.ub.page.locator('.voicehall-hint').innerText(), '语音已连接');
+      console.log('PASS reconnect: same page resubscribes and regains LiveKit token');
+
+      // 7. 断线兜底：C 刷新后自动 resume，重新拿到状态且频道树渲染、页面不抛错
       await players.uc.page.reload();
       await players.uc.page.evaluate(async () => {
         const main = [...document.scripts].find((script) => script.type === 'module'
@@ -361,7 +373,7 @@ print(json.dumps({n: accounts.create_session(n) for n in names}))
     assert.equal(processErrors.some((line) => /voice kick failed|voice room delete failed/.test(line)),
       false, 'LiveKit 管理 API should revoke old rooms without errors');
     for (const name of NAMES) assert.deepEqual(errors[name], [], `${name} page errors`);
-    console.log('PASS: voice hub e2e (shared default channel, channel isolation, per-channel chat, rename, reload resume)');
+    console.log('PASS: voice hub e2e (audio, channel isolation, chat, rename, socket reconnect, reload resume)');
   } finally {
     await browser?.close().catch(() => {});
     for (const proc of procs.reverse()) {
