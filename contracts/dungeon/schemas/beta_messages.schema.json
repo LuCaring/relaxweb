@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "title": "Dungeon Beta permanent-operation messages (protocol_version 1)",
-  "description": "Frozen shapes for the registered permanent Beta requests, camp state, shared envelopes, and invalidation push.",
+  "title": "Dungeon Beta messages (protocol_version 1)",
+  "description": "Frozen shapes for the registered permanent Beta requests, run action requests, camp state, shared envelopes, and invalidation/frame/clear pushes.",
   "$defs": {
     "request_id": {"type": "string", "pattern": "^[A-Za-z0-9_-]{1,96}$"},
     "protocol_version": {"type": "integer", "const": 1},
@@ -168,6 +168,100 @@
         "protocol_version": {"$ref": "#/$defs/protocol_version"},
         "request_id": {"$ref": "#/$defs/request_id"},
         "lookup_request_id": {"$ref": "#/$defs/request_id"}
+      },
+      "additionalProperties": false
+    },
+    "input_value": {
+      "type": "object",
+      "required": ["move_x", "move_y", "aim_x", "aim_y", "buttons"],
+      "properties": {
+        "move_x": {"type": "integer", "minimum": -1024, "maximum": 1024},
+        "move_y": {"type": "integer", "minimum": -1024, "maximum": 1024},
+        "aim_x": {"type": "integer", "minimum": -1024, "maximum": 1024},
+        "aim_y": {"type": "integer", "minimum": -1024, "maximum": 1024},
+        "buttons": {"type": "array", "maxItems": 3, "uniqueItems": true,
+                    "items": {"enum": ["attack", "dash", "potion"]}}
+      },
+      "additionalProperties": false
+    },
+    "start_run_request": {
+      "type": "object",
+      "required": ["type", "protocol_version", "request_id", "route_id"],
+      "properties": {
+        "type": {"const": "dungeon_beta_start_run"},
+        "protocol_version": {"$ref": "#/$defs/protocol_version"},
+        "request_id": {"$ref": "#/$defs/request_id"},
+        "route_id": {"type": "string", "minLength": 1, "maxLength": 128},
+        "expected_asset_revision": {"type": "integer", "minimum": 1}
+      },
+      "additionalProperties": false
+    },
+    "run_control_request": {
+      "type": "object",
+      "required": ["type", "protocol_version", "request_id", "run_id"],
+      "properties": {
+        "type": {"enum": ["dungeon_beta_take_control", "dungeon_beta_resume",
+                          "dungeon_beta_pause", "dungeon_beta_abandon"]},
+        "protocol_version": {"$ref": "#/$defs/protocol_version"},
+        "request_id": {"$ref": "#/$defs/request_id"},
+        "run_id": {"$ref": "#/$defs/request_id"}
+      },
+      "additionalProperties": false
+    },
+    "run_input_request": {
+      "type": "object",
+      "required": ["type", "protocol_version", "run_id", "control_epoch", "input_seq", "value"],
+      "properties": {
+        "type": {"const": "dungeon_beta_input"},
+        "protocol_version": {"$ref": "#/$defs/protocol_version"},
+        "run_id": {"$ref": "#/$defs/request_id"},
+        "control_epoch": {"type": "integer", "minimum": 0},
+        "input_seq": {"type": "integer", "minimum": 1},
+        "value": {"$ref": "#/$defs/input_value"}
+      },
+      "additionalProperties": false
+    },
+    "run_sync_request": {
+      "type": "object",
+      "required": ["type", "protocol_version", "request_id", "run_id"],
+      "properties": {
+        "type": {"const": "dungeon_beta_sync"},
+        "protocol_version": {"$ref": "#/$defs/protocol_version"},
+        "request_id": {"$ref": "#/$defs/request_id"},
+        "run_id": {"$ref": "#/$defs/request_id"}
+      },
+      "additionalProperties": false
+    },
+    "frame_push": {
+      "type": "object",
+      "required": ["type", "protocol_version", "run_id", "status", "room_index",
+                   "server_tick", "durable_tick", "control_epoch", "acked_input_seq", "view"],
+      "properties": {
+        "type": {"const": "dungeon_beta_frame"},
+        "protocol_version": {"$ref": "#/$defs/protocol_version"},
+        "run_id": {"type": "string", "minLength": 1},
+        "status": {"type": "string", "minLength": 1},
+        "room_index": {"type": "integer", "minimum": 0},
+        "server_tick": {"type": "integer", "minimum": 0},
+        "durable_tick": {"type": "integer", "minimum": 0},
+        "control_epoch": {"type": "integer", "minimum": 0},
+        "acked_input_seq": {"type": "integer", "minimum": 0},
+        "view": {"type": "object"}
+      },
+      "additionalProperties": false
+    },
+    "room_cleared_push": {
+      "type": "object",
+      "required": ["type", "protocol_version", "run_id", "status", "room_index", "reward"],
+      "properties": {
+        "type": {"const": "dungeon_beta_room_cleared"},
+        "protocol_version": {"$ref": "#/$defs/protocol_version"},
+        "run_id": {"type": "string", "minLength": 1},
+        "status": {"enum": ["ready", "finished"]},
+        "room_index": {"type": "integer", "minimum": 0},
+        "server_tick": {"type": "integer", "minimum": 0},
+        "durable_tick": {"type": "integer", "minimum": 0},
+        "reward": {"type": "object"}
       },
       "additionalProperties": false
     },
