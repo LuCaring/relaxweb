@@ -227,14 +227,18 @@ document.addEventListener("voicespeakers", (event) => {
 
 onMessage("voice_hub_state", (data) => {
   state.voiceHub ||= { channels: [], myChannel: null, subscribed: false, joinedOnce: false, chat: [] };
+  const previousChannel = state.voiceHub.myChannel;
   state.voiceHub.channels = data.channels || [];
   state.voiceHub.myChannel = data.my_channel || null;
+  // 换频道（含离开）先清空旧频道消息，加入后服务端会补发新频道历史
+  if (previousChannel !== state.voiceHub.myChannel) state.voiceHub.chat = [];
   // 初次拿到快照还没进频道：整个会话自动加入一次默认频道
   if (!state.voiceHub.myChannel && !state.voiceHub.joinedOnce) {
     state.voiceHub.joinedOnce = true;
     send({ type: "voice_hub_join", channel: "default" });
   }
   renderChannels();
+  renderChat();
 });
 
 onMessage("voice_hub_chat", (data) => {

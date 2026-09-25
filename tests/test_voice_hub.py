@@ -146,6 +146,9 @@ class VoiceHubTests(unittest.IsolatedAsyncioTestCase):
     async def test_switch_channel_moves_member_and_kicks_old_livekit_room(self):
         ws, state = self.connect("alice")
         await self.vh.handle_join(ws, state, {"channel": "default"})
+        # 频道 1 里已有历史消息：切换后应把该频道历史补给加入者
+        self.vh.channels["1"]["chat"].append(
+            {"username": "bob", "nickname": "昵称bob", "text": "频道1见", "time": 123})
         await self.vh.handle_join(ws, state, {"channel": "1"})
         self.assertEqual(self.vh._facade.voice_plan("alice"), {"vh-1": True})
         self.assertEqual(self.vh._facade.seating, ["alice"])
@@ -153,6 +156,10 @@ class VoiceHubTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(list(self.vh.channels["1"]["members"]), ["alice"])
         self.assertIn(("vh-default", "alice"), self.kicks)
         self.assertEqual(self.hub.sent["alice"][-1]["room"], "vh-1")
+        self.assertEqual(self.last_message(ws, "voice_hub_chat_history"),
+                         {"type": "voice_hub_chat_history", "channel": "1",
+                          "messages": [{"username": "bob", "nickname": "昵称bob",
+                                        "text": "频道1见", "time": 123}]})
         # 不存在的频道被拒且不影响现状
         await self.vh.handle_join(ws, state, {"channel": "9"})
         self.assertEqual(ws.messages[-1],

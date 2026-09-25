@@ -87,6 +87,12 @@ const baseChannels = () => [
     assert.equal(await page.locator('.voicehub-member[data-voice-peer="bob"] .voicehub-member-name').innerText(), 'Bob');
 
     // 3. 点击“频道2”行 → join channel 2；新快照后高亮切换
+    // 先在默认频道收到一条消息，切换后不应残留到频道2的聊天里
+    await page.evaluate(() => core.handleServerMessage({
+      type: 'voice_hub_chat', channel: 'default', username: 'bob', nickname: 'Bob',
+      text: '默认频道的消息', time: 1758767800,
+    }));
+    assert.equal(await page.locator('.voicehall-chat .rc-message').count(), 1);
     await page.locator('.voicehub-channel[data-channel="2"]').click();
     assert.deepEqual(await page.evaluate(() => window.sent.at(-1)), { type: 'voice_hub_join', channel: '2' });
     const switched = baseChannels();
@@ -98,6 +104,7 @@ const baseChannels = () => [
     assert.equal(await page.locator('.voicehub-channel.is-current .voicehub-channel-rename').count(), 1);
     assert.equal(await page.locator('.voicehub-member[data-voice-peer="alice"]').count(), 1);
     assert.equal(await page.locator('.voicehub-member[data-voice-peer="carol"]').count(), 1);
+    assert.equal(await page.locator('.voicehall-chat .rc-text').count(), 0, '切换频道后旧频道消息应清空');
 
     // 4. 重命名流：行内输入“开黑房”回车 → voice_hub_rename；custom 快照后显示新名与 ✎
     await page.locator('.voicehub-channel[data-channel="2"] .voicehub-channel-rename').click();

@@ -120,6 +120,12 @@ class VoiceHub:
             "joined_at": time.time(),
         }
         await self._after_change(emptied)
+        # 加入/切换频道后补一份该频道聊天历史，客户端据此替换旧频道消息
+        await self.hub.send_json(websocket, {
+            "type": "voice_hub_chat_history",
+            "channel": channel_id,
+            "messages": list(self.channels[channel_id]["chat"]),
+        })
 
     async def handle_leave(self, websocket, state, data):
         user = state.get("user")
