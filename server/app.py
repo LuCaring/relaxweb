@@ -21,6 +21,7 @@ from server.rooms.settlement import Settlement
 from server.routing import merge_handlers
 from server.schema import init_db
 from server.transport import ConnectionHub, connection_client, rate_limited
+from server.voice_hub import VoiceHub
 from server.voice_livekit import VoiceService
 from server.wallet import WalletProtocol
 
@@ -41,6 +42,9 @@ class Application:
         self.rooms = RoomHost(database, self.hub, self.accounts, self.settlement,
                               self.ranking, self.rewards, self.wallet,
                               disconnect_grace=disconnect_grace, voice=self.voice)
+        self.voice_hub = VoiceHub(self.hub, self.accounts, self.rooms, self.voice,
+                                  disconnect_grace=disconnect_grace)
+        self.rooms.voice_hub = self.voice_hub
         self.room_protocol = RoomProtocol(database, self.hub, self.rooms,
                                           self.accounts, self.settlement)
         self.betting = Betting(
@@ -63,8 +67,10 @@ class Application:
             self.wallet.handlers(), self.ranking.handlers(), self.rewards.handlers(),
             self.admin.handlers(), self.room_protocol.handlers(),
             self.estate_protocol.handlers(), self.betting.handlers(),
+            self.voice_hub.handlers(),
         )
         self._watcher = None
+        self._hub_task = None
 
     async def aclose(self):
         """监听器关闭后释放本实例的后台任务，不触发额外的业务结算。"""
@@ -72,6 +78,11 @@ class Application:
             self._watcher.cancel()
             await asyncio.gather(self._watcher, return_exceptions=True)
             self._watcher = None
+        if self._hub_task is not None:
+            self._hub_task.cancel()
+            await asyncio.gather(self._hub_task, return_exceptions=True)
+            self._hub_task = None
+        await self.voice_hub.aclose()
         await self.rooms.aclose()
         await self.voice.aclose()
 
@@ -90,6 +101,7 @@ class Application:
                 ping_interval=20, ping_timeout=20, close_timeout=5,
             ):
                 self._watcher = asyncio.create_task(self.betting.bet_close_watcher())
+                self._hub_task = asyncio.create_task(self.voice_hub.refresh_loop())
                 await asyncio.Future()
         finally:
             await self.aclose()
@@ -126,6 +138,7 @@ class Application:
             pass
         finally:
             await self.estate_presence.leave(websocket, state)
+            await self.voice_hub.disconnect(websocket, state)
             self.hub.clients.pop(websocket, None)
             logger.info("connection closed; online=%d", len(self.hub.clients))
             await self.rooms.cleanup_rooms_on_disconnect(state)

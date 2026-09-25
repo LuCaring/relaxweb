@@ -40,6 +40,7 @@ DEFAULTS = {
         "api_key": "devkey",
         "api_secret": "",
         "token_ttl": 600,
+        "hub_rename_ttl": 600,
     },
     "economy": {
         "new_user_coins": 1000,

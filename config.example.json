@@ -26,7 +26,8 @@
     "api_url": "http://127.0.0.1:7880",
     "api_key": "devkey",
     "api_secret": "改成你自己的 LiveKit API Secret",
-    "token_ttl": 600
+    "token_ttl": 600,
+    "hub_rename_ttl": 600
   },
   "economy": {
     "new_user_coins": 1000

@@ -17,6 +17,7 @@ class RoomHost:
         self.rewards = rewards
         self.wallet = wallet
         self.voice = voice
+        self.voice_hub = None
         self.game_rooms = {}
         self.room_seq = 0
         self.leave_timers = {}
@@ -28,6 +29,13 @@ class RoomHost:
             if room.has_member(username) or room.has_spectator(username):
                 return room
         return None
+
+    def user_in_room(self, username):
+        """用户是否在任何游戏房间（含观战）；语音聊天室与游戏房间互斥。"""
+        for room in self.game_rooms.values():
+            if username in room.seating or username in room.spectators:
+                return True
+        return False
 
     def attach_host(self, room):
         """把宿主能力注入房间：成员广播、视图分发、列表变更通知与托管同步。"""
@@ -64,6 +72,12 @@ class RoomHost:
                     await self.voice.sync_room(room)
                 except Exception:
                     logger.warning("voice sync failed for room %s", room.id, exc_info=True)
+            # 语音聊天室与游戏互斥：进任何游戏房间的频道成员在这里被拉出去
+            if self.voice_hub is not None:
+                try:
+                    await self.voice_hub.recheck()
+                except Exception:
+                    logger.warning("voice hub recheck failed", exc_info=True)
 
         async def on_rooms_changed():
             await self.broadcast_room_list()
