@@ -8,7 +8,7 @@ from decimal import Decimal
 from pathlib import Path
 from unittest.mock import patch
 
-from estate.market import market_snapshot, record_market_candles, trade_market
+from estate.market import NO_ADVANCE, market_snapshot, record_market_candles, trade_market
 from estate.schema import init_estate
 from estate.store import EstateError, ensure_estate
 from server.estate.protocol import EstateProtocol
@@ -42,7 +42,7 @@ class MarketTests(unittest.TestCase):
     def test_one_quote_per_minute_and_hidden_change(self):
         first = market_snapshot(self.conn, "alice", NOW, Decimal("100"))
         self.assertEqual(first["price"], 1000)
-        with patch("estate.market.secrets.randbelow", return_value=600):
+        with patch("estate.market.secrets.randbelow", return_value=160):
             second = market_snapshot(self.conn, "alice", NOW + 60, Decimal("101"))
         self.assertEqual(second["price"], 1007)
         self.assertEqual(market_snapshot(self.conn, "alice", NOW + 61, None)["price"], 1007)
@@ -51,7 +51,7 @@ class MarketTests(unittest.TestCase):
     def test_candles_aggregate_sampled_open_high_low_close(self):
         boundary = (NOW // 3600 + 1) * 3600
         first = market_snapshot(self.conn, "alice", boundary - 60, Decimal("100"))
-        with patch("estate.market.secrets.randbelow", return_value=600):
+        with patch("estate.market.secrets.randbelow", return_value=160):
             second = market_snapshot(self.conn, "alice", boundary, Decimal("101"))
         self.assertEqual(first["candles"]["minute"][-1]["close"], 1000)
         self.assertEqual(second["candles"]["minute"][-1], {
@@ -98,7 +98,7 @@ class MarketTests(unittest.TestCase):
 
     def test_long_gap_reflects_cumulative_reference_move(self):
         market_snapshot(self.conn, "alice", NOW, Decimal("100"))
-        with patch("estate.market.secrets.randbelow", return_value=6000):
+        with patch("estate.market.secrets.randbelow", return_value=1600):
             later = market_snapshot(self.conn, "alice", NOW + 180 * 60, Decimal("110"))
         self.assertEqual(later["price"], 1070)
         self.assertTrue(later["available"])
@@ -142,6 +142,52 @@ class MarketTests(unittest.TestCase):
                               NOW, adjust_coins, None, Decimal("101"))
         self.assertEqual(result["price"], 1007)
         self.assertGreater(result["amount"], 1007)
+
+    def test_live_hidden_noise_stays_below_reference_signal(self):
+        market_snapshot(self.conn, "alice", NOW, Decimal("100"))
+        with patch("estate.market.secrets.randbelow", return_value=0):
+            down = market_snapshot(self.conn, "alice", NOW + 60, Decimal("100"))
+        self.assertEqual(down["price"], 998.4)
+
+    def test_live_hidden_noise_upper_bound(self):
+        market_snapshot(self.conn, "alice", NOW, Decimal("100"))
+        with patch("estate.market.secrets.randbelow", return_value=320):
+            up = market_snapshot(self.conn, "alice", NOW + 60, Decimal("100"))
+        self.assertEqual(up["price"], 1001.6)
+
+    def test_single_tick_change_is_capped_after_long_gap(self):
+        market_snapshot(self.conn, "alice", NOW, Decimal("100"))
+        with patch("estate.market.secrets.randbelow", return_value=1600):
+            jumped = market_snapshot(self.conn, "alice", NOW + 600 * 60, Decimal("200"))
+        self.assertEqual(jumped["price"], 1080)
+
+    def test_simulated_quote_reverts_upward_toward_earlier_price(self):
+        market_snapshot(self.conn, "alice", NOW, Decimal("100"))
+        self.conn.execute("UPDATE estate_market_index SET price_cents=90000,"
+                          "source_kind='simulated'")
+        with patch("estate.market.secrets.randbelow", return_value=800):
+            reverted = market_snapshot(self.conn, "alice", NOW + 241 * 60, None)
+        self.assertEqual(reverted["price"], 900.19)
+
+    def test_simulated_quote_reverts_downward_from_high(self):
+        market_snapshot(self.conn, "alice", NOW, Decimal("100"))
+        self.conn.execute("UPDATE estate_market_index SET price_cents=110000,"
+                          "source_kind='simulated'")
+        with patch("estate.market.secrets.randbelow", return_value=800):
+            reverted = market_snapshot(self.conn, "alice", NOW + 241 * 60, None)
+        self.assertEqual(reverted["price"], 1099.79)
+
+    def test_hold_sentinel_reads_quote_without_generating_tick(self):
+        market_snapshot(self.conn, "alice", NOW, Decimal("100"))
+        held = market_snapshot(self.conn, "alice", NOW + 60, NO_ADVANCE)
+        self.assertEqual(held["price"], 1000)
+        self.assertEqual(held["source_kind"], "live")
+        self.assertTrue(held["available"])
+        self.assertEqual(self.conn.execute(
+            "SELECT COUNT(*) FROM estate_market_ticks").fetchone()[0], 1)
+        with patch("estate.market.secrets.randbelow", return_value=160):
+            followed = market_snapshot(self.conn, "alice", NOW + 120, Decimal("101"))
+        self.assertEqual(followed["price"], 1007)
 
 
 class MarketWatcherTests(unittest.IsolatedAsyncioTestCase):

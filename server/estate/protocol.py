@@ -7,7 +7,12 @@ import sqlite3
 import time
 
 from server.wallet import adjust_coins
-from estate.market import fetch_source_price, quote_refresh_due, refresh_market_quote
+from estate.market import (
+    NO_ADVANCE,
+    fetch_source_price,
+    quote_refresh_due,
+    refresh_market_quote,
+)
 from server.estate.presence import ESTATE_PLOT_POSITIONS
 from estate import (
     EstateError,
@@ -433,7 +438,8 @@ class EstateProtocol:
             now = int(time.time())
             await self.refresh_market_quote(now)
             with self.database() as conn, conn:
-                snapshot = estate_market_snapshot(conn, user["username"], now, None)
+                # 报价刚刷新过；传 NO_ADVANCE 避免分钟翻转时误补一根模拟 K 线。
+                snapshot = estate_market_snapshot(conn, user["username"], now, NO_ADVANCE)
             await self.send_json(websocket, {"type": "estate_market_state", "market": snapshot,
                                             "request_id": data.get("request_id")})
         except sqlite3.Error:
