@@ -128,6 +128,7 @@ class VoiceHubTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(self.hub.sent["alice"][-1]["room"], "vh-default")
         snapshot = self.last_message(ws, "voice_hub_state")
         self.assertEqual(snapshot["my_channel"], "default")
+        self.assertTrue(snapshot["voice_enabled"])
         self.assertEqual([channel["id"] for channel in snapshot["channels"]],
                          ["default", "1", "2", "3", "4", "5"])
         default = snapshot["channels"][0]

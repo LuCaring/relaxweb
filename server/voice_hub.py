@@ -229,6 +229,7 @@ class VoiceHub:
     def _snapshot(self, username=None):
         return {
             "type": "voice_hub_state",
+            "voice_enabled": self.voice.enabled,
             "channels": [
                 {
                     "id": channel_id,

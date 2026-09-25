@@ -81,12 +81,18 @@ const baseChannels = () => [
     await page.locator('.hall-voice-card').click();
     assert.equal(await page.evaluate(() => core.state.hallPage), 'voicehall');
     assert.equal(await page.locator('.voicehall').count(), 1);
+    assert.equal(await page.locator('.voicehall-hint').innerText(), '正在获取频道状态…');
+    assert.equal(await page.locator('.voicehall-mic .waiting-voice-status').innerText(),
+      '正在获取频道状态…');
+    assert.equal(await page.locator('.voicehall-retry').isHidden(), true);
     assert.deepEqual(await page.evaluate(() => window.sent.filter(msg => msg.type === 'voice_hub_state')),
       [{ type: 'voice_hub_state' }]);
 
     // 2. 无 my_channel 的快照 → 自动加入默认频道；完整快照 → 六行频道 + 当前高亮 + 成员条目
     await page.evaluate(snapshot => core.handleServerMessage(snapshot),
       { type: 'voice_hub_state', channels: baseChannels(), my_channel: null });
+    assert.equal(await page.locator('.voicehall-hint').innerText(), '正在加入频道…');
+    assert.equal(await page.locator('.voicehall-retry').isHidden(), true);
     assert.deepEqual(await page.evaluate(() => window.sent.at(-1)), { type: 'voice_hub_join', channel: 'default' });
     assert.equal(await page.evaluate(() => core.state.voiceHub.joinedOnce), true);
     const channels = baseChannels();
@@ -94,6 +100,8 @@ const baseChannels = () => [
     channels[1].members = [member('carol', 'Carol')];
     await page.evaluate(snapshot => core.handleServerMessage(snapshot),
       { type: 'voice_hub_state', channels, my_channel: 'default' });
+    assert.equal(await page.locator('.voicehall-hint').innerText(), '等待语音授权…');
+    assert.equal(await page.locator('.voicehall-retry').isHidden(), true);
     assert.equal(await page.locator('.voicehub-channel').count(), 6);
     assert.equal(await page.locator('.voicehub-channel.is-current').count(), 1);
     assert.equal(await page.locator('.voicehub-channel.is-current').getAttribute('data-channel'), 'default');
@@ -180,11 +188,55 @@ const baseChannels = () => [
     assert.deepEqual(await page.evaluate(() => JSON.parse(localStorage.getItem('voicePeerVolumes') || '[]')),
       [['carol', 40]]);
 
+    // 只有 LiveKit 确认连接失败后才提供手动重试；连接恢复即隐藏按钮。
+    await page.evaluate(() => {
+      window.LivekitClient = {
+        RoomEvent: { ActiveSpeakersChanged: 'speakers', TrackSubscribed: 'subscribed',
+          TrackUnsubscribed: 'unsubscribed', ParticipantConnected: 'joined',
+          ParticipantDisconnected: 'left', Disconnected: 'disconnected' },
+        Track: { Source: { Microphone: 'microphone' } },
+        Room: class {
+          on() { return this; }
+          async connect() { throw new Error('test connection failure'); }
+          async disconnect() {}
+        },
+      };
+      core.handleServerMessage({ type: 'voice_update', url: 'ws://mock',
+        room: 'vh-2', token: 'bad', can_publish: true });
+    });
+    await page.waitForFunction(() => document.querySelector('.voicehall-hint')
+      ?.textContent.includes('连接失败'));
+    assert.equal(await page.locator('.voicehall-retry').isVisible(), true);
+    const beforeRetry = await page.evaluate(() => sent.filter(msg => msg.type === 'voice_hub_state').length);
+    await page.locator('.voicehall-retry').click();
+    assert.equal(await page.evaluate(() => sent.filter(msg => msg.type === 'voice_hub_state').length),
+      beforeRetry + 1);
+    await page.evaluate(() => {
+      window.LivekitClient.Room = class {
+        on() { return this; }
+        async connect() {}
+        async disconnect() {}
+      };
+      core.handleServerMessage({ type: 'voice_update', url: 'ws://mock',
+        room: 'vh-2', token: 'good', can_publish: true });
+    });
+    await page.waitForFunction(() => document.querySelector('.voicehall-hint')
+      ?.textContent === '语音已连接');
+    assert.equal(await page.locator('.voicehall-retry').isHidden(), true);
+    await page.evaluate(snapshot => core.handleServerMessage(snapshot),
+      { type: 'voice_hub_state', channels: renamed, my_channel: '1' });
+    assert.equal(await page.locator('.voicehall-hint').innerText(), '正在切换语音频道…');
+    assert.equal(await page.locator('.voicehall-retry').isHidden(), true);
+    await page.evaluate(snapshot => core.handleServerMessage(snapshot),
+      { type: 'voice_hub_state', channels: renamed, my_channel: '2' });
+    assert.equal(await page.locator('.voicehall-hint').innerText(), '语音已连接');
+
     // 返回大厅：订阅保持（不重复发 voice_hub_state），标题行出现返回频道的胶囊
     await page.locator('.voicehall-head .hall-back').click();
     assert.equal(await page.evaluate(() => core.state.hallPage), null);
     assert.equal(await page.locator('.voicehall').count(), 0);
-    assert.equal(await page.evaluate(() => window.sent.filter(msg => msg.type === 'voice_hub_state').length), 1,
+    assert.equal(await page.evaluate(() => window.sent.filter(msg => msg.type === 'voice_hub_state').length),
+      beforeRetry + 1,
       '订阅在整个会话保持，重进视图不重复发送');
     assert.match(await page.locator('.hall-voice-pill').innerText(), /开黑房 · 返回/);
     await page.locator('.hall-voice-pill').click();
@@ -205,6 +257,23 @@ const baseChannels = () => [
     }));
     assert.equal(mobileColumns.features.split(' ').length, 1);
     assert.equal(mobileColumns.rankings.split(' ').length, 1);
+
+    // 已加入频道但一直没有授权时，等待超时才出现重试入口。
+    await page.locator('.hall-voice-card').click();
+    await page.clock.install();
+    await page.evaluate(async () => {
+      const voice = await import('/assets/js/room-voice.js');
+      await voice.leaveVoice();
+    });
+    assert.equal(await page.locator('.voicehall-retry').isHidden(), true);
+    await page.clock.fastForward(12001);
+    assert.equal(await page.locator('.voicehall-hint').innerText(), '语音授权超时，请重试');
+    assert.equal(await page.locator('.voicehall-retry').isVisible(), true);
+    await page.evaluate(snapshot => core.handleServerMessage(snapshot),
+      { type: 'voice_hub_state', voice_enabled: false,
+        channels: baseChannels(), my_channel: null });
+    assert.equal(await page.locator('.voicehall-hint').innerText(), '语音服务暂不可用');
+    assert.equal(await page.locator('.voicehall-retry').isHidden(), true);
 
     console.log('PASS voice hall entry card, channel tree with members, rename flow, per-channel chat, peer volume gear, hall pill, narrow viewport');
   } finally {

@@ -20,6 +20,7 @@ let chatList = null;
 let chatInput = null;
 let micPanel = null;       // { root, controls }，voicestate 时刷新
 let speakers = new Set();  // 最近一次 voicespeakers 名单，重建频道树后补高亮
+let authorizationTimer = 0;
 
 function el(tag, className, text) {
   const node = document.createElement(tag);
@@ -32,24 +33,76 @@ function channelName(channelId) {
   return state.voiceHub?.channels?.find((channel) => channel.id === channelId)?.name || channelId;
 }
 
+function channelVoiceState(status = voiceStatus()) {
+  const room = state.voiceHub?.myChannel ? `vh-${state.voiceHub.myChannel}` : "";
+  return {
+    connected: Boolean(room && status.connected && status.room === room),
+    connecting: Boolean(room && status.connecting && status.connectingRoom === room),
+    error: room && status.errorRoom === room ? status.connectError : "",
+  };
+}
+
 function voiceHintText() {
   if (!window.LIVE_CONFIG?.voice?.enabled) return "管理员未启用语音";
   if (state.socket?.readyState !== WebSocket.OPEN) return "游戏厅重连中…";
+  const hub = state.voiceHub;
+  if (!hub?.snapshotReceived) return "正在获取频道状态…";
+  if (hub.voiceEnabled === false) return "语音服务暂不可用";
+  if (hub.pendingChannel === null) return "正在离开频道…";
+  if (hub.pendingChannel) return hub.myChannel ? "正在切换频道…" : "正在加入频道…";
+  if (!hub.myChannel) return "未加入语音频道";
   const status = voiceStatus();
-  if (status.connected) return "语音已连接";
-  if (status.connectError) return status.connectError;
-  return "语音连接中…";
+  const channel = channelVoiceState(status);
+  if (channel.connected) return status.audioBlocked ? "语音已连接 · 请启用声音" : "语音已连接";
+  if (channel.connecting) return "语音连接中…";
+  if (channel.error) return channel.error;
+  if (hub.authorizationTimedOut) return "语音授权超时，请重试";
+  if (status.connected || status.connecting) return "正在切换语音频道…";
+  return "等待语音授权…";
 }
 
 function refreshConnectionUi() {
+  const status = voiceStatus();
+  const channel = channelVoiceState(status);
+  const hub = state.voiceHub;
+  const waitingForAuthorization = window.LIVE_CONFIG?.voice?.enabled
+    && state.socket?.readyState === WebSocket.OPEN && hub?.snapshotReceived
+    && hub.voiceEnabled !== false && hub.myChannel && hub.pendingChannel === undefined
+    && !channel.connected && !channel.connecting && !channel.error;
+  if (waitingForAuthorization && !hub.authorizationTimedOut && !authorizationTimer) {
+    authorizationTimer = window.setTimeout(() => {
+      authorizationTimer = 0;
+      if (state.voiceHub === hub) {
+        hub.authorizationTimedOut = true;
+        refreshConnectionUi();
+      }
+    }, 12000);
+  } else if (!waitingForAuthorization && authorizationTimer) {
+    clearTimeout(authorizationTimer);
+    authorizationTimer = 0;
+  }
+  if (channel.connected || channel.connecting) {
+    if (hub) hub.authorizationTimedOut = false;
+  }
   if (headHint?.isConnected) headHint.textContent = voiceHintText();
-  if (retryButton?.isConnected) retryButton.hidden = voiceStatus().connected
-    || !window.LIVE_CONFIG?.voice?.enabled;
+  if (retryButton?.isConnected) retryButton.hidden = !(channel.error || hub?.authorizationTimedOut)
+    || channel.connected || channel.connecting || !hub?.myChannel || !hub.snapshotReceived
+    || hub.pendingChannel !== undefined || hub.voiceEnabled === false
+    || state.socket?.readyState !== WebSocket.OPEN;
+  if (micPanel?.root.isConnected) micPanel.controls.refresh({
+    ...status, connected: channel.connected, waitingText: voiceHintText(),
+  });
 }
 
 function requestHubState(force = false) {
   if (!state.voiceHub || (!force && state.voiceHub.subscribed)) return;
-  if (send({ type: "voice_hub_state" })) state.voiceHub.subscribed = true;
+  if (send({ type: "voice_hub_state" })) {
+    state.voiceHub.subscribed = true;
+    if (force) {
+      state.voiceHub.authorizationTimedOut = false;
+      refreshConnectionUi();
+    }
+  }
 }
 
 function channelRow(channel) {
@@ -60,14 +113,23 @@ function channelRow(channel) {
   if (channel.custom) name.append(el("span", "voicehub-channel-mark", "✎"));
   row.append(name, el("span", "voicehub-channel-count", `${channel.members.length} 人`));
   if (!current) {
-    row.addEventListener("click", () => send({ type: "voice_hub_join", channel: channel.id }));
+    row.addEventListener("click", () => {
+      if (send({ type: "voice_hub_join", channel: channel.id })) {
+        state.voiceHub.pendingChannel = channel.id;
+        refreshConnectionUi();
+      }
+    });
     return row;
   }
   const leave = el("button", "voicehub-channel-leave", "离开频道");
   leave.type = "button";
   leave.addEventListener("click", (event) => {
     event.stopPropagation();
-    if (send({ type: "voice_hub_leave" })) state.voiceHub.restoreChannel = null;
+    if (send({ type: "voice_hub_leave" })) {
+      state.voiceHub.restoreChannel = null;
+      state.voiceHub.pendingChannel = null;
+      refreshConnectionUi();
+    }
   });
   row.append(leave);
   if (channel.id !== "default") {
@@ -172,7 +234,9 @@ function sendChat() {
 
 function renderVoiceHall() {
   state.voiceHub ||= { channels: [], myChannel: null, subscribed: false,
-    joinedOnce: false, chat: [], restoreChannel: null };
+    joinedOnce: false, chat: [], restoreChannel: null,
+    snapshotReceived: false, voiceEnabled: true, pendingChannel: undefined,
+    authorizationTimedOut: false };
   requestHubState();
   const root = el("section", "voicehall");
   const head = el("header", "voicehall-head");
@@ -186,7 +250,7 @@ function renderVoiceHall() {
   headHint.setAttribute("role", "status");
   retryButton = el("button", "voicehall-retry", "重试连接");
   retryButton.type = "button";
-  retryButton.hidden = voiceStatus().connected || !window.LIVE_CONFIG?.voice?.enabled;
+  retryButton.hidden = true;
   retryButton.addEventListener("click", () => requestHubState(true));
   head.append(back, el("h1", "voicehall-title", "语音聊天室"), headHint, retryButton);
 
@@ -196,8 +260,10 @@ function renderVoiceHall() {
     // 复用等待页语音面板的 .waiting-voice 样式，挂载后立即同步连接状态
     mic.classList.add("waiting-voice");
     micPanel = { root: mic,
-      controls: mountVoiceControls(mic, { note: "先试麦再开聊；进入游戏房间会自动切换到房间语音。" }) };
-    micPanel.controls.refresh(voiceStatus());
+      controls: mountVoiceControls(mic, { title: "语音设置",
+        note: "连接频道后可测试麦克风；进入游戏房间会自动切换到房间语音。" }) };
+    micPanel.controls.refresh({ ...voiceStatus(),
+      connected: channelVoiceState().connected, waitingText: voiceHintText() });
   } else {
     micPanel = null;
     mic.append(el("div", "voicehall-voice-disabled", "管理员未启用语音，这里只提供频道文字聊天。"));
@@ -234,17 +300,20 @@ function renderVoiceHall() {
   elements.gameMain.replaceChildren(root);
   renderChannels();
   renderChat();
+  refreshConnectionUi();
 }
 
 document.addEventListener("voicestate", () => {
   refreshConnectionUi();
-  if (micPanel?.root.isConnected) micPanel.controls.refresh(voiceStatus());
 });
 
 document.addEventListener("gamesocketclose", () => {
   if (!state.voiceHub) return;
   state.voiceHub.restoreChannel = state.voiceHub.myChannel;
   state.voiceHub.subscribed = false;
+  state.voiceHub.snapshotReceived = false;
+  state.voiceHub.pendingChannel = undefined;
+  state.voiceHub.authorizationTimedOut = false;
   refreshConnectionUi();
 });
 
@@ -265,23 +334,38 @@ document.addEventListener("voicespeakers", (event) => {
 
 onMessage("voice_hub_state", (data) => {
   state.voiceHub ||= { channels: [], myChannel: null, subscribed: false,
-    joinedOnce: false, chat: [], restoreChannel: null };
+    joinedOnce: false, chat: [], restoreChannel: null,
+    snapshotReceived: false, voiceEnabled: true, pendingChannel: undefined,
+    authorizationTimedOut: false };
   const previousChannel = state.voiceHub.myChannel;
+  state.voiceHub.snapshotReceived = true;
+  state.voiceHub.voiceEnabled = data.voice_enabled !== false;
   state.voiceHub.channels = data.channels || [];
   state.voiceHub.myChannel = data.my_channel || null;
+  if (state.voiceHub.myChannel === state.voiceHub.pendingChannel) {
+    state.voiceHub.pendingChannel = undefined;
+  }
   // 换频道（含离开）先清空旧频道消息，加入后服务端会补发新频道历史
-  if (previousChannel !== state.voiceHub.myChannel) state.voiceHub.chat = [];
+  if (previousChannel !== state.voiceHub.myChannel) {
+    clearTimeout(authorizationTimer);
+    authorizationTimer = 0;
+    state.voiceHub.chat = [];
+    state.voiceHub.authorizationTimedOut = false;
+  }
   // 初次拿到快照还没进频道：整个会话自动加入一次默认频道
   if (!state.voiceHub.myChannel && state.voiceHub.restoreChannel) {
     const channel = state.voiceHub.restoreChannel;
     state.voiceHub.restoreChannel = null;
-    send({ type: "voice_hub_join", channel });
+    if (send({ type: "voice_hub_join", channel })) state.voiceHub.pendingChannel = channel;
   } else if (!state.voiceHub.myChannel && !state.voiceHub.joinedOnce) {
     state.voiceHub.joinedOnce = true;
-    send({ type: "voice_hub_join", channel: "default" });
+    if (send({ type: "voice_hub_join", channel: "default" })) {
+      state.voiceHub.pendingChannel = "default";
+    }
   }
   renderChannels();
   renderChat();
+  refreshConnectionUi();
 });
 
 onMessage("voice_hub_chat", (data) => {
@@ -298,6 +382,8 @@ onMessage("voice_hub_chat_history", (data) => {
 });
 
 onMessage("voice_hub_error", (data) => {
+  if (state.voiceHub) state.voiceHub.pendingChannel = undefined;
+  refreshConnectionUi();
   void alertDialog(data?.message || "语音聊天室出现问题", { title: "语音聊天室" });
 });
 

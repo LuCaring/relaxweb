@@ -86,7 +86,7 @@ function refreshVoiceGate(root, status) {
 /** 在 container 内构建面板；返回 { refresh(status) }，宿主在每次连接状态变化时调用。 */
 export function mountVoiceControls(container, opts = {}) {
   const info = el("div", "waiting-voice-info");
-  info.append(el("strong", "", "开局前语音调试"),
+  info.append(el("strong", "", opts.title || "开局前语音调试"),
     el("span", "", opts.note || "等待区可以自由聊天；开局后会自动切换到游戏语音频道。"));
   const actions = el("div", "waiting-voice-actions");
   const status = el("span", "waiting-voice-status");
@@ -140,7 +140,7 @@ export function mountVoiceControls(container, opts = {}) {
       mic.setAttribute("aria-pressed", String(on));
       status.textContent = preview
         ? "布局预览 · 麦克风未连接"
-        : !nextStatus.connected ? "语音连接中，连接后可测试麦克风"
+        : !nextStatus.connected ? nextStatus.waitingText || "语音连接中，连接后可测试麦克风"
         : nextStatus.micError || (on ? "麦克风已开启，可以和房内玩家交谈" : "已连接 · 麦克风关闭");
       audio.hidden = !nextStatus.audioBlocked;
       refreshVoiceMeter(container, nextStatus);
