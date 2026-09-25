@@ -1,34 +1,36 @@
 # A线：框架、资产与Beta集成
 
-工作分支：`dev/dungeon-beta-foundation`，同时承接B/C经审阅的合流。共同起点：`2b8e757`。本提交明确后续任务；尚未新增正式Beta协议或权威宿主，交易成交已落地为应用服务（见下）。
+工作分支为 `dev/dungeon-beta-foundation`，同时承接B/C审阅合流。当前阶段继续落实R4；升级与交易服务及其鉴权协议已经存在，不重复开发。
 
-## 已有接口
+## 应用边界
 
-- `AssetService.quote_upgrade`返回真实内容驱动的升级报价；`upgrade`在同一事务中校验版本、扣金币/材料、改装备、写成功回执。
-- `FixedLevelPolicy`使用`rules.mutable_content("progression")`构造；`SharedWalletPort`共用现有金币及流水，金额以整数分传入。
-- `reserve_item/release_item`由调用方在写事务中使用；旧入口已接统一预留门禁。
-- `TradeService`（`dungeon/application/trading.py`）：定向报价、预留、撤销、接受、过期与原子成交。价格/手续费/上下限/TTL全部来自`TradePolicy.from_economy(ruleset.content("economy"))`，代码内无常量数值；接受时按报价冻结值结算，买家付`price_minor`、卖家得`price_minor-fee_minor`、手续费销毁，同一事务内完成双方金币、物品归属、订单终态、唯一结算记录与回执。过期在读取/接受/清理路径统一迁移并释放预留；满包进`pending`；失败整笔回滚不占请求号。
-- 失败回滚且不占用请求号；成功重试返回提交时结果，前端另查最新余额和状态。
+- `AssetService`持有升级事务，`FixedLevelPolicy`只产生报价，`SharedWalletPort`共用现有金币与流水。
+- `TradeService`冻结报价价格与手续费；成交在同一事务内改变双方金币、装备归属、订单终态、预留与成功回执。
+- `create_item`是内部装备工厂，由调用方提供写事务。Beta效果保存在独立字段，旧`effects_json`保持旧语义；模板禁交易、测试及新手来源的限制不能由调用方解除。
+- `StateService`只读一致性快照，不调用旧开档函数；已注册`dungeon_beta_get_state`供客户端刷新当前状态。
+- `RunService`与内部运行宿主固定路线、规则、装备快照和控制代次；房间奖励从规则计算，不能来自客户端申报。
 
-## 首批交付
+正式动作协议、自动调度和完整B线模拟器仍待接入。内部手动推进测试不等于对玩家开放Beta。接口详情见[当前状态](../../docs/dungeon-beta-implementation-status.md)与[合同目录](../../contracts/dungeon/README.md)。
 
-1. 鉴权升级协议：~~从会话获取账号ID，不信任客户端归属；补报价、确认、错误映射、成功后状态刷新和多连接通知。先冻结fixture，再接UI。~~已落地`server/dungeon/beta_protocol.py`（升级+交易共8个`dungeon_beta_*`消息，schema/fixture冻结于`contracts/dungeon/`，写后多连接`dungeon_beta_invalidate`提示）；`get_state`聚合与B线页面联调剩余。
-2. 权威运行宿主：有序输入、控制epoch、有界调度、固定规则集、检查点和停服恢复；与B的Simulator通过窄接口连接。
-3. 房间奖励：只接受当前宿主的内部结果，检查点、唯一奖励凭据与永久资产同事务提交，再向客户端确认。
-4. 定向交易：~~报价、预留、接受、取消、过期；金币/手续费/物品所有权原子交割~~已按上述边界实现并通过`tests/test_dungeon_beta_trading.py`（竞争、重放、过期、满包、故障回滚、迁移与账号删除）并完成协议注册；列表游标分页与双方UI仍待R6接入。
+## 继续推进
 
-升级协议与R4/R5可分小PR推进。A统一分配迁移编号；迁移1（Beta资产表）与迁移2（交易表、账号删除清理扩展）已进入公共底座，后续新增迁移，不能修改既有迁移内容使现有checksum失效。
+1. B线提供真实Simulator：固定tick、可恢复快照、命名随机流、符合合同的房间完成信号。
+2. A将内部宿主接入Application生命周期、受控调度与动作传输，验证输入上限、双标签接管、断线暂停及停服恢复。
+3. A/B完成大厅→短局→结算→升级→两账号交易的浏览器闭环；C用相同规则版本做经济模拟与试玩。
+4. 补交易分页、失效通知与可观测性。生产备份迁移及目标并发测量通过后再开放。
 
-## 验收与合流
+## 迁移与验证
+
+既有迁移1/2不可改写；新增字段和run表使用迁移3/4。后续迁移编号由A统一分配，B/C提交需求，不各自覆盖初始化脚本。
 
 ```sh
 uv run --locked python tests/test_dungeon_beta_assets.py
+uv run --locked python tests/test_dungeon_beta_state.py
 uv run --locked python tests/test_dungeon_beta_trading.py
+uv run --locked python tests/test_dungeon_beta_protocol.py
+uv run --locked python tests/test_dungeon_beta_runtime.py
 uv run --locked python tests/test_admin.py
-uv run --locked python tests/test_dungeon_protocol.py
 uv run --locked python scripts/run_python_tests.py
 ```
 
-新增事务须覆盖竞争、成功重放、报价过期/变化及扣费后异常。正式公开前还需两账号端到端与共享经济回归。公共底座曾有一个既有前端静态检查失败，具体证据见[实现状态](../../docs/dungeon-beta-implementation-status.md)，不能将其当成所有未来前端失败的豁免。
-
-B/C合并前检查公共合同和规则版本；使用普通merge保留协作者提交，必要的公共更新先在A提交，再由B/C同步。旧本地core分支已经退役，不重新创建并行集成入口。
+B/C同步公共合同后再改调用方，普通merge保留协作者提交。每个PR写明规则/协议版本、实际运行的测试与尚未交付边界；不把过往测试通过当成新代码的验收。

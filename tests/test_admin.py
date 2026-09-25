@@ -251,7 +251,8 @@ class AdminTests(unittest.TestCase):
             user_id = conn.execute("SELECT id FROM users WHERE username='alice'").fetchone()[0]
             conn.execute("INSERT INTO dungeon_beta_progress VALUES (?,'beta.clear.first_boss')", (user_id,))
             conn.execute("INSERT INTO dungeon_material_balances VALUES (?,'scrap',3)", (user_id,))
-            conn.execute("INSERT INTO dungeon_beta_asset_revisions VALUES (?,2)", (user_id,))
+            conn.execute("""INSERT INTO dungeon_beta_asset_revisions VALUES (?,2)
+                ON CONFLICT(user_id) DO UPDATE SET revision=excluded.revision""", (user_id,))
             conn.execute("""INSERT INTO dungeon_beta_receipts
                 (user_id,request_id,request_hash,status,result_json,created_at)
                 VALUES (?,'beta-1','digest','success','{}',100)""", (user_id,))

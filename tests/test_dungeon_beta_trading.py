@@ -385,7 +385,7 @@ class TradeTests(unittest.TestCase):
     def test_migration_two_is_idempotent_and_cleanup_keeps_bought_items(self):
         with self.database() as conn:
             self.assertEqual(conn.execute(
-                "SELECT COUNT(*) FROM dungeon_migrations").fetchone()[0], 2)
+                "SELECT COUNT(*) FROM dungeon_migrations").fetchone()[0], 4)
         with self.database() as conn, conn:
             init_beta(conn)
         offer_id = self.offer()["result"]["offer_id"]
@@ -419,10 +419,10 @@ class TradeTests(unittest.TestCase):
         init_dungeon(conn)
         conn.commit()
         init_beta(conn)
-        self.assertEqual(conn.execute("SELECT COUNT(*) FROM dungeon_migrations").fetchone()[0], 2)
+        self.assertEqual(conn.execute("SELECT COUNT(*) FROM dungeon_migrations").fetchone()[0], 4)
         conn.commit()
         init_beta(conn)  # replays without touching either checksum
-        self.assertEqual(conn.execute("SELECT COUNT(*) FROM dungeon_migrations").fetchone()[0], 2)
+        self.assertEqual(conn.execute("SELECT COUNT(*) FROM dungeon_migrations").fetchone()[0], 4)
         self.assertIsNotNone(conn.execute("""SELECT sql FROM sqlite_master
             WHERE type='trigger' AND name='delete_user_dungeon_beta'""").fetchone())
 

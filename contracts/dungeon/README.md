@@ -17,8 +17,9 @@ the whole run. A digest alone cannot restore old plugin code.
 action simulator. This package does not contain an action simulator or the
 run-time WebSocket commands described in the V1 draft. The fixtures exercise
 the pure shield mechanism, a real growth policy quote, and the frozen
-permanent-operation lifecycles below; a complete run fixture set arrives with
-the R4 host.
+permanent-operation lifecycles below. Internal host recovery and reward tests
+live in `tests/test_dungeon_beta_runtime.py`; action transport fixtures are pending.
+See [runtime integration](../../dungeon/runtime/README.md).
 
 The first trusted mechanism is `sword.shield_on_spend`. Its state contains
 `cooldown_until_tick` and `last_action_id`; both must be saved in the simulator
@@ -28,12 +29,13 @@ mechanisms; it cannot select an import path or execute a script.
 
 ## Beta permanent-operation messages (protocol_version 1)
 
-`schemas/beta_messages.schema.json` freezes the eight `dungeon_beta_*` requests
-registered by `server/dungeon/beta_protocol.py` (catalog, upgrade quote/commit,
+`schemas/beta_messages.schema.json` freezes the nine `dungeon_beta_*` requests
+registered by `server/dungeon/beta_protocol.py` (state, catalog, upgrade quote/commit,
 directed offers, receipt lookup), the shared `dungeon_beta_result` /
 `dungeon_beta_error` envelopes and the `dungeon_beta_invalidate` push. Run-time
-messages (start/input/frame/sync) are deliberately absent until the R4 host.
-`fixtures/upgrade_lifecycle.json` and `fixtures/trade_lifecycle.json` carry
+messages (start/input/frame/sync) are deliberately absent until the transport and lifecycle integration.
+`fixtures/state_lifecycle.json`, `fixtures/upgrade_lifecycle.json` and
+`fixtures/trade_lifecycle.json` carry
 happy-path and failure samples whose figures match the beta-core pack; the
 protocol tests validate every fixture entry against this schema, so B-line fake
 services and C-line samples stay byte-compatible with the server. To bootstrap

@@ -6,6 +6,7 @@ from uuid import uuid4
 from dungeon.legacy.catalog import CATALOG, SLOTS, prerequisite_key, public_catalog
 from dungeon.legacy.effects import resolve_stats
 from dungeon.domain.errors import DungeonError
+from dungeon.storage.assets import bump_asset_revision
 
 
 def _json(value):
@@ -35,6 +36,9 @@ def ensure_dungeon(conn, username, now, catalog=CATALOG):
                  _json(template["tags"]), _json(template["effects"]), int(now)))
             conn.execute("INSERT INTO dungeon_loadout(username,slot,item_id) VALUES (?,?,?)",
                          (username, template["slot"], item_id))
+        if starters:
+            user_id = conn.execute("SELECT id FROM users WHERE username=?", (username,)).fetchone()[0]
+            bump_asset_revision(conn, user_id)
     # Freeze display fields on pre-upgrade items while their template still exists.
     missing_display = conn.execute("""SELECT item_id,template_id FROM dungeon_items
         WHERE owner=? AND (display_name IS NULL OR visual_id IS NULL)""", (username,)).fetchall()

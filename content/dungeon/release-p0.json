@@ -1,0 +1,12 @@
+{
+  "ruleset_id": "beta-20260925-p0",
+  "protocol_version": 1,
+  "plugin_api_version": 1,
+  "simulation_version": 1,
+  "save_version": 1,
+  "tick_rate": 30,
+  "packs": [
+    "packs/beta-core/manifest.json",
+    "packs/beta-p0-flamefield/manifest.json"
+  ]
+}

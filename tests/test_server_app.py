@@ -77,7 +77,9 @@ class TransportTests(unittest.IsolatedAsyncioTestCase):
 
 class ApplicationTests(unittest.IsolatedAsyncioTestCase):
     def setUp(self):
-        self.tmp = self.enterContext(tempfile.TemporaryDirectory())
+        temp = tempfile.TemporaryDirectory()
+        self.addCleanup(temp.cleanup)
+        self.tmp = temp.name
         self.app = self.make_app("first")
 
     def make_app(self, name):
@@ -95,7 +97,8 @@ class ApplicationTests(unittest.IsolatedAsyncioTestCase):
     def connect(self, name="alice"):
         ws = Socket()
         state = {"user": self.app.accounts.authenticate_user(name, "password123"),
-                 "send_lock": asyncio.Lock()}
+                 "send_lock": asyncio.Lock(), "last_room_op": -1e6,
+                 "last_profile_update": -1e6, "last_transfer": -1e6}
         self.app.hub.clients[ws] = state
         return ws, state
 
@@ -123,11 +126,11 @@ class ApplicationTests(unittest.IsolatedAsyncioTestCase):
             get_dungeon dungeon_compare_item dungeon_equip dungeon_lock_item
             dungeon_sell_item dungeon_claim_items dungeon_start dungeon_sync
             dungeon_control dungeon_get_result
-            dungeon_beta_get_catalog dungeon_beta_quote_upgrade dungeon_beta_upgrade
+            dungeon_beta_get_state dungeon_beta_get_catalog dungeon_beta_quote_upgrade dungeon_beta_upgrade
             dungeon_beta_create_offer dungeon_beta_list_offers dungeon_beta_accept_offer
             dungeon_beta_cancel_offer dungeon_beta_get_receipt"""
         self.assertEqual(set(self.app.handlers), set(expected.split()))
-        self.assertEqual(len(self.app.handlers), 83)
+        self.assertEqual(len(self.app.handlers), 84)
 
     async def test_two_apps_isolate_accounts_rooms_history_and_protocol_state(self):
         second = self.make_app("second")
@@ -202,11 +205,12 @@ class ApplicationTests(unittest.IsolatedAsyncioTestCase):
         token = self.app.accounts.create_session("alice")
 
         async def receive(ws, kind):
-            async with asyncio.timeout(3):
+            async def read_until_kind():
                 while True:
                     payload = json.loads(await ws.recv())
                     if payload["type"] == kind:
                         return payload
+            return await asyncio.wait_for(read_until_kind(), timeout=3)
 
         async with websockets.serve(self.app.handler, "127.0.0.1", 0) as host:
             uri = f"ws://127.0.0.1:{host.sockets[0].getsockname()[1]}/?client=game"
@@ -220,6 +224,7 @@ class ApplicationTests(unittest.IsolatedAsyncioTestCase):
                 await ws.send(json.dumps({"type": "get_estate"}))
                 await receive(ws, "estate_state")
                 self.assertTrue(self.app.estate_presence.channels)
+                await asyncio.sleep(1.6)  # auth cooldown after resume
                 await ws.send(json.dumps({"type": "logout", "token": token}))
                 await receive(ws, "logout_success")
                 self.assertIsNone(self.app.accounts.resume_user(token))

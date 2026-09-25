@@ -1,7 +1,7 @@
 """Authenticated ``dungeon_beta_*`` WebSocket adapter over the Beta services.
 
-Permanent operations only: catalog, upgrade quotes/commits, directed offers.
-Run-time messages (input/frame/sync) arrive with the R4 host. Every handler
+Permanent operations only: state, catalog, upgrade quotes/commits, directed offers.
+Run-time messages (input/frame/sync) await host lifecycle/transport integration. Every handler
 resolves the stable user id from the authenticated session per call and never
 trusts ownership fields sent by the client.
 """
@@ -14,15 +14,31 @@ import time
 from pathlib import Path
 
 from dungeon.application.assets import AssetService
+from dungeon.application.state import StateService
 from dungeon.application.trading import TradeService
 from dungeon.content import ContentError, load_ruleset
+from dungeon.contracts.json_validation import validation_errors
 from dungeon.domain.errors import DungeonError
 from dungeon.domain.growth import FixedLevelPolicy
 from dungeon.domain.trading import TradePolicy
+from dungeon.legacy.receipts import REQUEST_ID_PATTERN
 
 logger = logging.getLogger("live-chat")
 
 RELEASE_PATH = Path(__file__).resolve().parents[2] / "content" / "dungeon" / "release.json"
+MESSAGE_SCHEMA = json.loads((Path(__file__).resolve().parents[2] / "contracts" / "dungeon" /
+                             "schemas" / "beta_messages.schema.json").read_text())
+REQUEST_DEFINITIONS = {
+    "dungeon_beta_get_state": "get_state_request",
+    "dungeon_beta_get_catalog": "get_catalog_request",
+    "dungeon_beta_quote_upgrade": "quote_upgrade_request",
+    "dungeon_beta_upgrade": "upgrade_request",
+    "dungeon_beta_create_offer": "create_offer_request",
+    "dungeon_beta_list_offers": "list_offers_request",
+    "dungeon_beta_accept_offer": "accept_offer_request",
+    "dungeon_beta_cancel_offer": "cancel_offer_request",
+    "dungeon_beta_get_receipt": "get_receipt_request",
+}
 RETRYABLE_CODES = frozenset({"storage_busy", "storage_failed"})
 
 
@@ -34,6 +50,7 @@ class DungeonBetaProtocol:
         self.ruleset = None
         self.assets = None
         self.trades = None
+        self.state = StateService(database)
         path = Path(release_path) if release_path is not None else RELEASE_PATH
         try:
             self.ruleset = load_ruleset(path)
@@ -50,7 +67,8 @@ class DungeonBetaProtocol:
         self._slots = asyncio.Semaphore(4)
 
     def handlers(self):
-        return {"dungeon_beta_get_catalog": self.handle_get_catalog,
+        return {"dungeon_beta_get_state": self.handle_get_state,
+                "dungeon_beta_get_catalog": self.handle_get_catalog,
                 "dungeon_beta_quote_upgrade": self.handle_quote_upgrade,
                 "dungeon_beta_upgrade": self.handle_upgrade,
                 "dungeon_beta_create_offer": self.handle_create_offer,
@@ -66,6 +84,8 @@ class DungeonBetaProtocol:
             return await asyncio.to_thread(function, *args, **kwargs)
 
     async def _fail(self, websocket, request_id, error):
+        if not isinstance(request_id, str) or REQUEST_ID_PATTERN.fullmatch(request_id) is None:
+            request_id = None
         if isinstance(error, DungeonError):
             code, message = error.code, str(error)
         elif isinstance(error, sqlite3.OperationalError):
@@ -111,7 +131,7 @@ class DungeonBetaProtocol:
 
     async def _guard(self, websocket, state, data):
         """Return (request_id, user_id, username) or None after replying."""
-        request_id = data.get("request_id")
+        request_id = data.get("request_id") if isinstance(data, dict) else None
         user = state.get("user")
         if not user:
             await self._fail(websocket, request_id, DungeonError("auth_required", "请先登录"))
@@ -119,6 +139,12 @@ class DungeonBetaProtocol:
         if self.ruleset is None:
             await self._fail(websocket, request_id,
                              DungeonError("ruleset_unavailable", "地下城规则集不可用"))
+            return None
+        definition = REQUEST_DEFINITIONS.get(data.get("type"))
+        if definition is None or validation_errors(
+                {"$ref": "#/$defs/" + definition, "$defs": MESSAGE_SCHEMA["$defs"]}, data):
+            await self._fail(websocket, request_id,
+                             DungeonError("invalid_request", "地下城请求格式无效"))
             return None
         try:
             user_id = await self._blocking(self._user_id, user["username"])
@@ -133,6 +159,18 @@ class DungeonBetaProtocol:
                 "request_id": request_id, "result_kind": kind, "result": result}
 
     # --------------------------------------------------------------- catalog
+
+    async def handle_get_state(self, websocket, state, data):
+        guard = await self._guard(websocket, state, data)
+        if guard is None:
+            return
+        request_id, user_id, _ = guard
+        try:
+            snapshot = await self._blocking(self.state.get_state, user_id)
+            snapshot["ruleset"] = self.ruleset.reference()
+            await self.hub.send_json(websocket, self._read_result(request_id, "get_state", snapshot))
+        except (DungeonError, sqlite3.OperationalError) as error:
+            await self._fail(websocket, request_id, error)
 
     async def handle_get_catalog(self, websocket, state, data):
         guard = await self._guard(websocket, state, data)

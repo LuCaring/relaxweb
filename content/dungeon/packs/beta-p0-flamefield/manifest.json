@@ -1,12 +1,13 @@
 {
   "pack_id": "beta.p0.flamefield",
-  "pack_version": "0.1.0",
+  "pack_version": "0.2.0",
   "schema_version": 1,
   "requires": [{"plugin_id": "builtin.sword_rules", "plugin_version": "0.1.0"}],
   "files": {
     "weapons": "weapons.json",
     "enemies": "enemies.json",
     "encounters": "encounters.json",
+    "routes": "routes.json",
     "effects": "effects.json",
     "progression": "progression.json",
     "loot": "loot.json"

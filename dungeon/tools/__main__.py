@@ -6,7 +6,6 @@ from functools import partial
 from pathlib import Path
 import sys
 import time
-from uuid import uuid4
 
 from dungeon.content import ContentError, load_ruleset
 
@@ -17,9 +16,11 @@ def _init_test_db(path, coins, password):
     from server.database import database
     from server.schema import init_db
     from dungeon.legacy.service import ensure_dungeon
+    from dungeon.application.items import create_item
 
     factory = partial(database, str(Path(path)))
     init_db(factory)
+    ruleset = load_ruleset(Path(__file__).resolve().parents[2] / "content/dungeon/release.json")
     created, skipped = [], []
     with factory() as conn, conn:
         now = int(time.time())
@@ -34,20 +35,15 @@ def _init_test_db(path, coins, password):
                                    (username,)).fetchone()[0]
             ensure_dungeon(conn, username, now)
             if tradable:
-                conn.execute("""INSERT INTO dungeon_items
-                    (item_id,owner,template_id,template_version,display_name,visual_id,slot,
-                     quality,stats_json,created_at)
-                    VALUES (?,?,?,?,?,?,?,?,?,?)""",
-                             (uuid4().hex, username, "beta.sword.basic", "0.1.0", "遗迹长剑",
-                              "beta.visual.ruins_blade", "weapon", "normal",
-                              '{"atk":30}', now))
+                create_item(conn, ruleset, username, "beta.sword.basic",
+                            source="integration_fixture", now=now)
                 conn.execute("""INSERT INTO dungeon_beta_progress(user_id,progress_id)
                     VALUES (?,'beta.clear.first_boss')""", (user_id,))
             created.append(username)
     print(json.dumps({"path": str(path), "created": created, "skipped_existing": skipped,
                       "coins_each": coins, "password": password,
-                      "note": "beta_seller owns one tradable sword with boss progress;"
-                              " starter gear is bound and not tradable"},
+                      "note": "integration_fixture sword is tradable only in this dedicated test DB;"
+                              " source=test and starter gear are bound"},
                      ensure_ascii=False))
 
 

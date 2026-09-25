@@ -3,6 +3,8 @@
 import hashlib
 import sqlite3
 
+from dungeon.storage.run_migration import RUN_MIGRATION
+
 
 _MIGRATIONS = ((1, """
 CREATE TABLE dungeon_beta_receipts (
@@ -97,7 +99,22 @@ CREATE TRIGGER delete_user_dungeon_beta AFTER DELETE ON users BEGIN
     DELETE FROM dungeon_trade_settlements WHERE buyer_user_id=OLD.id OR seller_user_id=OLD.id;
     DELETE FROM dungeon_trade_offers WHERE seller_user_id=OLD.id OR buyer_user_id=OLD.id;
 END;
-"""),)
+"""), (3, """
+ALTER TABLE dungeon_items ADD COLUMN beta_ruleset_id TEXT;
+ALTER TABLE dungeon_items ADD COLUMN beta_ruleset_hash TEXT;
+ALTER TABLE dungeon_items ADD COLUMN beta_effects_json TEXT;
+ALTER TABLE dungeon_items ADD COLUMN beta_trade_allowed INTEGER CHECK(beta_trade_allowed IN (0,1));
+CREATE TRIGGER dungeon_beta_offer_delete_release AFTER DELETE ON dungeon_trade_offers
+WHEN OLD.status='open'
+BEGIN
+    DELETE FROM dungeon_asset_reservations
+      WHERE asset_type='item' AND asset_id=OLD.item_id
+        AND purpose='trade_offer' AND reservation_ref=OLD.offer_id;
+    INSERT INTO dungeon_beta_asset_revisions(user_id,revision)
+      SELECT OLD.seller_user_id,2 FROM users WHERE id=OLD.seller_user_id
+      ON CONFLICT(user_id) DO UPDATE SET revision=revision+1;
+END;
+"""), RUN_MIGRATION)
 
 
 def init_beta(conn):

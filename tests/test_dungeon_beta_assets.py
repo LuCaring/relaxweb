@@ -232,7 +232,7 @@ class MigrationTests(unittest.TestCase):
         conn.commit()
         init_beta(conn)
         init_beta(conn)
-        self.assertEqual(conn.execute("SELECT COUNT(*) FROM dungeon_migrations").fetchone()[0], 2)
+        self.assertEqual(conn.execute("SELECT COUNT(*) FROM dungeon_migrations").fetchone()[0], 4)
 
     def test_legacy_gate_works_before_beta_tables_exist(self):
         conn = sqlite3.connect(":memory:")

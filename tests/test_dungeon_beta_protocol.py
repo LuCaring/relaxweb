@@ -41,7 +41,7 @@ class Socket:
 class FixtureTests(unittest.TestCase):
     def test_lifecycle_fixtures_match_the_frozen_message_schema(self):
         schema = json.loads((SCHEMAS / "beta_messages.schema.json").read_text())
-        for name in ("upgrade_lifecycle.json", "trade_lifecycle.json"):
+        for name in ("upgrade_lifecycle.json", "trade_lifecycle.json", "state_lifecycle.json"):
             fixture = json.loads((FIXTURES / name).read_text())
             for group, examples in fixture.items():
                 if not isinstance(examples, dict):
@@ -92,6 +92,37 @@ class BetaProtocolTests(unittest.IsolatedAsyncioTestCase):
         return TradePolicy.from_economy(ruleset.content("economy"))
 
     # ------------------------------------------------------------------- auth
+
+    async def test_get_state_is_read_only_and_schema_valid(self):
+        await self._call("dungeon_beta_get_state", self.a, self.a_state,
+                         {"type": "dungeon_beta_get_state", "protocol_version": 1,
+                          "request_id": "camp-1"})
+        message = self.a.last("dungeon_beta_result")
+        self.assertEqual(message["result_kind"], "get_state")
+        self.assertEqual(message["result"]["wallet"]["coin_minor"], 1000)
+        self.assertEqual(message["result"]["items"][0]["item_id"], "beta_sword")
+        schema = json.loads((SCHEMAS / "beta_messages.schema.json").read_text())
+        self.assertEqual(validation_errors({"$ref": "#/$defs/get_state_result",
+                                            "$defs": schema["$defs"]}, message["result"]), [])
+
+    async def test_request_schema_rejects_malformed_lookup_and_wrong_version(self):
+        for request in (
+            {"type": "dungeon_beta_get_receipt", "protocol_version": 1,
+             "request_id": "bad-lookup", "lookup_request_id": {"bad": "value"}},
+            {"type": "dungeon_beta_get_state", "protocol_version": 2,
+             "request_id": "bad-version"},
+            {"type": "dungeon_beta_get_state", "protocol_version": True,
+             "request_id": "bad-bool-version"},
+            {"type": "dungeon_beta_get_state", "protocol_version": 1,
+             "request_id": "bad-extra", "owner_id": self.buyer},
+        ):
+            with self.subTest(request=request):
+                await self._call(request["type"], self.a, self.a_state, request)
+                self.assertEqual(self.a.last("dungeon_beta_error")["code"], "invalid_request")
+        await self._call("dungeon_beta_get_state", self.a, self.a_state,
+                         {"type": "dungeon_beta_get_state", "protocol_version": 1,
+                          "request_id": {"bad": "id"}})
+        self.assertIsNone(self.a.last("dungeon_beta_error")["request_id"])
 
     async def test_auth_ruleset_and_catalog(self):
         await self._call("dungeon_beta_get_catalog", self.a, {"user": None},

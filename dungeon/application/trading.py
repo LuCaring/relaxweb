@@ -49,7 +49,9 @@ class TradeService:
         if not isinstance(item_id, str) or REQUEST_ID_PATTERN.fullmatch(item_id) is None:
             raise DungeonError("invalid_request", "装备编号无效")
         row = conn.execute("""SELECT template_id,template_version,display_name,visual_id,slot,
-            quality,stats_json,beta_upgrade_level,version,location,locked
+            quality,stats_json,beta_upgrade_level,version,location,locked,
+            beta_bound_reason,beta_source,beta_ruleset_id,beta_ruleset_hash,
+            beta_effects_json,beta_trade_allowed
             FROM dungeon_items WHERE item_id=? AND owner=?""", (item_id, username)).fetchone()
         if row is None or row[9] == "sold":
             raise DungeonError("not_found", "装备不存在")
@@ -59,10 +61,18 @@ class TradeService:
             raise DungeonError("invalid_save", "装备属性存档异常") from error
         if not isinstance(stats, dict):
             raise DungeonError("invalid_save", "装备属性存档异常")
+        try:
+            effects = json.loads(row[15]) if row[15] is not None else []
+        except (TypeError, ValueError) as error:
+            raise DungeonError("invalid_save", "装备效果存档异常") from error
+        if not isinstance(effects, list):
+            raise DungeonError("invalid_save", "装备效果存档异常")
         return {"item_id": item_id, "template_id": row[0], "template_version": row[1],
                 "display_name": row[2], "visual_id": row[3], "slot": row[4], "quality": row[5],
                 "stats": stats, "upgrade_level": row[7], "version": row[8],
-                "location": row[9], "locked": bool(row[10])}
+                "location": row[9], "locked": bool(row[10]), "bound_reason": row[11],
+                "source": row[12], "ruleset_id": row[13], "ruleset_hash": row[14],
+                "effects": effects, "trade_allowed": bool(row[16]) if row[16] is not None else None}
 
     def _receipt(self, conn, user_id, request_id, digest):
         row = conn.execute("""SELECT request_hash,result_json FROM dungeon_beta_receipts
@@ -165,7 +175,9 @@ class TradeService:
                 raise DungeonError("version_conflict", "装备已变化，请刷新")
             snapshot = {key: item[key] for key in (
                 "item_id", "template_id", "template_version", "display_name", "visual_id",
-                "slot", "quality", "stats", "upgrade_level", "version")}
+                "slot", "quality", "stats", "upgrade_level", "version",
+                "bound_reason", "source", "ruleset_id", "ruleset_hash", "effects",
+                "trade_allowed")}
             offer_id = uuid4().hex
             reserve_item(conn, seller, item_id, "trade_offer", offer_id, now)
             conn.execute("""INSERT INTO dungeon_trade_offers

@@ -1,10 +1,69 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "Dungeon Beta permanent-operation messages (protocol_version 1)",
-  "description": "Frozen shapes for the registered dungeon_beta_* requests, the shared result/error envelopes, and the invalidation push. Run-time messages (input/frame/sync) are not part of this file yet.",
+  "description": "Frozen shapes for the registered permanent Beta requests, camp state, shared envelopes, and invalidation push.",
   "$defs": {
     "request_id": {"type": "string", "pattern": "^[A-Za-z0-9_-]{1,96}$"},
-    "protocol_version": {"const": 1},
+    "protocol_version": {"type": "integer", "const": 1},
+    "get_state_request": {
+      "type": "object",
+      "required": ["type", "protocol_version", "request_id"],
+      "properties": {
+        "type": {"const": "dungeon_beta_get_state"},
+        "protocol_version": {"$ref": "#/$defs/protocol_version"},
+        "request_id": {"$ref": "#/$defs/request_id"}
+      },
+      "additionalProperties": false
+    },
+    "state_item": {
+      "type": "object",
+      "required": ["item_id", "template_id", "template_version", "display_name", "visual_id", "slot", "quality", "stats", "tags", "legacy_effects", "affixes", "sell_coins", "locked", "location", "version", "upgrade_level", "bound_reason", "source", "ruleset_id", "ruleset_hash", "effects", "template_trade_allowed", "can_trade", "reservation"],
+      "properties": {
+        "item_id": {"$ref": "#/$defs/request_id"},
+        "template_id": {"type": "string", "minLength": 1},
+        "template_version": {"type": "string", "minLength": 1},
+        "display_name": {"type": "string", "minLength": 1},
+        "visual_id": {"type": "string", "minLength": 1},
+        "slot": {"type": "string", "minLength": 1},
+        "quality": {"type": "string", "minLength": 1},
+        "stats": {"type": "object"},
+        "tags": {"type": "array"},
+        "legacy_effects": {"type": "array"},
+        "affixes": {"type": "array"},
+        "sell_coins": {"type": "integer", "minimum": 0},
+        "locked": {"type": "boolean"},
+        "location": {"enum": ["bag", "pending"]},
+        "version": {"type": "integer", "minimum": 1},
+        "upgrade_level": {"type": "integer", "minimum": 0},
+        "bound_reason": {"type": ["string", "null"]},
+        "source": {"type": ["string", "null"]},
+        "ruleset_id": {"type": ["string", "null"]},
+        "ruleset_hash": {"type": ["string", "null"]},
+        "effects": {"type": "array", "items": {"type": "object", "required": ["id", "kind", "trigger", "params"], "properties": {"id": {"type": "string"}, "kind": {"type": "string"}, "trigger": {"type": "string"}, "params": {"type": "object"}}}},
+        "template_trade_allowed": {"type": ["boolean", "null"]},
+        "can_trade": {"type": "boolean"},
+        "reservation": {"type": ["object", "null"], "required": ["purpose", "ref"], "properties": {"purpose": {"enum": ["active_run", "trade_offer"]}, "ref": {"type": "string"}}, "additionalProperties": false}
+      },
+      "additionalProperties": false
+    },
+    "get_state_result": {
+      "type": "object",
+      "required": ["ruleset", "wallet", "bag_capacity", "profile_version", "items", "pending_count", "loadout", "progress", "materials", "asset_revision", "active_run"],
+      "properties": {
+        "ruleset": {"type": "object", "required": ["ruleset_id", "ruleset_hash", "protocol_version", "simulation_version", "save_version"], "properties": {"ruleset_id": {"type": "string"}, "ruleset_hash": {"type": "string"}, "protocol_version": {"type": "integer"}, "simulation_version": {"type": "integer"}, "save_version": {"type": "integer"}}},
+        "wallet": {"type": "object", "required": ["coin_minor"], "properties": {"coin_minor": {"type": "integer", "minimum": 0}}, "additionalProperties": false},
+        "bag_capacity": {"type": "integer", "minimum": 1},
+        "profile_version": {"type": ["integer", "null"], "minimum": 1},
+        "items": {"type": "array", "items": {"$ref": "#/$defs/state_item"}},
+        "pending_count": {"type": "integer", "minimum": 0},
+        "loadout": {"type": "object", "additionalProperties": {"$ref": "#/$defs/request_id"}},
+        "progress": {"type": "array", "items": {"type": "string"}},
+        "materials": {"type": "object", "additionalProperties": {"type": "integer", "minimum": 0}},
+        "asset_revision": {"type": "integer", "minimum": 1},
+        "active_run": {"type": ["object", "null"], "required": ["run_id", "route_id", "status", "room_index", "server_tick", "durable_tick", "run_revision", "control_epoch", "ruleset_id", "ruleset_hash"]}
+      },
+      "additionalProperties": false
+    },
     "cost": {
       "type": "object",
       "required": ["resource_id", "amount"],

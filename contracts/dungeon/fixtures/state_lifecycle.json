@@ -1,0 +1,68 @@
+{
+  "requests": {
+  "get_state_request": {
+    "type": "dungeon_beta_get_state",
+    "protocol_version": 1,
+    "request_id": "camp-1"
+  }
+  },
+  "results": {
+  "get_state_result": {
+    "ruleset": {
+      "ruleset_id": "beta-20260925-p0",
+      "ruleset_hash": "sha256-dbc966ee2e7141931fcd479420a5446890db4e3c83db59f2da276ae273babf77",
+      "protocol_version": 1,
+      "plugin_api_version": 1,
+      "simulation_version": 1,
+      "save_version": 1,
+      "tick_rate": 30
+    },
+    "wallet": {"coin_minor": 100000},
+    "bag_capacity": 60,
+    "profile_version": 1,
+    "items": [
+      {
+        "item_id": "example-sword",
+        "template_id": "beta.p0.weapon.bulwark_blade",
+        "template_version": "beta-20260925-p0",
+        "display_name": "萤灯长剑·稳盾",
+        "visual_id": "beta.p0.visual.ruins_blade",
+        "slot": "weapon",
+        "quality": "normal",
+        "stats": {"atk": 72},
+        "tags": [],
+        "legacy_effects": [],
+        "affixes": [],
+        "sell_coins": 0,
+        "locked": false,
+        "location": "bag",
+        "version": 1,
+        "upgrade_level": 0,
+        "bound_reason": null,
+        "source": "run_reward",
+        "ruleset_id": "beta-20260925-p0",
+        "ruleset_hash": "sha256-dbc966ee2e7141931fcd479420a5446890db4e3c83db59f2da276ae273babf77",
+        "effects": [{
+          "id": "beta.p0.effect.bulwark_guard",
+          "kind": "sword.shield_on_spend",
+          "trigger": "sword.momentum_spent",
+          "filter": {"origin": "main_weapon"},
+          "params": {"minimum_spent": 2, "shield_max_hp_bp": 1500, "duration_ms": 3000, "cooldown_ms": 8000},
+          "limits": {"per_action": 1, "max_proc_depth": 1},
+          "stacking": "refresh_max",
+          "remove_policy": "remove_owned_state"
+        }],
+        "template_trade_allowed": true,
+        "can_trade": false,
+        "reservation": {"purpose": "trade_offer", "ref": "offer-1"}
+      }
+    ],
+    "pending_count": 0,
+    "loadout": {},
+    "progress": ["beta.p0.clear.rm01"],
+    "materials": {},
+    "asset_revision": 3,
+    "active_run": null
+  }
+  }
+}

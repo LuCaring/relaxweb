@@ -10,8 +10,16 @@
       "beta.p0.enemy.seedpuff", "beta.p0.enemy.seedpuff", "beta.p0.enemy.seedpuff",
       "beta.p0.enemy.seedpuff", "beta.p0.enemy.seedpuff", "beta.p0.enemy.seedpuff"
     ],
+    "spawn_groups": [
+      {"enemy_id": "beta.p0.enemy.softbug", "count": 9},
+      {"enemy_id": "beta.p0.enemy.seedpuff", "count": 9}
+    ],
     "loot_pool_id": "beta.p0.loot.rm01",
-    "clear_progress_id": "beta.p0.clear.rm01"
+    "clear_progress_id": "beta.p0.clear.rm01",
+    "rewards": {
+      "permanent": {"coins_minor": 1500, "loot_rolls": 1, "progress_ids": ["beta.p0.clear.rm01"]},
+      "run": {"potions": []}
+    }
   },
   {
     "id": "beta.p0.encounter.rm02",
@@ -24,8 +32,16 @@
       "beta.p0.enemy.seedpuff", "beta.p0.enemy.seedpuff", "beta.p0.enemy.seedpuff",
       "beta.p0.enemy.seedpuff", "beta.p0.enemy.seedpuff", "beta.p0.enemy.seedpuff"
     ],
+    "spawn_groups": [
+      {"enemy_id": "beta.p0.enemy.softbug", "count": 12},
+      {"enemy_id": "beta.p0.enemy.seedpuff", "count": 6}
+    ],
     "loot_pool_id": "beta.p0.loot.rm02",
-    "clear_progress_id": "beta.p0.clear.rm02"
+    "clear_progress_id": "beta.p0.clear.rm02",
+    "rewards": {
+      "permanent": {"coins_minor": 2000, "loot_rolls": 0, "progress_ids": ["beta.p0.clear.rm02"]},
+      "run": {"potions": []}
+    }
   },
   {
     "id": "beta.p0.encounter.rm03",
@@ -37,14 +53,28 @@
       "beta.p0.enemy.seedpuff", "beta.p0.enemy.seedpuff", "beta.p0.enemy.seedpuff",
       "beta.p0.enemy.seedpuff", "beta.p0.enemy.seedpuff", "beta.p0.enemy.seedpuff"
     ],
+    "spawn_groups": [
+      {"enemy_id": "beta.p0.enemy.moth", "count": 1},
+      {"enemy_id": "beta.p0.enemy.softbug", "count": 6},
+      {"enemy_id": "beta.p0.enemy.seedpuff", "count": 6}
+    ],
     "loot_pool_id": "beta.p0.loot.rm03",
-    "clear_progress_id": "beta.p0.clear.rm03"
+    "clear_progress_id": "beta.p0.clear.rm03",
+    "rewards": {
+      "permanent": {"coins_minor": 3000, "loot_rolls": 1, "progress_ids": ["beta.p0.clear.rm03"]},
+      "run": {"potions": [{"count": 1, "heal_max_hp_bp": 3000}]}
+    }
   },
   {
     "id": "beta.p0.encounter.rm04",
     "name": "RM04 Boss 房",
     "enemies": ["beta.p0.enemy.mossqueen"],
+    "spawn_groups": [{"enemy_id": "beta.p0.enemy.mossqueen", "count": 1}],
     "loot_pool_id": "beta.p0.loot.rm04",
-    "clear_progress_id": "beta.p0.clear.rm04"
+    "clear_progress_id": "beta.p0.clear.rm04",
+    "rewards": {
+      "permanent": {"coins_minor": 5000, "loot_rolls": 1, "progress_ids": ["beta.p0.clear.rm04"]},
+      "run": {"potions": []}
+    }
   }
 ]

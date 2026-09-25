@@ -6,7 +6,7 @@ from dungeon.legacy.catalog import SLOTS
 from dungeon.legacy.receipts import (REQUEST_ID_PATTERN, load_receipt,
                                      request_digest, save_receipt)
 from dungeon.legacy.service import DungeonError, ensure_dungeon
-from dungeon.storage.assets import ensure_available
+from dungeon.storage.assets import bump_asset_revision, ensure_available
 
 
 ITEM_ID_PATTERN = REQUEST_ID_PATTERN
@@ -182,6 +182,8 @@ def run_dungeon_action(conn, username, request_id, action_type, payload,
     if changed:
         conn.execute("""UPDATE dungeon_profiles SET version=version+1,updated_at=?
             WHERE username=?""", (int(now), username))
+        user_id = conn.execute("SELECT id FROM users WHERE username=?", (username,)).fetchone()[0]
+        bump_asset_revision(conn, user_id)
         version += 1
     stored = {**result, "request_id": request_id, "profile_version": version,
               "changed": changed, "replayed": False}

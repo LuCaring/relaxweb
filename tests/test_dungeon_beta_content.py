@@ -20,6 +20,7 @@ from dungeon.tools.__main__ import main as cli_main
 
 
 RELEASE = ROOT / "content/dungeon/release.json"
+P0_RELEASE = ROOT / "content/dungeon/release-p0.json"
 FIXTURES = ROOT / "contracts/dungeon/fixtures"
 
 
@@ -47,6 +48,8 @@ class ContentTests(unittest.TestCase):
         rules = load_ruleset(RELEASE)
         again = load_ruleset(RELEASE)
         self.assertEqual(rules.ruleset_hash, again.ruleset_hash)
+        self.assertEqual(rules.ruleset_hash,
+                         "sha256-7b80484d5348e997d05f8afd96696e45c56089ff294e99f1ea0ef68cc1610b58")
         self.assertRegex(rules.ruleset_hash, r"^sha256-[a-f0-9]{64}$")
         self.assertEqual(cli_main(["validate-content", str(RELEASE)]), 0)
         public = json.dumps(rules.public_catalog(), ensure_ascii=False)
@@ -149,6 +152,133 @@ class ContentTests(unittest.TestCase):
         self.release.write_text('{"ruleset_id":"one","ruleset_id":"two"}', encoding="utf-8")
         with self.assertRaisesRegex(ContentError, "duplicate JSON key"):
             load_ruleset(self.release)
+
+
+class P0ContentTests(unittest.TestCase):
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temp.cleanup)
+        self.root = Path(self.temp.name) / "dungeon"
+        shutil.copytree(P0_RELEASE.parent, self.root)
+        self.release = self.root / "release-p0.json"
+        self.pack = self.root / "packs/beta-p0-flamefield"
+
+    def change(self, filename, update):
+        path = self.pack / filename
+        value = json.loads(path.read_text(encoding="utf-8"))
+        update(value)
+        path.write_text(json.dumps(value, ensure_ascii=False), encoding="utf-8")
+
+    def rejects(self, filename, update, fragment):
+        self.change(filename, update)
+        with self.assertRaisesRegex(ContentError, fragment):
+            load_ruleset(self.release)
+
+    def test_route_spawns_rewards_and_public_catalog(self):
+        rules = load_ruleset(P0_RELEASE)
+        route = rules.content("routes")[0]
+        self.assertEqual(route["encounter_ids"], tuple(
+            "beta.p0.encounter.rm%02d" % number for number in range(1, 5)))
+        rooms = {room["id"]: room for room in rules.content("encounters")}
+        self.assertEqual([sum(group["count"] for group in rooms[room_id]["spawn_groups"])
+                          for room_id in route["encounter_ids"]], [18, 18, 13, 1])
+        rewards = [rooms[room_id]["rewards"] for room_id in route["encounter_ids"]]
+        self.assertEqual([reward["permanent"]["coins_minor"] for reward in rewards],
+                         [1500, 2000, 3000, 5000])
+        self.assertEqual([reward["permanent"]["loot_rolls"] for reward in rewards],
+                         [1, 0, 1, 1])
+        self.assertEqual(rewards[2]["run"]["potions"][0]["heal_max_hp_bp"], 3000)
+        public = json.dumps(rules.public_catalog(), ensure_ascii=False)
+        self.assertIn("beta.p0.route.flamefield", public)
+        self.assertIn("entry_encounter_id", public)
+        for secret in ("loot_pool_id", "loot_rolls", "coins_minor", "progress_ids", "spawn_groups"):
+            self.assertNotIn(secret, public)
+        self.assertEqual(load_ruleset(P0_RELEASE).ruleset_hash, rules.ruleset_hash)
+        self.assertNotEqual(rules.ruleset_hash, load_ruleset(RELEASE).ruleset_hash)
+
+    def test_rejects_route_unknown_duplicate_and_wrong_boss_position(self):
+        self.rejects("routes.json",
+                     lambda routes: routes[0]["encounter_ids"].append("beta.p0.encounter.missing"),
+                     "unknown route encounter")
+
+    def test_rejects_duplicate_route_room(self):
+        self.rejects("routes.json",
+                     lambda routes: routes[0]["encounter_ids"].append("beta.p0.encounter.rm01"),
+                     "unique|duplicate")
+
+    def test_rejects_boss_before_final_room(self):
+        self.rejects("routes.json", lambda routes: routes[0]["encounter_ids"].reverse(),
+                     "boss before final room")
+
+    def test_rejects_route_without_final_boss(self):
+        self.rejects("routes.json", lambda routes: routes[0]["encounter_ids"].pop(),
+                     "route has no final boss")
+
+    def test_rejects_route_room_without_reward_plan(self):
+        self.rejects("encounters.json", lambda rooms: rooms[0].pop("rewards"),
+                     "route encounter missing reward plan")
+
+    def test_rejects_route_referencing_legacy_room_without_reward_plan(self):
+        self.rejects("routes.json",
+                     lambda routes: routes[0]["encounter_ids"].__setitem__(
+                         0, "beta.encounter.entry"),
+                     "route encounter missing reward plan: beta.encounter.entry")
+
+    def test_rejects_spawn_reference_and_expansion(self):
+        self.rejects("encounters.json",
+                     lambda rooms: rooms[0]["spawn_groups"][0].update(enemy_id="beta.p0.enemy.missing"),
+                     "spawn groups do not match enemies")
+
+    def test_rejects_spawn_count_limit(self):
+        self.rejects("encounters.json",
+                     lambda rooms: rooms[0]["spawn_groups"][0].update(count=65),
+                     "64")
+
+    def test_rejects_duplicate_spawn_group(self):
+        self.rejects("encounters.json",
+                     lambda rooms: rooms[0]["spawn_groups"].append(
+                         copy.deepcopy(rooms[0]["spawn_groups"][0])),
+                     "duplicate spawn group enemy")
+
+    def test_rejects_reward_progress_forgery(self):
+        self.rejects("encounters.json",
+                     lambda rooms: rooms[0]["rewards"]["permanent"].update(
+                         progress_ids=["beta.p0.clear.rm04"]),
+                     "reward progress does not match clear progress")
+
+    def test_rejects_reward_duplicate_and_bounded_rolls(self):
+        self.rejects("encounters.json",
+                     lambda rooms: rooms[0]["rewards"]["permanent"].update(
+                         progress_ids=["beta.p0.clear.rm01", "beta.p0.clear.rm01"]),
+                     "unique")
+
+    def test_rejects_fractional_money(self):
+        self.rejects("encounters.json",
+                     lambda rooms: rooms[0]["rewards"]["permanent"].update(coins_minor=15.5),
+                     "integer")
+
+    def test_rejects_reward_quantity_limits(self):
+        for field, value, fragment in (("loot_rolls", 11, "10"),
+                                       ("coins_minor", 1000000001, "1000000000")):
+            with self.subTest(field=field):
+                path = self.pack / "encounters.json"
+                original = path.read_text(encoding="utf-8")
+                self.rejects("encounters.json",
+                             lambda rooms: rooms[0]["rewards"]["permanent"].update(**{field: value}),
+                             fragment)
+                path.write_text(original, encoding="utf-8")
+
+    def test_rejects_route_and_room_quantity_limits(self):
+        self.rejects("routes.json",
+                     lambda routes: routes[0]["encounter_ids"].extend(
+                         "beta.p0.encounter.extra%02d" % index for index in range(33)),
+                     "too long|32")
+
+    def test_rejects_more_than_64_enemies(self):
+        self.rejects("encounters.json",
+                     lambda rooms: rooms[0]["enemies"].extend(
+                         ["beta.p0.enemy.softbug"] * 47),
+                     "too long|64")
 
 
 class RegistryTests(unittest.TestCase):
