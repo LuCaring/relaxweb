@@ -158,11 +158,11 @@ export function createEstateUI(root, activities = {}) {
           { disabled: snapshot.coins < penguin.upgrade_price, className: "estate-button estate-button-gold" })
         : button("已经达到最高等级", () => {}, { disabled: true });
     sheetBody.append(itemCard({ icon: "🐧", title: penguinLevel ? `臭企鹅 Lv.${penguinLevel}` : "臭企鹅",
-      meta: penguinLevel ? `成熟后 ${penguinDelay} 分钟自动收获${penguinLevel === 4 ? "，并尝试自动播种" : ""}`
-        : `纪念品集齐后抽奖可获皮肤碎片 · ${fragmentCost} 个碎片兑换`,
+      meta: penguinLevel ? `成熟后 ${penguinDelay} 分钟自动收获${penguinLevel === 4 ? "，并尝试自动播种" : ""}；仓库满时作物留在田里等待空位`
+        : `纪念品集齐后抽奖可获皮肤碎片 · ${fragmentCost} 个碎片兑换；兑换后 Lv.1 于成熟 80 分钟后自动收获`,
       controls: [penguinButton] }));
     if (penguinLevel) {
-      sheetBody.append(note("臭企鹅已替换豆豆出场，豆豆的偷菜防守暂不生效。仓库满时，成熟作物会留在田里等待空位。"));
+      sheetBody.append(note("臭企鹅已替换豆豆出场，豆豆的偷菜防守暂不生效。"));
       if (penguinLevel === 4) sheetBody.append(note("自动播种沿用该田上种作物，并直接扣除对应种子费用；金币不足或种子仅限抽奖时，田地会保持空置。"));
       return;
     }
@@ -171,8 +171,7 @@ export function createEstateUI(root, activities = {}) {
     if (!level) {
       const starter = catalogEntry(rules, 1);
       const defendChance = Math.round(starter.defend_chance * 100);
-      sheetBody.append(note(`豆豆会跟随主人。有人来偷菜时，它有 ${defendChance}% 概率阻止偷窃，并让对方掉落金币。`));
-      sheetBody.append(itemCard({ icon: "🐕", title: "豆豆", meta: `宠物 · Lv.1 · 防守概率 ${defendChance}%`,
+      sheetBody.append(itemCard({ icon: "🐕", title: "豆豆", meta: `宠物 · Lv.1 · 偷菜防守概率 ${defendChance}%；防守成功会保住作物，消耗对方一次偷菜机会，并获得对方掉落的 1–1000 金币`,
         controls: [button(`${formatCoinsWhole(10000)} 金币 · 带豆豆回家`,
           () => estateCommand("estate_pet"), { className: "estate-button estate-button-gold" })] }));
       return;
@@ -180,11 +179,10 @@ export function createEstateUI(root, activities = {}) {
     const current = catalogEntry(rules, level);
     const next = catalogEntry(rules, level + 1);
     sheetBody.append(itemCard({ icon: "🐕", title: `豆豆 Lv.${level}`,
-      meta: `偷菜防守概率 ${Math.round(current.defend_chance * 100)}%`,
+      meta: `偷菜防守概率 ${Math.round(current.defend_chance * 100)}%；防守成功会保住作物，消耗对方一次偷菜机会，并获得对方掉落的 1–1000 金币`,
       controls: next ? [button(`${formatCoinsWhole(current.upgrade_price)} 金币 · 升到 Lv.${level + 1}`,
         () => estateCommand("estate_pet"), { className: "estate-button estate-button-gold" })]
         : [button("已经达到最高等级", () => {}, { disabled: true })] }));
-    sheetBody.append(note("防守成功会保住作物，消耗对方一次偷菜机会，并把对方掉落的 1–1000 金币交给主人。"));
   }
 
   function renderLottery() {
