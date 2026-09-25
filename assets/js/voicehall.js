@@ -9,7 +9,8 @@ import { elements, formatClock, playerAvatarNode, renderGameView, send, state } 
 import { onMessage, registerView } from "./registry.js";
 import { attachPeerVolumeMenu } from "./peer-volume-menu.js";
 import { getPeerVolume, micGateOpen, micLevel, setPeerVolume } from "./voice-mic.js";
-import { toggleMic, voiceMicPublishing, voiceMicWanted, voiceStatus } from "./room-voice.js";
+import { enableVoiceMic, leaveVoice, toggleMic, voiceMicPublishing, voiceMicWanted,
+  voiceStatus } from "./room-voice.js";
 import { mountVoiceControls } from "./voice-controls.js";
 
 // 视图 DOM 引用：voice_hub_state 只重建频道树与头部，保住聊天输入焦点
@@ -129,6 +130,20 @@ function requestHubState(force = false) {
   }
 }
 
+function joinHubChannel(channel) {
+  if (state.myRoom) return false;
+  if (!send({ type: "voice_hub_join", channel })) return false;
+  const hub = ensureHub();
+  hub.joinedOnce = true;
+  hub.pendingChannel = channel;
+  if (window.LIVE_CONFIG?.voice?.enabled && hub.voiceEnabled !== false) {
+    // 立即请求浏览器权限，真正发布要等新频道的 LiveKit 授权。
+    void enableVoiceMic({ publishNow: false });
+  }
+  refreshConnectionUi();
+  return true;
+}
+
 function closeQuick() {
   quick.menu.hidden = true;
   quick.toggle.setAttribute("aria-expanded", "false");
@@ -158,7 +173,9 @@ function refreshQuickUi() {
   }
   const voice = channelVoiceState();
   const status = voiceStatus();
-  quick.status.textContent = `${voiceHintText()}${status.micError && voice.connected ? ` · ${status.micError}` : ""}`;
+  const micStatus = voice.connected && status.micError ? status.micError
+    : voice.connected && voiceMicWanted() && !voiceMicPublishing() ? "麦克风开启中…" : "";
+  quick.status.textContent = `${voiceHintText()}${micStatus ? ` · ${micStatus}` : ""}`;
   const channel = hub?.myChannel ? channelName(hub.myChannel) : "语音聊天室";
   quick.toggle.querySelector(".voice-quick-label").textContent = channel;
   quick.toggle.setAttribute("aria-label", `${channel}，${voiceHintText()}，打开快捷设置`);
@@ -171,9 +188,8 @@ function refreshQuickUi() {
   quick.leave.hidden = !hub?.myChannel;
   quick.leave.disabled = !ready || busy;
   quick.mic.disabled = !voice.connected || !status.canPublish;
-  quick.mic.textContent = voiceMicWanted()
-    ? (voiceMicPublishing() ? "关闭麦克风" : "麦克风开启中…") : "开启麦克风";
-  quick.mic.classList.toggle("is-on", voiceMicWanted() && voice.connected);
+  quick.mic.textContent = voiceMicWanted() ? "关闭麦克风" : "开启麦克风";
+  quick.mic.classList.toggle("is-on", voice.connected && voiceMicPublishing());
   refreshGlow();
 }
 
@@ -232,17 +248,14 @@ quick.channel.addEventListener("change", () => {
 });
 quick.join.addEventListener("click", () => {
   if (quick.join.disabled || !quickSelection) return;
-  if (send({ type: "voice_hub_join", channel: quickSelection })) {
-    ensureHub().joinedOnce = true;
-    state.voiceHub.pendingChannel = quickSelection;
-    refreshConnectionUi();
-  }
+  joinHubChannel(quickSelection);
 });
 quick.leave.addEventListener("click", () => {
   if (quick.leave.disabled) return;
   if (send({ type: "voice_hub_leave" })) {
     state.voiceHub.restoreChannel = null;
     state.voiceHub.pendingChannel = null;
+    void leaveVoice();
     refreshConnectionUi();
   }
 });
@@ -275,10 +288,7 @@ function channelRow(channel) {
   row.append(name, el("span", "voicehub-channel-count", `${channel.members.length} 人`));
   if (!current) {
     row.addEventListener("click", () => {
-      if (send({ type: "voice_hub_join", channel: channel.id })) {
-        state.voiceHub.pendingChannel = channel.id;
-        refreshConnectionUi();
-      }
+      joinHubChannel(channel.id);
     });
     return row;
   }
@@ -289,6 +299,7 @@ function channelRow(channel) {
     if (send({ type: "voice_hub_leave" })) {
       state.voiceHub.restoreChannel = null;
       state.voiceHub.pendingChannel = null;
+      void leaveVoice();
       refreshConnectionUi();
     }
   });
@@ -397,8 +408,7 @@ function renderVoiceHall() {
   const hub = ensureHub();
   requestHubState();
   if (hub.snapshotReceived && !hub.myChannel && !hub.joinedOnce && hub.pendingChannel === undefined) {
-    hub.joinedOnce = true;
-    if (send({ type: "voice_hub_join", channel: "default" })) hub.pendingChannel = "default";
+    joinHubChannel("default");
   }
   const root = el("section", "voicehall");
   const head = el("header", "voicehall-head");
@@ -423,7 +433,7 @@ function renderVoiceHall() {
     mic.classList.add("waiting-voice");
     micPanel = { root: mic,
       controls: mountVoiceControls(mic, { title: "语音设置",
-        note: "连接频道后可测试麦克风；进入游戏房间会自动切换到房间语音。" }) };
+        note: "加入频道后自动开麦；进入游戏房间会自动切换到房间语音。" }) };
     micPanel.controls.refresh({ ...voiceStatus(),
       connected: channelVoiceState().connected, waitingText: voiceHintText() });
   } else {
@@ -515,16 +525,17 @@ onMessage("voice_hub_state", (data) => {
     state.voiceHub.authorizationTimedOut = false;
   }
   // 初次拿到快照还没进频道：整个会话自动加入一次默认频道
-  if (!state.voiceHub.myChannel && state.voiceHub.restoreChannel) {
+  if (!state.myRoom && !state.voiceHub.myChannel && state.voiceHub.restoreChannel) {
     const channel = state.voiceHub.restoreChannel;
     state.voiceHub.restoreChannel = null;
-    if (send({ type: "voice_hub_join", channel })) state.voiceHub.pendingChannel = channel;
-  } else if (!state.voiceHub.myChannel && !state.voiceHub.joinedOnce
+    joinHubChannel(channel);
+  } else if (!state.myRoom && !state.voiceHub.myChannel && !state.voiceHub.joinedOnce
     && state.hallPage === "voicehall" && state.voiceHub.pendingChannel === undefined) {
-    state.voiceHub.joinedOnce = true;
-    if (send({ type: "voice_hub_join", channel: "default" })) {
-      state.voiceHub.pendingChannel = "default";
-    }
+    joinHubChannel("default");
+  } else if (previousChannel !== state.voiceHub.myChannel && state.voiceHub.myChannel
+    && window.LIVE_CONFIG?.voice?.enabled && state.voiceHub.voiceEnabled !== false) {
+    // 断线恢复或另一个入口加入时，也保持“加入后默认开麦”。
+    void enableVoiceMic({ publishNow: channelVoiceState().connected });
   }
   renderChannels();
   renderChat();

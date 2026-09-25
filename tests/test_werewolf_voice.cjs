@@ -223,6 +223,14 @@ print(json.dumps({n: accounts.create_session(n) for n in names}))
       players[name] = { name, page };
     }
 
+    // 两人先通过全局入口加入公共频道并自动开麦，再进入狼人杀房间。
+    for (const name of ['va', 'vb']) {
+      const page = players[name].page;
+      await page.locator('#voiceQuickToggle').click();
+      await page.locator('#voiceQuickJoin').click();
+      await page.waitForFunction(() => core.state.voiceHub?.myChannel === 'default'
+        && voice.voiceDebug().micPublished === true, null, { timeout: 20000, polling: 100 });
+    }
     // 4 人局：1 狼 + 预言家 + 女巫 + 平民；角色由服务端随机分发
     await players.va.page.evaluate(() => core.send({
       type: 'create_room', game: 'werewolf', name: '语音局', buy_in: 100, blind: 5,
@@ -232,7 +240,7 @@ print(json.dumps({n: accounts.create_session(n) for n in names}))
     const roomId = await players.va.page.evaluate(() => core.state.myRoom.room_id);
     await players.va.page.waitForFunction(() => voice.voiceDebug().room?.endsWith('-lobby'));
     assert.equal(await players.va.page.locator('.waiting-voice').isVisible(), true);
-    assert.equal(await players.va.page.locator('.waiting-voice-mic').isDisabled(), false);
+    await players.va.page.waitForFunction(() => document.querySelector('.waiting-voice-mic')?.disabled === false);
     for (const name of ['vb', 'vc', 'vd']) {
       await players[name].page.evaluate((id) => core.send({ type: 'join_room', room_id: id }), roomId);
       await players[name].page.waitForFunction((id) => core.state.myRoom?.room_id === id, roomId);
@@ -240,9 +248,8 @@ print(json.dumps({n: accounts.create_session(n) for n in names}))
     for (const name of Object.keys(players)) {
       await players[name].page.waitForFunction(() => voice.voiceDebug().room?.endsWith('-lobby'));
     }
-    // 等待区就能开启麦克风，并实际收到另一名玩家发布的音轨。
+    // 公共频道 → 游戏等待区自动切换且保留开麦，双方收到彼此音轨。
     for (const name of ['va', 'vb']) {
-      await players[name].page.locator('.waiting-voice-mic').click();
       await players[name].page.waitForFunction(() => voice.voiceDebug().micPublished);
     }
     for (const name of ['va', 'vb']) {
@@ -251,7 +258,7 @@ print(json.dumps({n: accounts.create_session(n) for n in names}))
           .some((element) => !element.paused && element.readyState >= 2));
       assert.match(await players[name].page.locator('.waiting-voice-status').innerText(), /麦克风已开启/);
     }
-    console.log('PASS lobby: creator and joiners share voice; two microphones publish and play audio');
+    console.log('PASS lobby: public voice auto-switches into game voice with microphones published');
 
     // 按人音量齿轮菜单：除自己外每个成员条目一个齿轮；打开浮层调整后
     // 写入缓存并作用于已挂载音轨
@@ -390,6 +397,14 @@ print(json.dumps({n: accounts.create_session(n) for n in names}))
     const speaker = await players.va.page.evaluate(() => core.state.myRoom.speech_current);
     const speakerRole = roleOf[speaker];
     console.log(`PASS day: all four connected to the day channel, speaker ${speaker}(${speakerRole})`);
+
+    await players[speaker].page.evaluate(() => core.send({ type: 'room_chat', text: '白天发言测试' }));
+    for (const name of Object.keys(players)) {
+      await players[name].page.waitForFunction(() => core.state.roomChat
+        .some((message) => message.text === '白天发言测试'), null,
+      { timeout: 10000, polling: 100 });
+    }
+    console.log('PASS chat: active speaker text reaches all four game players');
 
     // 依次发言：只有当前发言人可发布麦克风，其余人只听
     for (const name of Object.keys(players)) {

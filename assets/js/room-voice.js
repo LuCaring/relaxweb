@@ -1,7 +1,7 @@
 /* 语音连接管理：消费服务器的 voice_update（token 授权），直连 LiveKit。
    授权模型：能否进语音房间由服务端签发的短时 JWT 决定，客户端拿到
    token 才连接；token 为空表示服务端要求断开。
-   麦克风采集受浏览器手势限制：第一次「上麦」点击会预热权限并记住意愿，
+   加入语音频道时在点击手势内预热麦克风权限，连上后自动发布；
    之后连接/换房自动恢复发布；「闭麦」走 LiveKit 的麦克风静音。
    说话指示经 ActiveSpeakersChanged 广播成 voicespeakers 事件，
    牌桌据此高亮座位；连接状态变化广播 voicestate 事件。 */
@@ -10,7 +10,9 @@ import { onMessage } from "./registry.js";
 import { getPeerVolume, micGateOpen, micGateTrack, micLevel, micPipelineActive,
   startMicPipeline, stopMicPipeline } from "./voice-mic.js";
 
-const mic = { wanted: false, primed: false, processing: false };
+const mic = { wanted: false, primed: false, processing: false, priming: null };
+let micGeneration = 0;
+let micApplyQueue = Promise.resolve();
 let current = null;        // 当前 LiveKit Room
 let currentKey = "";       // url|room|发布权限，防止重复连接
 let currentRoomName = "";
@@ -45,6 +47,7 @@ export function voiceStatus() {
 export function voiceMicPublishing() {
   if (!current || !mic.wanted || !canPublish) return false;
   const participant = current.localParticipant;
+  if (!participant) return false;
   const source = window.LivekitClient?.Track?.Source?.Microphone;
   const publication = (source && participant.getTrackPublication?.(source))
     || [...(participant.trackPublications?.values() || [])].find((pub) => pub.kind === "audio");
@@ -111,39 +114,81 @@ export function voiceDebug() {
   };
 }
 
-export async function toggleMic() {
-  if (!current || !canPublish) return false;
-  // 两项浏览器授权都在点击调用栈中启动，避免等待播放后丢失用户手势。
-  void enableVoiceAudio();
-  mic.wanted = !mic.wanted;
-  micError = "";
-  if (mic.wanted && !mic.primed) {
-    // 首次上麦在点击手势里预热权限；采集流同时交给本地管线供电平表与
-    // 噪声门使用，管线建不起来时退回 LiveKit 直接采集。
+function queueMicApply() {
+  micApplyQueue = micApplyQueue.then(applyMic);
+  return micApplyQueue;
+}
+
+async function primeMic(generation) {
+  try {
+    // 必须在加入按钮的同步点击栈内调用 getUserMedia，不能等 LiveKit 授权。
+    const stream = await navigator.mediaDevices.getUserMedia({
+      audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
+    });
+    if (generation !== micGeneration || !mic.wanted) {
+      stream.getTracks().forEach((track) => track.stop());
+      return false;
+    }
+    let processed = false;
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
-      });
-      let processed = false;
-      try {
-        await startMicPipeline(stream);
-        processed = true;
-      } catch (error) {
-        console.warn("voice mic pipeline unavailable", error);
-        stream.getTracks().forEach((track) => track.stop());
-      }
-      mic.processing = processed;
-      mic.primed = true;
+      await startMicPipeline(stream);
+      processed = true;
     } catch (error) {
+      console.warn("voice mic pipeline unavailable", error);
+      stream.getTracks().forEach((track) => track.stop());
+    }
+    if (generation !== micGeneration || !mic.wanted) {
+      stream.getTracks().forEach((track) => track.stop());
+      if (processed && !mic.priming) stopMicPipeline();
+      return false;
+    }
+    mic.processing = processed;
+    mic.primed = true;
+    return true;
+  } catch (error) {
+    if (generation === micGeneration) {
       mic.wanted = false;
       micError = microphoneError(error);
-      announceState();
-      return mic.wanted;
     }
+    return false;
   }
-  await applyMic();
+}
+
+/** 预热麦克风并记住开麦意愿；公共频道加入前可在尚未连接时调用。 */
+export async function enableVoiceMic({ publishNow = true } = {}) {
+  if (!mic.wanted) {
+    mic.wanted = true;
+    micError = "";
+    announceState();
+  }
+  if (!mic.primed) {
+    if (!mic.priming) {
+      const generation = ++micGeneration;
+      const pending = primeMic(generation);
+      mic.priming = pending;
+      void pending.finally(() => {
+        if (mic.priming === pending) mic.priming = null;
+        announceState();
+      });
+    }
+    if (!await mic.priming) return false;
+  }
+  if (publishNow && current && canPublish && mic.wanted) await queueMicApply();
   announceState();
   return mic.wanted;
+}
+
+export async function toggleMic() {
+  if (!current || !canPublish) return false;
+  void enableVoiceAudio();
+  if (!mic.wanted) return enableVoiceMic();
+  mic.wanted = false;
+  micGeneration += 1;
+  mic.priming = null;
+  micError = "";
+  await queueMicApply();
+  announceState();
+  return false;
 }
 
 async function applyMic() {
@@ -297,7 +342,19 @@ async function applyUpdate(update) {
   errorRoomName = "";
   retryDelay = 2000;
   canPublish = Boolean(update.can_publish);
-  if (mic.wanted) await applyMic();
+  if (mic.wanted) {
+    if (mic.priming) {
+      const activeRoom = room;
+      void mic.priming.then(async (ready) => {
+        if (ready && current === activeRoom && mic.wanted) {
+          await queueMicApply();
+          announceState();
+        }
+      });
+    } else {
+      await queueMicApply();
+    }
+  }
   announceState();
 }
 
@@ -325,6 +382,8 @@ export async function leaveVoice() {
   connectError = "";
   errorRoomName = "";
   mic.wanted = false;
+  micGeneration += 1;
+  mic.priming = null;
   mic.primed = false;
   mic.processing = false;
   micError = "";

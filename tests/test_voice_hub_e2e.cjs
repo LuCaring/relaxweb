@@ -150,6 +150,8 @@ print(json.dumps({n: accounts.create_session(n) for n in names}))
         }
       });
       page.on('requestfailed', (request) => {
+        // 本测试不启动直播推流，直播页入口打开时 WHEP 探测失败是预期行为。
+        if (request.url().endsWith('/live/whep')) return;
         errors[name].push(`${request.url()}: ${request.failure()?.errorText}`);
       });
       await page.route(`http://127.0.0.1:${webPort}/assets/**`, (route) => {
@@ -224,20 +226,38 @@ print(json.dumps({n: accounts.create_session(n) for n in names}))
     }
 
     try {
-      // 1. 三人从顶栏快捷入口进入视图，初次快照后自动落入默认频道
-      for (const name of NAMES) {
-        const { page } = players[name];
-        await page.locator('#voiceQuickToggle').click();
-        await page.locator('#voiceQuickDetail').click();
-        await page.waitForFunction(() => Boolean(document.querySelector('.voicehall')));
-      }
+      // 1. 分别验证直播页全局入口、游戏厅顶栏快捷加入、详细页面自动加入。
+      await players.ua.page.goto(`http://127.0.0.1:${webPort}/index.html`);
+      await players.ua.page.locator('.voicehall-nav').click();
+      await players.ua.page.waitForURL('**/game.html?view=voicehall');
+      await players.ua.page.evaluate(async () => {
+        const main = [...document.scripts].find((script) => script.type === 'module'
+          && script.src.includes('/assets/js/main.js'));
+        await import(main.src);
+        window.core = await import('/assets/js/core.js');
+        window.voice = await import('/assets/js/room-voice.js');
+        window.voiceMic = await import('/assets/js/voice-mic.js');
+      });
+      await players.ua.page.waitForFunction(() => core.state.currentUser?.username === 'ua'
+        && Boolean(document.querySelector('.voicehall')));
+
+      await players.ub.page.locator('#voiceQuickToggle').click();
+      await players.ub.page.locator('#voiceQuickChannel').selectOption('default');
+      await players.ub.page.locator('#voiceQuickJoin').click();
+      await players.ub.page.waitForFunction(() => core.state.voiceHub?.myChannel === 'default'
+        && voice.voiceDebug().micPublished === true, null, { timeout: 20000, polling: 100 });
+      assert.equal(await players.ub.page.locator('.voicehall').count(), 0,
+        '顶栏快捷加入后无需进入详细页面');
+      await players.ub.page.locator('#voiceQuickDetail').click();
+
+      await players.uc.page.locator('#voiceQuickToggle').click();
+      await players.uc.page.locator('#voiceQuickDetail').click();
       for (const name of NAMES) {
         await players[name].page.waitForFunction(() => core.state.voiceHub?.myChannel === 'default',
           null, { timeout: 15000, polling: 100 });
       }
-      // 各自点开麦克风（假麦振荡器），三人在同一 LiveKit 房间互通
+      // 加入后自动发布假麦音轨，三人在同一 LiveKit 房间互通。
       for (const name of NAMES) {
-        await players[name].page.locator('.voicehall-mic .waiting-voice-mic').click();
         await players[name].page.waitForFunction(() => voice.voiceDebug().micPublished === true,
           null, { timeout: 20000, polling: 100 });
       }
@@ -251,7 +271,7 @@ print(json.dumps({n: accounts.create_session(n) for n in names}))
         assert.equal(debug.connected, true, `${name} should be connected`);
         assert.equal(debug.room, 'vh-default', `${name} should stay in the default channel room`);
       }
-      console.log('PASS join: three pages enter via the hall card, auto-join default, publish mics');
+      console.log('PASS entry: live page, header quick join, detailed page all auto-publish microphones');
 
       // 2. A 页存在 B 的远端 audio 元素且音量 > 0，且 B、C 两路都可播放
       await players.ua.page.waitForFunction(() => {
@@ -269,6 +289,8 @@ print(json.dumps({n: accounts.create_session(n) for n in names}))
       await players.uc.page.waitForFunction(
         () => voice.voiceDebug().connected && voice.voiceDebug().room === 'vh-2',
         null, { timeout: 20000, polling: 100 });
+      await players.uc.page.waitForFunction(() => voice.voiceDebug().micPublished === true,
+        null, { timeout: 15000, polling: 100 });
       await players.ua.page.waitForFunction(
         () => !document.querySelector('.voicehub-member[data-voice-peer="uc"]'),
         null, { timeout: 15000, polling: 100 });

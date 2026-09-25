@@ -2,7 +2,8 @@
    （内嵌噪声门阈值滑块）与门控开关。面板自带 rAF 刷新循环，宿主容器
    从文档移除后自动停止；不含成员音量（见 peer-volume-menu.js）。 */
 
-import { enableVoiceAudio, toggleMic, voiceMicWanted, voiceStatus } from "./room-voice.js";
+import { enableVoiceAudio, toggleMic, voiceMicPublishing, voiceMicWanted,
+  voiceStatus } from "./room-voice.js";
 import { micGateOpen, micGateSettings, micLevel, micPipelineActive,
   setMicGateSettings } from "./voice-mic.js";
 
@@ -133,15 +134,17 @@ export function mountVoiceControls(container, opts = {}) {
   return {
     refresh(nextStatus) {
       const preview = Boolean(window.LIVE_CONFIG?.voice?.preview);
-      const on = nextStatus.connected && nextStatus.canPublish && voiceMicWanted();
+      const on = nextStatus.connected && nextStatus.canPublish && voiceMicPublishing();
+      const wanted = voiceMicWanted();
       mic.disabled = preview || !nextStatus.connected || !nextStatus.canPublish;
       mic.classList.toggle("on", on);
-      mic.textContent = on ? "🎙 关闭麦克风" : "🎙 开启麦克风";
+      mic.textContent = wanted ? "🎙 关闭麦克风" : "🎙 开启麦克风";
       mic.setAttribute("aria-pressed", String(on));
       status.textContent = preview
         ? "布局预览 · 麦克风未连接"
         : !nextStatus.connected ? nextStatus.waitingText || "语音连接中，连接后可测试麦克风"
-        : nextStatus.micError || (on ? "麦克风已开启，可以和房内玩家交谈" : "已连接 · 麦克风关闭");
+        : nextStatus.micError || (on ? "麦克风已开启，可以和房内玩家交谈"
+          : wanted ? "麦克风开启中…" : "已连接 · 麦克风关闭");
       audio.hidden = !nextStatus.audioBlocked;
       refreshVoiceMeter(container, nextStatus);
       refreshVoiceGate(container, nextStatus);
