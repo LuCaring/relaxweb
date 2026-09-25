@@ -7,7 +7,6 @@
   "frame_order": "left_to_right",
   "animations": {
     "idle": "idle.png",
-    "move": "move.png",
     "attack": "attack.png",
     "hit": "hit.png",
     "death": "death.png"
