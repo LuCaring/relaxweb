@@ -15,7 +15,16 @@ MIN_PRICE_CENTS = 10000
 MAX_PRICE_CENTS = 1000000
 QUANTITY_PATTERN = re.compile(r"^[0-9]+(?:\.[0-9]{1,3})?$")
 UNFETCHED = object()
+NO_ADVANCE = object()  # 只读取当前报价；即使这一分钟的采样还没生成也不补造
 CANDLE_LIMITS = {"minute": 60, "hour": 72, "day": 90}
+# 隐藏噪声半幅：须明显小于参考价真实涨幅的七成跟踪项，否则小时/日 K 线看不出参考行情。
+HIDDEN_NOISE_HALF_SPAN = 160
+HIDDEN_NOISE_SPAN_CAP = 1600
+# 长断线恢复后的单笔最大涨跌幅；按分钟线性放大的 1.5% 上限封顶到 8%。
+MAX_TICK_CHANGE = Decimal("0.08")
+# 模拟行情向约 4 小时前的价位温和回归，避免纯随机漫步长期贴住上下限。
+REVERSION_RATE = Decimal("0.002")
+REVERSION_LAG_MINUTES = 240
 
 
 def record_market_candles(conn, minute, open_cents, close_cents):
@@ -90,11 +99,18 @@ def _advance(conn, now, source_price=UNFETCHED):
         "FROM estate_market_index WHERE id=1").fetchone()
     if attempt >= minute:
         return price_cents, bool(available)
+    if source_price is NO_ADVANCE:
+        return price_cents, bool(available)
     source = fetch_source_price() if source_price is UNFETCHED else source_price
     opening_price = price_cents
     if source is None:
         # 每分钟只生成一次全服共享的报价；不按离线时长补算，避免无人访问时跳价。
         change = Decimal(secrets.randbelow(1601) - 800) / Decimal(100000)
+        anchor = conn.execute(
+            "SELECT price_cents FROM estate_market_ticks WHERE minute<=? "
+            "ORDER BY minute DESC LIMIT 1", (minute - REVERSION_LAG_MINUTES,)).fetchone()
+        if anchor and anchor[0] > 0:
+            change -= REVERSION_RATE * Decimal(math.log(price_cents / anchor[0]))
         price_cents = max(MIN_PRICE_CENTS, min(MAX_PRICE_CENTS,
             int((Decimal(price_cents) * (1 + change)).to_integral_value())))
         conn.execute("UPDATE estate_market_index SET attempted_minute=?,price_cents=?,"
@@ -106,9 +122,9 @@ def _advance(conn, now, source_price=UNFETCHED):
     if previous > 0 and source_kind == "live":
         gap = max(1, minute - source_minute)
         real_move = max(Decimal("-0.5"), min(Decimal("0.5"), source / previous - 1))
-        span = min(6000, 600 * math.isqrt(gap))
+        span = min(HIDDEN_NOISE_SPAN_CAP, HIDDEN_NOISE_HALF_SPAN * math.isqrt(gap))
         hidden_move = Decimal(secrets.randbelow(span * 2 + 1) - span) / Decimal(100000)
-        cap = min(Decimal("0.5"), Decimal("0.015") * gap)
+        cap = min(MAX_TICK_CHANGE, Decimal("0.015") * gap)
         change = max(-cap, min(cap, real_move * Decimal("0.7") + hidden_move))
         price_cents = max(MIN_PRICE_CENTS, min(MAX_PRICE_CENTS,
             int((Decimal(price_cents) * (1 + change)).to_integral_value())))
@@ -211,7 +227,7 @@ def trade_market(conn, username, request_id, side, quantity, now, adjust_coins,
         )
         return {"action": "market_trade", "side": side, "quantity": amount_milli / 1000,
                 "price": price_cents / 100, "amount": cents / 100, "coins": balance,
-                "market": market_snapshot(conn, username, now)}
+                "market": market_snapshot(conn, username, now, NO_ADVANCE)}
 
     return run_action(conn, username, request_id, "market_trade",
                       {"side": side, "quantity_milli": amount_milli}, now, mutate)
