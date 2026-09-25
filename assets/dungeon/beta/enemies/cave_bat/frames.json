@@ -1,5 +1,5 @@
 {
-  "visual_id": "ruins_slime",
+  "visual_id": "cave_bat",
   "format": "horizontal_sprite_sheet",
   "frame_width": 362,
   "frame_height": 724,
@@ -7,7 +7,6 @@
   "frame_order": "left_to_right",
   "animations": {
     "idle": "idle.png",
-    "move": "move.png",
     "attack": "attack.png",
     "hit": "hit.png",
     "death": "death.png"

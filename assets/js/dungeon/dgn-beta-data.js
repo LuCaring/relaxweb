@@ -26,6 +26,7 @@ export const BASE_STATS = {
 };
 
 const IMG = (file) => `assets/dungeon/items/${file}`;
+const BETA_ART = (path) => `assets/dungeon/beta/${path}`;
 
 export const WEAPONS = [
   {
@@ -47,7 +48,7 @@ export const WEAPONS = [
     id: "club",
     name: "硬木棒",
     kind: "melee",
-    icon: null,
+    icon: BETA_ART("weapons/club-a.png"),
     emoji: "🏏",
     damage: 13,
     cooldown: 1.5,
@@ -62,7 +63,7 @@ export const WEAPONS = [
     id: "throwing_knife",
     name: "飞刀",
     kind: "ranged",
-    icon: null,
+    icon: BETA_ART("weapons/throwing-knives.png"),
     emoji: "🎯",
     damage: 3,
     cooldown: 0.45,
@@ -77,7 +78,7 @@ export const WEAPONS = [
     id: "crossbow",
     name: "猎弩",
     kind: "ranged",
-    icon: null,
+    icon: BETA_ART("weapons/crossbow.png"),
     emoji: "🏹",
     damage: 7,
     cooldown: 1.2,
@@ -92,7 +93,7 @@ export const WEAPONS = [
     id: "flame_staff",
     name: "火焰法杖",
     kind: "ranged",
-    icon: null,
+    icon: BETA_ART("weapons/flame-staff.png"),
     emoji: "🔥",
     damage: 10,
     cooldown: 1.7,
@@ -170,7 +171,7 @@ export const ITEMS = [
   {
     id: "whetstone",
     name: "磨刀石",
-    icon: null,
+    icon: BETA_ART("icons/whetstone.png"),
     emoji: "🪨",
     tier: 1,
     price: 11,
@@ -180,7 +181,7 @@ export const ITEMS = [
   {
     id: "scope",
     name: "瞄准镜",
-    icon: null,
+    icon: BETA_ART("icons/scope.png"),
     emoji: "🔭",
     tier: 2,
     price: 15,
@@ -190,7 +191,7 @@ export const ITEMS = [
   {
     id: "adrenaline",
     name: "肾上腺素",
-    icon: null,
+    icon: BETA_ART("icons/adrenaline.png"),
     emoji: "💉",
     tier: 3,
     price: 22,
@@ -200,7 +201,7 @@ export const ITEMS = [
   {
     id: "iron_heart",
     name: "铁石心肠",
-    icon: null,
+    icon: BETA_ART("icons/iron-heart.png"),
     emoji: "🫀",
     tier: 3,
     price: 24,
