@@ -22,6 +22,13 @@ class RoomProtocol:
         self.settlement = settlement
 
     async def _refresh_voice(self, room, username):
+        voice_hub = getattr(self.rooms, "voice_hub", None)
+        if voice_hub is not None:
+            try:
+                await voice_hub.recheck()
+            except Exception:
+                logger.warning("voice hub recheck failed before game voice refresh",
+                               exc_info=True)
         voice = getattr(self.rooms, "voice", None)
         if voice is None:
             return

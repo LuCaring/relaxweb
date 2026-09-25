@@ -4,7 +4,7 @@
 不依赖真实 LiveKit：VoiceService 照 tests/test_voice.py 的 make_service
 stub 掉 mint_token/_kick_room 并记录调用，覆盖：
   - 加入/切换频道的成员变化与 voice_plan 映射（vh-<频道>）；
-  - 与游戏房间互斥：join 被拒、recheck 把成员拉出并发 token:null 断开；
+  - 与游戏房间互斥：join 被拒、recheck 撤销公共频道旧授权且不覆盖游戏授权；
   - 临时重命名：权限/长度/限频校验，空置超 TTL 恢复默认名；
   - 分频道文字聊天：定向投递、1 秒限频、历史上限；
   - 断线宽限：到点二次确认，已认证连接仍在则不移除；
@@ -180,17 +180,16 @@ class VoiceHubTests(unittest.IsolatedAsyncioTestCase):
                           "message": "游戏中不能加入语音聊天室"})
         self.assertNotIn("alice", self.hub.sent)
         self.assertEqual(self.vh._facade.seating, [])
-        # 已在频道的成员进入游戏房间后，recheck 立即拉出并显式断开
+        # 已在频道的成员进入游戏房间后，recheck 只撤销旧授权，
+        # 游戏房间即将下发的 token 不能被公共频道的 token:null 覆盖。
         bob, bob_state = self.connect("bob")
         await self.vh.handle_join(bob, bob_state, {})
+        sent_before = len(self.hub.sent["bob"])
         self.rooms.in_room.add("bob")
         await self.vh.recheck()
         self.assertNotIn("bob", self.vh.channels["default"]["members"])
         self.assertEqual(self.vh._facade.seating, [])
-        disconnect = self.hub.sent["bob"][-1]
-        self.assertEqual(disconnect["type"], "voice_update")
-        self.assertIsNone(disconnect["token"])
-        self.assertIsNone(disconnect["room"])
+        self.assertEqual(len(self.hub.sent["bob"]), sent_before)
         self.assertIn(("vh-default", "bob"), self.kicks)
 
     async def test_rename_validation_custom_flag_and_cooldown(self):

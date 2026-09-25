@@ -293,8 +293,9 @@ class VoiceHub:
                 emptied.append(channel_id)
         if not removed:
             return
+        # 游戏语音授权由 RoomHost 随后签发，这里只撤销公共频道旧授权；
+        # 再发 token:null 会将新的游戏语音连接误断开。
         await self._after_change(emptied)
-        await asyncio.gather(*(self._send_voice_disconnect(name) for name in removed))
 
     async def _send_voice_disconnect(self, username):
         """显式下发无 token 的 voice_update；room-voice.js 收到后立即断开。"""

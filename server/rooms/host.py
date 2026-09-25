@@ -66,18 +66,19 @@ class RoomHost:
                 elif room.has_spectator(username):
                     targets.append((socket, room.spectator_view(username)))
             await asyncio.gather(*(self.hub.send_json(socket, view) for socket, view in targets))
+            # 先退出公共频道并撤销旧 LiveKit 授权，再签发游戏频道 token；
+            # 否则旧频道的断开消息可能把刚建立的游戏语音也关掉。
+            if self.voice_hub is not None:
+                try:
+                    await self.voice_hub.recheck()
+                except Exception:
+                    logger.warning("voice hub recheck failed", exc_info=True)
             # 语音授权跟随视图：阶段/生死变化在这里差分签发 LiveKit token
             if self.voice is not None:
                 try:
                     await self.voice.sync_room(room)
                 except Exception:
                     logger.warning("voice sync failed for room %s", room.id, exc_info=True)
-            # 语音聊天室与游戏互斥：进任何游戏房间的频道成员在这里被拉出去
-            if self.voice_hub is not None:
-                try:
-                    await self.voice_hub.recheck()
-                except Exception:
-                    logger.warning("voice hub recheck failed", exc_info=True)
 
         async def on_rooms_changed():
             await self.broadcast_room_list()
