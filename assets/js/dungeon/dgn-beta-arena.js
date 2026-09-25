@@ -99,7 +99,7 @@ export class Arena {
   stop() { this.running = false; }
 
   pushHud() {
-    const stats = statsOf(this.state);
+    const stats = statsOf(this.state, this.dataDeps);
     this.hooks.onHud?.({
       hp: this.state.hp,
       maxHp: stats.maxHp,
@@ -237,24 +237,24 @@ export class Arena {
 
   updateWeapons(dt) {
     const stats = statsOf(this.state, this.dataDeps);
-    for (const weaponId of this.state.weapons) {
-      const weapon = this.weaponById(weaponId);
+    for (const [index, gear] of this.state.weapons.entries()) {
+      const weapon = this.weaponById(gear.id);
       if (!weapon) continue;
-      const timer = (this.player.attackTimers[weaponId] ?? 0.4) - dt * stats.attackSpeed;
+      const timer = (this.player.attackTimers[index] ?? 0.4) - dt * stats.attackSpeed;
       if (timer <= 0) {
         const target = this.nearestEnemy(this.player.x, this.player.y, weapon.range);
         if (target) {
-          this.player.attackTimers[weaponId] = weapon.cooldown;
+          this.player.attackTimers[index] = weapon.cooldown;
           if (weapon.kind === "melee") {
             this.meleeAttack(weapon, target, stats);
           } else {
             this.rangedAttack(weapon, target, stats);
           }
         } else {
-          this.player.attackTimers[weaponId] = 0.08;
+          this.player.attackTimers[index] = 0.08;
         }
       } else {
-        this.player.attackTimers[weaponId] = timer;
+        this.player.attackTimers[index] = timer;
       }
     }
     if (this.player.swing) {

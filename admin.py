@@ -58,6 +58,7 @@ USERNAME_REF_TABLES = (
     "estate_tools", "estate_inventory", "estate_plots", "estate_profiles",
     "dungeon_profiles", "dungeon_loadout", "dungeon_runs", "dungeon_active_jobs",
     "dungeon_rewards", "dungeon_progress", "dungeon_actions", "dungeon_items",
+    "dungeon_currency",
 )
 USERNAME_REF_COLUMNS = {"dungeon_items": ("owner",)}
 DELETION_PLAN = (

@@ -5,6 +5,7 @@ import re
 
 from dungeon.legacy.effects import (EffectError, MAX_STAT, STAT_FIELDS,
                                     validate_base_stats, validate_effect)
+from dungeon.legacy.crafting import CURRENCIES
 
 
 SLOTS = ("weapon", "helmet", "chest", "belt", "boots", "accessory")
@@ -50,7 +51,18 @@ CATALOG = {
     ],
     "reward_tables": [
         {"reward_table_id": "slime_clear", "coins": 20, "rolls": 1,
-         "entries": [{"template_id": "ruins_blade", "weight": 1}]},
+         "item_level": 35,
+         "entries": [{"template_id": "ruins_blade", "weight": 1}],
+         "currency_drops": [
+             {"currency_id": "transmutation", "chance_bp": 10000, "amount": 1},
+             {"currency_id": "augmentation", "chance_bp": 4500, "amount": 1},
+             {"currency_id": "regal", "chance_bp": 2000, "amount": 1},
+             {"currency_id": "alchemy", "chance_bp": 1000, "amount": 1},
+             {"currency_id": "exalted", "chance_bp": 300, "amount": 1},
+             {"currency_id": "chaos", "chance_bp": 200, "amount": 1},
+             {"currency_id": "divine", "chance_bp": 50, "amount": 1},
+             {"currency_id": "annulment", "chance_bp": 100, "amount": 1},
+         ]},
     ],
 }
 
@@ -179,8 +191,28 @@ def validate_catalog(catalog):
             raise DungeonConfigError("至少配置一个挑战")
         reward_ids = _unique(catalog["reward_tables"], "reward_table_id")
         for table in catalog["reward_tables"]:
-            if set(table) != {"reward_table_id", "coins", "rolls", "entries"}:
+            if not {"reward_table_id", "coins", "rolls", "entries"} <= set(table) or not set(table) <= {
+                    "reward_table_id", "coins", "rolls", "entries", "item_level", "currency_drops"}:
                 raise DungeonConfigError("奖励表字段无效")
+            item_level = table.get("item_level", 1)
+            if isinstance(item_level, bool) or not isinstance(item_level, int) or not 1 <= item_level <= 100:
+                raise DungeonConfigError("奖励物品等级无效")
+            drops = table.get("currency_drops", [])
+            if not isinstance(drops, list) or len(drops) > len(CURRENCIES):
+                raise DungeonConfigError("通货掉落表无效")
+            currency_ids = set()
+            for drop in drops:
+                if (not isinstance(drop, dict) or set(drop) != {"currency_id", "chance_bp", "amount"}
+                        or drop["currency_id"] not in CURRENCIES
+                        or drop["currency_id"] in currency_ids
+                        or isinstance(drop["chance_bp"], bool)
+                        or not isinstance(drop["chance_bp"], int)
+                        or not 0 <= drop["chance_bp"] <= 10000
+                        or isinstance(drop["amount"], bool)
+                        or not isinstance(drop["amount"], int)
+                        or not 1 <= drop["amount"] <= 1000):
+                    raise DungeonConfigError("通货掉落条目无效")
+                currency_ids.add(drop["currency_id"])
             if (isinstance(table["coins"], bool) or not isinstance(table["coins"], int)
                     or table["coins"] < 0 or table["coins"] > 1_000_000):
                 raise DungeonConfigError("奖励金币无效")
@@ -254,6 +286,8 @@ def public_catalog(catalog=CATALOG):
                             "reward_preview": {
                                 "coins": reward_tables[row["reward_table_id"]]["coins"],
                                 "rolls": reward_tables[row["reward_table_id"]]["rolls"],
+                                "item_level": reward_tables[row["reward_table_id"]].get("item_level", 1),
+                                "currency_drops": deepcopy(reward_tables[row["reward_table_id"]].get("currency_drops", [])),
                                 "possible_items": [entry["template_id"] for entry in
                                                    reward_tables[row["reward_table_id"]]["entries"]],
                             },

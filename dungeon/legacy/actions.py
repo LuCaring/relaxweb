@@ -1,8 +1,10 @@
 """装备写操作；调用者以 BEGIN IMMEDIATE 包裹动作和后续状态读取。"""
 
 import json
+import secrets
 
 from dungeon.legacy.catalog import SLOTS
+from dungeon.legacy.crafting import CURRENCIES, apply_currency
 from dungeon.legacy.receipts import (REQUEST_ID_PATTERN, load_receipt,
                                      request_digest, save_receipt)
 from dungeon.legacy.service import DungeonError, ensure_dungeon
@@ -11,7 +13,8 @@ from dungeon.storage.assets import ensure_available
 
 ITEM_ID_PATTERN = REQUEST_ID_PATTERN
 ACTION_TYPES = frozenset(("dungeon_equip", "dungeon_lock_item",
-                          "dungeon_sell_item", "dungeon_claim_items"))
+                          "dungeon_sell_item", "dungeon_claim_items",
+                          "dungeon_use_currency"))
 
 
 def _item_id(value):
@@ -43,6 +46,12 @@ def normalize_payload(action_type, data):
         if len(normalized) != len(set(normalized)):
             raise DungeonError("invalid_request", "领取清单存在重复装备")
         return {"item_ids": sorted(normalized)}
+    if action_type == "dungeon_use_currency":
+        currency_id = data.get("currency_id")
+        if currency_id not in CURRENCIES:
+            raise DungeonError("invalid_request", "通货编号无效")
+        return {"item_id": _item_id(data.get("item_id")),
+                "currency_id": currency_id}
     raise DungeonError("invalid_request", "未知地下城操作")
 
 
@@ -152,6 +161,36 @@ def _claim_items(conn, username, payload):
     return {"item_ids": payload["item_ids"]}, True
 
 
+def _use_currency(conn, username, payload):
+    item_id, currency_id = payload["item_id"], payload["currency_id"]
+    owned = _owned_item(conn, username, item_id)
+    if owned["location"] != "bag" or owned["locked"]:
+        raise DungeonError("item_protected", "装备已锁定或尚未领取")
+    if _active_job(conn, username):
+        raise DungeonError("active_job", "挑战或扫荡进行中，暂不能改造装备")
+    ensure_available(conn, username, item_id)
+    row = conn.execute("""SELECT quality,stats_json,affixes_json,item_level,slot
+        FROM dungeon_items WHERE owner=? AND item_id=?""", (username, item_id)).fetchone()
+    balance = conn.execute("""SELECT amount FROM dungeon_currency
+        WHERE username=? AND currency_id=?""", (username, currency_id)).fetchone()
+    if balance is None or balance[0] < 1:
+        raise DungeonError("insufficient_currency", "通货数量不足")
+    item = {"quality": row[0], "stats": json.loads(row[1]),
+            "affixes": json.loads(row[2]), "item_level": row[3], "slot": row[4]}
+    crafted = apply_currency(item, currency_id, secrets.randbelow)
+    conn.execute("""UPDATE dungeon_currency SET amount=amount-1
+        WHERE username=? AND currency_id=?""", (username, currency_id))
+    conn.execute("""UPDATE dungeon_items SET quality=?,stats_json=?,affixes_json=?,
+        version=version+1 WHERE item_id=? AND owner=?""",
+        (crafted["quality"], json.dumps(crafted["stats"], ensure_ascii=False,
+                                       sort_keys=True, separators=(",", ":")),
+         json.dumps(crafted["affixes"], ensure_ascii=False,
+                    sort_keys=True, separators=(",", ":")), item_id, username))
+    return {"item_id": item_id, "currency_id": currency_id,
+            "quality": crafted["quality"], "affixes": crafted["affixes"],
+            "stats": crafted["stats"], "currency_remaining": balance[0] - 1}, True
+
+
 def run_dungeon_action(conn, username, request_id, action_type, payload,
                        expected_version, now, adjust_coins):
     """请求回执、版本校验、装备与金币写入在同一调用方事务中完成。"""
@@ -177,6 +216,8 @@ def run_dungeon_action(conn, username, request_id, action_type, payload,
         result, changed = _lock_item(conn, username, payload)
     elif action_type == "dungeon_sell_item":
         result, changed = _sell_item(conn, username, payload, adjust_coins)
+    elif action_type == "dungeon_use_currency":
+        result, changed = _use_currency(conn, username, payload)
     else:
         result, changed = _claim_items(conn, username, payload)
     if changed:

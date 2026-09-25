@@ -2,10 +2,11 @@
  * 地下城 Beta 原型 · 入口装配。
  * 屏幕流转：标题 → 战斗 → 结算 → 商店 → 下一波 …（死亡则结束）
  */
-import { ITEMS, UPGRADES, WEAPONS, MAX_WAVE, MAX_WEAPON_SLOTS } from "./dgn-beta-data.js";
+import { UPGRADES, WEAPONS, MAX_WAVE, MAX_WEAPON_SLOTS } from "./dgn-beta-data.js";
 import { Arena } from "./dgn-beta-arena.js";
 import { Shop } from "./dgn-beta-shop.js";
-import { createState, statsOf } from "./dgn-beta-state.js";
+import { createState } from "./dgn-beta-state.js";
+import { CURRENCIES, rollCurrencyDrops } from "./dgn-beta-crafting.js";
 
 function showScreen(id) {
   for (const screen of document.querySelectorAll(".dgn-screen")) {
@@ -65,6 +66,12 @@ class BetaApp {
 
   onWaveEnd(result) {
     if (!result.victory) return;
+    const drops = rollCurrencyDrops(Math.random);
+    for (const currencyId of drops) {
+      this.state.currencies[currencyId] = (this.state.currencies[currencyId] || 0) + 1;
+    }
+    el("dgn-result-currency").textContent = drops.length
+      ? drops.map((id) => CURRENCIES.find((currency) => currency.id === id).name).join("、") : "无";
     if (this.state.wave >= MAX_WAVE) {
       this.onVictory();
       return;
@@ -113,9 +120,9 @@ class BetaApp {
     strip.replaceChildren();
     for (let i = 0; i < MAX_WEAPON_SLOTS; i++) {
       const slot = document.createElement("div");
-      const weaponId = this.state.weapons[i];
-      if (weaponId) {
-        const weapon = WEAPONS.find((entry) => entry.id === weaponId);
+      const gear = this.state.weapons[i];
+      if (gear) {
+        const weapon = WEAPONS.find((entry) => entry.id === gear.id);
         slot.className = "dgn-wslot";
         if (weapon.icon) {
           const img = document.createElement("img");

@@ -63,6 +63,7 @@ class DungeonRunTests(unittest.TestCase):
             saved = conn.execute("SELECT snapshot_json FROM dungeon_runs WHERE battle_id=?",
                                  (battle_id,)).fetchone()[0]
             self.assertEqual(json.loads(saved)["reward_table"]["coins"], 20)
+            self.assertEqual(json.loads(saved)["affix_rules"]["version"], "ruins-affixes-v1")
             self.assertNotIn("seed", json.dumps(first))
 
     def test_concurrent_start_only_one_succeeds(self):
@@ -86,6 +87,9 @@ class DungeonRunTests(unittest.TestCase):
         self.assertEqual(first["battle"]["result"]["outcome"], "victory")
         self.assertEqual(first["battle"]["result"]["coins_gained"], 20)
         self.assertEqual(len(first["battle"]["result"]["items"]), 1)
+        self.assertEqual(first["battle"]["result"]["currencies"]["transmutation"], 1)
+        self.assertEqual(first["battle"]["result"]["items"][0]["item_level"], 35)
+        self.assertEqual(len(first["battle"]["result"]["items"][0]["affixes"]), 1)
         self.assertEqual([event["sequence_id"] for event in first["events"]],
                          list(range(1, first["battle"]["last_sequence"] + 1)))
         item_id = first["battle"]["result"]["items"][0]["item_id"]
@@ -101,6 +105,8 @@ class DungeonRunTests(unittest.TestCase):
             self.assertEqual(conn.execute("SELECT COUNT(*) FROM coin_transactions WHERE kind='dungeon_reward'").fetchone()[0], 1)
             self.assertEqual(conn.execute("SELECT COUNT(*) FROM dungeon_items WHERE item_id=?",
                                           (item_id,)).fetchone()[0], 1)
+            self.assertEqual(conn.execute("""SELECT amount FROM dungeon_currency
+                WHERE username='alice' AND currency_id='transmutation'""").fetchone()[0], 1)
             self.assertEqual(conn.execute("SELECT COUNT(*) FROM dungeon_active_jobs WHERE username='alice'").fetchone()[0], 0)
 
     def test_reward_uses_frozen_catalog_copy(self):

@@ -8,7 +8,8 @@ import time
 from dungeon.legacy.effects import EffectError
 from dungeon.legacy.actions import ITEM_ID_PATTERN, REQUEST_ID_PATTERN, run_dungeon_action
 from dungeon.legacy.runs import progress_run, read_run, start_run
-from dungeon.legacy.service import DungeonError, compare_item, dungeon_state
+from dungeon.legacy.service import (DungeonError, affix_probabilities,
+                                    compare_item, dungeon_state)
 from server.wallet import adjust_coins
 
 logger = logging.getLogger("live-chat")
@@ -31,10 +32,12 @@ class DungeonProtocol:
     def handlers(self):
         return {"get_dungeon": self.handle_get_dungeon,
                 "dungeon_compare_item": self.handle_compare_item,
+                "dungeon_affix_probabilities": self.handle_affix_probabilities,
                 "dungeon_equip": self.handle_action,
                 "dungeon_lock_item": self.handle_action,
                 "dungeon_sell_item": self.handle_action,
                 "dungeon_claim_items": self.handle_action,
+                "dungeon_use_currency": self.handle_action,
                 "dungeon_start": self.handle_start,
                 "dungeon_sync": self.handle_sync,
                 "dungeon_control": self.handle_control,
@@ -121,6 +124,38 @@ class DungeonProtocol:
             await self._error(websocket, request_id, "storage_failed", "地下城暂时不可用，请稍后重试")
             return
         await self.hub.send_json(websocket, {"type": "dungeon_comparison",
+                                              "request_id": request_id, **result})
+
+    async def handle_affix_probabilities(self, websocket, state, data):
+        request_id = data.get("request_id")
+        item_id = data.get("item_id")
+        if (not isinstance(request_id, str) or REQUEST_ID_PATTERN.fullmatch(request_id) is None
+                or not isinstance(item_id, str) or ITEM_ID_PATTERN.fullmatch(item_id) is None):
+            await self._error(websocket, None, "invalid_request", "请求编号或装备编号无效")
+            return
+        user = state.get("user")
+        if not user:
+            await self._error(websocket, request_id, "auth_required", "请先登录")
+            return
+        try:
+            def read_probabilities():
+                with self.database() as conn, conn:
+                    conn.execute("BEGIN IMMEDIATE")
+                    return affix_probabilities(conn, user["username"], item_id,
+                                               int(self.clock()), currency_id=data.get("currency_id"))
+            result = await self._blocking(read_probabilities)
+        except DungeonError as error:
+            await self._error(websocket, request_id, error.code, str(error))
+            return
+        except (EffectError, ValueError, KeyError, TypeError):
+            logger.exception("dungeon affix probabilities failed")
+            await self._error(websocket, request_id, "invalid_save", "地下城存档异常，请联系管理员")
+            return
+        except sqlite3.Error:
+            logger.exception("dungeon affix probability storage failed")
+            await self._error(websocket, request_id, "storage_failed", "地下城暂时不可用，请稍后重试")
+            return
+        await self.hub.send_json(websocket, {"type": "dungeon_affix_probabilities",
                                               "request_id": request_id, **result})
 
     async def handle_action(self, websocket, state, data):
