@@ -34,6 +34,14 @@ export const GAME_TYPES = [
     desc: "双副牌四人组队，级牌为王前第二大，逢人配、炸弹翻倍。头游定胜负，从 2 打到 A。",
   },
   {
+    id: "doudizhu",
+    name: "斗地主 · 经典三人",
+    icon: "👑",
+    seats: 3,
+    minStartPlayers: 3,
+    desc: "一副牌三人斗地主：叫分定地主、地主拿 3 张底牌先出。先出完者获胜，炸弹王炸翻倍、春天再翻倍，地主一打二按倍数包赔或通吃。",
+  },
+  {
     id: "mahjong",
     name: "国标麻将 · 八番起和",
     icon: "🀄",

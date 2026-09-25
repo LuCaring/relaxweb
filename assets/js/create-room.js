@@ -21,6 +21,7 @@ function draftFor(gameId) {
         win_mode: "bian", witch_self_save: "first", last_words: "first",
         tie: "revote", guard_continuous: 0, board_text: "",
         speak_seconds: 30,
+        bid_mode: "bid", bottom: 0, dd_bomb: 16, spring: 1,
       },
     });
   }
@@ -114,6 +115,13 @@ function createRules(game, draft, details) {
       labeledSelect("炸弹翻倍", "炸弹翻倍", [[0, "不翻倍"], [4, "翻倍，×4 封顶"], [8, "翻倍，×8 封顶"], [16, "翻倍，×16 封顶"], [999, "翻倍，不封顶"]], draft.rules.bomb, save("bomb")),
       labeledSelect("过 A 条件", "过A条件", [[1, "严格（需要双上）"], [0, "宽松（搭档非末游即可）"]], draft.rules.ace, save("ace")),
     );
+  } else if (game.id === "doudizhu") {
+    rules.append(
+      labeledSelect("叫地主方式", "叫地主方式", [["bid", "叫分竞叫（1/2/3 分，叫 3 直接当地主）"], ["random", "随机指定（不叫分，底分 ×1）"]], draft.rules.bid_mode, save("bid_mode", false)),
+      labeledSelect("底牌", "底牌", [[0, "暗底牌（只有地主看）"], [1, "明底牌（发牌后人人可见）"]], draft.rules.bottom, save("bottom")),
+      labeledSelect("炸弹翻倍", "炸弹翻倍", [[0, "不翻倍"], [4, "翻倍，×4 封顶"], [8, "翻倍，×8 封顶"], [16, "翻倍，×16 封顶"], [999, "翻倍，不封顶"]], draft.rules.dd_bomb, save("dd_bomb")),
+      labeledSelect("春天翻倍", "春天翻倍", [[1, "开启（春天/反春再 ×2）"], [0, "关闭"]], draft.rules.spring, save("spring")),
+    );
   } else if (game.id === "mahjong") {
     rules.append(
       labeledSelect("起和番数", "起和番数", [[8, "八番起和（国标标准）"], [4, "四番起和（低门槛）"], [0, "不起和"]], draft.rules.min_fan, save("min_fan")),
@@ -166,6 +174,7 @@ function createRules(game, draft, details) {
 
 function createDescription(game) {
   if (game.id === "mahjong") return "国标麻将需 4 人开局。自摸三家各付一份，点炮按所选计法赔付；花牌每张 1 分计入总番。荒庄不计分且庄家连庄。";
+  if (game.id === "doudizhu") return "斗地主需 3 人开局。叫分最高的玩家成为地主，拿 3 张底牌共 20 张、先出牌；地主先出完则独赢两家，任一农民出完则农民方胜。倍数 = 叫分 × 炸弹翻倍（王炸同计）× 春天，输方按倍数赔付，不超过剩余筹码。";
   if (game.id === "werewolf") return "狼人杀 4–12 人开局，6/8/9/10/12 人自动配板。夜晚按守卫→狼人→女巫→预言家行动，白天按座次依次发言（每人限时，可设置）后投票放逐；输方各付一份底注，胜方全体均分。";
   if (game.id === "guandan") return "掼蛋需 4 人开局，隔位玩家自动组队。各自从 2 打到 A，头游方获胜升级；线上暂不支持进贡还贡。";
   if (game.id === "uno") return "UNO 至少 2 人开局。一手结束后，赢家按各家剩余牌数乘以底注收注，离桌时按筹码自动结算。";
@@ -186,7 +195,9 @@ function updateCreateSummary() {
   summary.querySelector(".create-summary-seats").textContent = `${game.seats} 个座位`;
   const ruleSummary = game.id === "guandan"
     ? `逢人配${draft.rules.wild ? "开" : "关"} · 炸弹${draft.rules.bomb ? `×${draft.rules.bomb === 999 ? "∞" : draft.rules.bomb}` : "不翻倍"} · ${draft.rules.ace ? "严格过 A" : "宽松过 A"}`
-    : game.id === "mahjong"
+    : game.id === "doudizhu"
+      ? `${draft.rules.bid_mode === "random" ? "随机地主" : "叫分竞叫"} · ${Number(draft.rules.bottom) ? "明底牌" : "暗底牌"} · 炸弹${draft.rules.dd_bomb ? `×${draft.rules.dd_bomb === 999 ? "∞" : draft.rules.dd_bomb}` : "不翻倍"} · 春天${draft.rules.spring ? "开" : "关"}`
+      : game.id === "mahjong"
       ? `${draft.rules.min_fan || 0} 番起和 · 花牌${draft.rules.flowers ? "开" : "关"} · 吃牌${draft.rules.chow ? "开" : "关"} · 点炮${draft.rules.dianpao ? "包三家" : "付一份"}`
       : game.id === "ludo"
         ? `掷${draft.rules.launch === 5 ? "5或6" : "6"}起飞 · ${draft.rules.extra_roll ? "掷6连投" : "不连投"} · 跳格${draft.rules.jump4 ? "开" : "关"} · 飞行${draft.rules.fly12 ? "开" : "关"} · ${draft.rules.payout === "rank" ? "按名次结算" : "冠军通吃"}`
@@ -330,6 +341,12 @@ function renderCreate() {
       wild: Boolean(Number(draft.rules.wild)),
       bomb_cap: Number(draft.rules.bomb),
       ace_strict: Boolean(Number(draft.rules.ace)),
+    };
+    if (game.id === "doudizhu") payload.rules = {
+      bid_mode: draft.rules.bid_mode === "random" ? "random" : "bid",
+      bottom_visible: Boolean(Number(draft.rules.bottom)),
+      bomb_cap: Number(draft.rules.dd_bomb),
+      spring: Boolean(Number(draft.rules.spring)),
     };
     if (game.id === "mahjong") payload.rules = {
       min_fan: Number(draft.rules.min_fan),

@@ -61,7 +61,7 @@ const baseChannels = () => [
     assert.equal(await page.locator('.hall-voice-card').count(), 0);
     assert.equal(await page.locator('.hall-feature-grid .hall-estate-card').count(), 1);
     assert.equal(await page.locator('#voiceQuickToggle').count(), 1);
-    assert.equal(await page.locator('.hall-grid .hall-game-card').count(), 7,
+    assert.equal(await page.locator('.hall-grid .hall-game-card').count(), 8,
       '小游戏区域不重复展示庄园');
     assert.equal(await page.locator('.hall-rankings-grid .rating-card').count(), 2);
     const hallLayout = await page.evaluate(() => {

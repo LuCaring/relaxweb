@@ -107,6 +107,10 @@ function startRule(room, meta) {
     return { count, minimum: 4, canStart: count === 4,
       text: count === 4 ? "4 人已就位，可以开始" : "需要正好 4 名有筹码玩家" };
   }
+  if (room.game_type === "doudizhu") {
+    return { count, minimum: 3, canStart: count === 3,
+      text: count === 3 ? "3 人已就位，可以开始" : "需要正好 3 名有筹码玩家" };
+  }
   if (room.game_type === "werewolf") {
     const board = room.rules?.board;
     if (Array.isArray(board) && board.length) {
@@ -134,6 +138,11 @@ function ruleItems(room) {
     case "guandan": return [rules.wild === false ? "逢人配关闭" : "逢人配开启",
       `炸弹封顶 ${rules.bomb_cap ?? 8}`, rules.ace_strict === false ? "宽松过 A" : "严格过 A",
       "对家组队"];
+    case "doudizhu": return [rules.bid_mode === "random" ? "随机指定地主" : "叫分竞叫 1/2/3",
+      rules.bottom_visible ? "明底牌" : "暗底牌",
+      `炸弹封顶 ${rules.bomb_cap ?? 16}`,
+      rules.spring === false ? "春天不翻倍" : "春天/反春翻倍",
+      "地主一打二"];
     case "mahjong": return [`${rules.min_fan ?? 8} 番起和`,
       rules.flowers === false ? "花牌关闭" : "花牌开启",
       rules.chow === false ? "吃牌关闭" : "可以吃牌",
@@ -198,7 +207,8 @@ function refreshWaitingRoom(root) {
       ? room.rules?.board?.length ? `${room.rules.board.length} 人板子`
         : "6 / 8 / 9 / 10 / 12 人"
       : room.game_type === "guandan" || room.game_type === "mahjong"
-        ? "正好 4 人" : `至少 ${rule.minimum} 人`,
+        ? "正好 4 人" : room.game_type === "doudizhu" ? "正好 3 人"
+        : `至少 ${rule.minimum} 人`,
     stake: `${game?.stakeLabel || "底注"} ${formatCoinsWhole(room.blind)}`,
     buyin: `${formatCoins(room.buy_in)} 金币`,
   };

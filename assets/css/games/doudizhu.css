@@ -1,0 +1,152 @@
+.dd-page { height: auto; min-height: max(650px, calc(100dvh - 68px)); }
+.dd-table { position: relative; flex: 1; min-height: 310px; display: flex; flex-direction: column; }
+.dd-topbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; color: #bed1e8; font-size: 12px; }
+.dd-topbar > :last-child { flex: none; white-space: nowrap; }
+.dd-mults { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; margin: 12px 0 0; }
+.dd-mult-chip { display: inline-flex; align-items: center; gap: 6px; padding: 6px 14px; border-radius: 20px; background: #0b234144; color: #d3e4fb; font-size: 12px; }
+.dd-mult-chip.total { color: #ffdc8b; }
+.dd-bottom { display: flex; align-items: center; justify-content: center; gap: 10px; margin: 10px 0 0; color: #bed1e8; font-size: 12px; }
+.dd-bottom-label { padding: 4px 10px; border-radius: 14px; background: #0b234144; }
+.dd-bottom-cards { display: flex; }
+.dd-bottom-cards .dcard { width: 30px; height: 42px; padding: 3px; border-radius: 4px; }
+.dd-bottom-cards .dcard + .dcard { margin-left: 5px; }
+.dd-bottom-hidden { letter-spacing: 4px; color: #7d97ba; }
+/* Keep activity text in normal flow, separate from all played cards. */
+.dd-status { flex: none; margin: 8px auto 0; min-height: 18px; max-width: min(760px, 100%); color: #bed1e8; font-size: 12px; line-height: 1.5; text-align: center; overflow-wrap: anywhere; }
+.dd-arena { position: relative; flex: 1; min-height: 300px; }
+.dd-seats { position: absolute; inset: 0; pointer-events: none; }
+.dd-seat { position: absolute; width: 110px; display: flex; flex-direction: column; align-items: center; gap: 4px; pointer-events: auto; color: #e9f2ff; }
+.dd-seat.pos-left { left: 0; top: 38%; transform: translateY(-50%); }
+.dd-seat.pos-right { right: 0; top: 38%; transform: translateY(-50%); }
+.dd-seat.pos-bottom { bottom: 4px; left: 0; }
+.dd-seat.pos-bottom .rating-badge { display: none; }
+.ds-role-tag { padding: 2px 9px; background: #203d63; color: #dbeaff; border: 1px solid #a9c5e744; border-radius: 20px; font-size: 10px; }
+.ds-role-tag.is-landlord { background: #6b481c; color: #ffdf95; border-color: #ffd88744; }
+.ds-name { display: flex; gap: 5px; align-items: center; max-width: 108px; font-size: 13px; font-weight: 700; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.ds-info { display: flex; gap: 8px; align-items: center; font-size: 11px; font-variant-numeric: tabular-nums; }
+.ds-stack { color: #ffdb88; }
+.ds-count { padding: 2px 6px; border-radius: 8px; background: #102c5188; color: #e6f2ff; }
+.dd-seat .rating-badge { font-size: 10px; color: #c0d4ef; background: none; }
+.ds-crown { position: absolute; top: -6px; right: 6px; font-size: 15px; filter: drop-shadow(0 2px 3px #08203c66); }
+.ds-pass { border-radius: 12px; padding: 3px 9px; font-size: 12px; background: #ffffff15; color: #bed1e8; }
+.dd-table-plays { position: absolute; inset: 0; pointer-events: none; }
+.dd-table-play { position: absolute; display: flex; flex-direction: column; align-items: center; gap: 4px; max-width: 100%; color: #d2e2f5; }
+.dd-table-play.pos-left { top: 58%; left: 120px; width: calc(50% - 128px); transform: translateY(-50%); }
+.dd-table-play.pos-right { top: 58%; right: 120px; width: calc(50% - 128px); transform: translateY(-50%); }
+.dd-table-play.pos-bottom { bottom: 8px; left: 120px; width: calc(100% - 135px); }
+.dd-play-cards { display: flex; justify-content: safe center; max-width: 100%; overflow-x: auto; padding: 3px; pointer-events: auto; }
+.dd-play-cards .dcard { width: 38px; height: 52px; padding: 4px; border-radius: 5px; }
+.dd-play-cards .dc-rank { font-size: 15px; }
+.dd-play-cards .dc-suit { font-size: 11px; margin-top: 2px; }
+.dd-play-cards .dcard .dc-joker-icon { width: 16px; height: 16px; }
+.dd-play-cards .dcard + .dcard { margin-left: -17px; }
+.dd-play-cards.combo-triple_one .dcard:nth-child(4),
+.dd-play-cards.combo-triple_pair .dcard:nth-child(4),
+.dd-play-cards.combo-pairs_seq .dcard:nth-child(2n + 3),
+.dd-play-cards.combo-plane .dcard:nth-child(3n + 4),
+.dd-play-cards.combo-plane_single .dcard:nth-child(3n + 4),
+.dd-play-cards.combo-plane_pair .dcard:nth-child(3n + 4),
+.dd-play-cards.combo-four_two .dcard:nth-child(5),
+.dd-play-cards.combo-four_two_pairs .dcard:nth-child(5),
+.dd-play-cards.combo-four_two_pairs .dcard:nth-child(7) { margin-left: -7px; }
+.dd-play-label { max-width: 100%; padding: 2px 7px; border-radius: 10px; background: #0b2341a8; font-size: 11px; line-height: 1.2; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.dd-table-play.is-standing .dd-play-label { background: #6b481c; color: #ffdf95; font-weight: 700; }
+.dd-center { position: absolute; left: 50%; top: 32%; transform: translate(-50%, -50%); width: 44%; display: flex; justify-content: center; pointer-events: none; }
+.dd-free-lead, .dd-bid-status { font-size: 13px; color: #c1d5ed; text-align: center; }
+.dd-bid-status { padding: 6px 14px; border-radius: 20px; background: #0b234144; color: #ffdf95; }
+.dcard { position: relative; display: inline-flex; flex: none; flex-direction: column; align-items: flex-start; justify-content: flex-start; width: 64px; height: 88px; padding: 8px; border: 1px solid #d0d9e4; border-radius: 8px; background: linear-gradient(135deg, #fff, #f1f5fa); box-shadow: 0 3px 5px #08203c44; color: #1d2838; font-weight: 800; line-height: 1.1; }
+.dcard.red { color: #d23a52; }
+.dc-rank { font-size: 21px; }
+.dc-suit { font-size: 16px; margin-top: 4px; }
+.dc-joker-rank { line-height: 0; }
+.dcard .dc-joker-icon { display: block; width: 24px; height: 24px; object-fit: contain; user-select: none; }
+.dcard.joker-small .dc-joker-icon { filter: grayscale(1) contrast(1.1); }
+.dcard .dc-joker-label { margin-top: 4px; font-size: 11px; line-height: 1.15; letter-spacing: 2px; writing-mode: vertical-rl; }
+.dcard.small { width: 34px; height: 48px; padding: 4px; border-radius: 4px; }
+.dcard.small .dc-rank { font-size: 13px; }
+.dcard.small .dc-suit { font-size: 11px; margin-top: 2px; }
+.dcard.small .dc-joker-icon { width: 14px; height: 14px; }
+.dcard.small .dc-joker-label { font-size: 8px; margin-top: 2px; letter-spacing: 1px; }
+.dd-dock .dock-head { order: 0; }
+.dd-dock-action { display: none; }
+.dd-dock > .countdown { order: 1; }
+.dd-dock .action-bar { order: 2; }
+.dd-selection-status { order: 3; min-height: 18px; color: #c1d5ed; font-size: 12px; text-align: center; }
+.dd-hand { order: 4; display: flex; align-items: flex-end; justify-content: safe center; min-height: 114px; padding: 16px 4px 6px; overflow-x: auto; overscroll-behavior-x: contain; }
+.dd-hand-card { flex: none; padding: 0; margin-left: -26px; border: 0; background: none; cursor: pointer; font: inherit; }
+.dd-hand-card:first-child { margin-left: 0; }
+.dd-hand-card .dcard { transition: transform .15s; }
+.dd-hand-card .picked { transform: translateY(-12px); background: #fff5d8; border-color: #ffd478; box-shadow: 0 0 0 2px #ffd478, 0 5px 12px #08203c55; }
+.dd-result .dd-match-banner { margin-bottom: 10px; }
+.dd-match-banner { padding: 14px; border-radius: 12px; background: #ffe6a2; color: #664314; text-align: center; font-weight: 750; }
+@media (max-width: 650px) {
+    .dd-page { min-height: max(610px, calc(100dvh - 54px)); }
+    .dd-topbar { font-size: 10px; }
+    .dd-mults { gap: 5px; }
+    .dd-mult-chip { padding: 4px 8px; font-size: 10px; }
+    .dd-seat { width: 76px; }
+    .ds-name { max-width: 76px; font-size: 11px; }
+    .ds-role-tag { font-size: 9px; }
+    .dd-seat .rating-badge { display: none; }
+    .ds-info { gap: 3px; font-size: 10px; }
+    .dd-table-play.pos-left { top: 60%; left: 80px; width: calc(50% - 84px); }
+    .dd-table-play.pos-right { top: 60%; right: 80px; width: calc(50% - 84px); }
+    .dd-table-play.pos-bottom { left: 80px; width: calc(100% - 86px); }
+    .dd-play-cards .dcard { width: 32px; height: 44px; padding: 3px; }
+    .dd-play-cards .dc-rank { font-size: 13px; }
+    .dd-play-cards .dc-suit { font-size: 10px; }
+    .dd-play-cards .dcard + .dcard { margin-left: -19px; }
+    .dd-play-label { font-size: 10px; }
+    .dd-center { top: 30%; width: 60%; }
+    .dcard { width: 52px; height: 74px; padding: 6px; }
+    .dc-rank { font-size: 19px; }
+    .dc-suit { font-size: 14px; }
+    .dcard .dc-joker-icon { width: 22px; height: 22px; }
+    .dcard.small .dc-joker-icon { width: 14px; height: 14px; }
+    .dd-hand { min-height: 100px; }
+    .dd-hand-card { margin-left: -22px; }
+    .dd-dock .dock-head { justify-content: space-between; }
+    .dd-hand.many-cards {
+        display: grid;
+        grid-template-columns: repeat(10, minmax(0, 1fr)) 52px;
+        row-gap: 14px;
+        overflow: visible;
+    }
+    .dd-hand.many-cards .dd-hand-card { width: 52px; margin: 0; }
+    .dd-hand.many-cards .dcard { width: 52px; }
+    .dd-hand.many-cards .dc-rank { font-size: 16px; }
+    .dd-hand.many-cards .dc-joker-icon { width: clamp(12px, calc((100vw - 76px) / 10 - 6px), 22px); height: auto; aspect-ratio: 1; }
+}
+@media (orientation: landscape) and (max-height: 540px) {
+    .dd-page { min-height: calc(100dvh - 48px); }
+    .dd-table { min-height: 150px; }
+    .dd-mults { margin: 4px 0 0; flex-wrap: nowrap; }
+    .dd-topbar, .dd-status { font-size: 10px; }
+    .dd-status { margin-top: 4px; }
+    .dd-mult-chip { padding: 3px 8px; font-size: 10px; white-space: nowrap; }
+    .dd-arena { min-height: 250px; }
+    .dd-seat { width: 92px; }
+    .dd-seat.pos-bottom .ds-role-tag { display: none; }
+    .dd-seat .rating-badge { display: none; }
+    .ds-role-tag { position: static; }
+    .dd-table-play.pos-left, .dd-table-play.pos-right { top: 60%; }
+    .dd-table-play.pos-bottom { bottom: 5px; }
+    .dd-play-cards .dcard { width: 28px; height: 36px; padding: 3px; }
+    .dd-play-cards .dc-rank { font-size: 12px; }
+    .dd-play-cards .dc-suit { font-size: 9px; }
+    .dd-play-cards .dcard .dc-joker-icon { width: 12px; height: 12px; }
+    .dd-play-label { font-size: 9px; }
+    .dd-center { top: 55%; }
+    .dd-dock > .countdown, .dd-selection-status { display: none; }
+    .dcard { width: 40px; height: 56px; padding: 5px; }
+    .dc-rank { font-size: 15px; }
+    .dc-suit { font-size: 11px; margin-top: 2px; }
+    .dcard .dc-joker-icon { width: 18px; height: 18px; }
+    .dcard .dc-joker-label { font-size: 9px; margin-top: 2px; letter-spacing: 1px; }
+    .dcard.small .dc-joker-icon { width: 14px; height: 14px; }
+    .dd-hand { min-height: 76px; padding-top: 14px; padding-bottom: 3px; }
+    .dd-hand-card { margin-left: -15px; }
+    .dd-dock .dock-head { position: absolute; left: 0; right: 0; top: 0; justify-content: space-between; pointer-events: none; }
+    .dd-dock .dock-head .dock-chat-toggle { pointer-events: auto; }
+    .dd-dock .action-bar { padding-inline: 150px; }
+}
