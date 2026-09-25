@@ -1,12 +1,17 @@
 """马戏团模拟指数：一分钟报价、仓位、金币和幂等结算。"""
+import asyncio
 import sqlite3
+import tempfile
 import unittest
+from contextlib import closing
 from decimal import Decimal
+from pathlib import Path
 from unittest.mock import patch
 
 from estate.market import market_snapshot, record_market_candles, trade_market
 from estate.schema import init_estate
 from estate.store import EstateError, ensure_estate
+from server.estate.protocol import EstateProtocol
 
 
 NOW = 2_000_000_000
@@ -137,6 +142,26 @@ class MarketTests(unittest.TestCase):
                               NOW, adjust_coins, None, Decimal("101"))
         self.assertEqual(result["price"], 1007)
         self.assertGreater(result["amount"], 1007)
+
+
+class MarketWatcherTests(unittest.IsolatedAsyncioTestCase):
+    async def test_server_samples_without_any_player_request(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "market.db"
+            with closing(sqlite3.connect(path)) as conn, conn:
+                init_estate(conn)
+            protocol = EstateProtocol(database=lambda: closing(sqlite3.connect(path)), clients={},
+                                      send_json=None, send_encoded=None, presence=None)
+            try:
+                with patch("server.estate.protocol.fetch_source_price", return_value=None):
+                    await asyncio.sleep(1.2)
+                with closing(sqlite3.connect(path)) as conn:
+                    count = conn.execute("SELECT COUNT(*) FROM estate_market_candles "
+                                         "WHERE period='minute'").fetchone()[0]
+                self.assertEqual(count, 1)
+            finally:
+                protocol._market_watcher.cancel()
+                await asyncio.gather(protocol._market_watcher, return_exceptions=True)
 
 
 if __name__ == "__main__":

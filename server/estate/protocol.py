@@ -54,6 +54,22 @@ class EstateProtocol:
         self.send_encoded = send_encoded
         self.presence = presence
         self._market_quote_lock = asyncio.Lock()
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            self._market_watcher = None  # 单元测试等同步装配环境不启动后台任务。
+        else:
+            self._market_watcher = loop.create_task(self.market_quote_watcher())
+
+    async def market_quote_watcher(self):
+        """服务器运行期间按自然分钟采样，避免玩家未打开面板时出现 K 线空档。"""
+        await asyncio.sleep(1)  # 宿主在第一个 await 前完成数据库初始化。
+        while True:
+            try:
+                await self.refresh_market_quote(int(time.time()))
+            except Exception:
+                logger.exception("estate market background quote refresh failed")
+            await asyncio.sleep(max(0.1, 60 - time.time() % 60 + 0.05))
 
     async def refresh_market_quote(self, now):
         async with self._market_quote_lock:
@@ -61,7 +77,7 @@ class EstateProtocol:
                 if not quote_refresh_due(conn, now):
                     return None
             source = await asyncio.to_thread(fetch_source_price)
-            with self.database() as conn:
+            with self.database() as conn, conn:
                 refresh_market_quote(conn, now, source)
             return source
 
@@ -416,7 +432,7 @@ class EstateProtocol:
         try:
             now = int(time.time())
             await self.refresh_market_quote(now)
-            with self.database() as conn:
+            with self.database() as conn, conn:
                 snapshot = estate_market_snapshot(conn, user["username"], now, None)
             await self.send_json(websocket, {"type": "estate_market_state", "market": snapshot,
                                             "request_id": data.get("request_id")})
