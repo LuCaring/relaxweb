@@ -85,7 +85,14 @@ function renderEstate() {
   });
   root.querySelector(".estate-loading").hidden = Boolean(estateStore.snapshot);
   if (estateStore.snapshot) ui.render(); else requestEstate();
+  // 在线停留时定期向服务端确认自动收获，离线时由下次访问或拜访触发补算。
+  const autoHarvestPoll = window.setInterval(() => {
+    if (!estateStore.visit && Number(estateStore.snapshot?.profile?.penguin_level || 0) > 0) {
+      requestEstate();
+    }
+  }, 60_000);
   cleanup = () => {
+    window.clearInterval(autoHarvestPoll);
     document.body.classList.remove("estate-active"); wardrobe.destroy(); unsubscribe(); map.destroy(); input.destroy(); ui.destroy();
   };
 }

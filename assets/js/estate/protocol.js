@@ -28,6 +28,7 @@ const SOUND_CUES = {
   estate_upgrade_tool: "shop",
   estate_repair_tool: "shop",
   estate_pet: "shop",
+  estate_penguin: "shop",
 };
 
 function requestId(prefix) {

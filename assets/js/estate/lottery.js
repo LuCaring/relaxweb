@@ -13,7 +13,7 @@ function rewardLabel(result) {
   if (award === "fertilizer_2") return "恭喜获得化肥 ×2！";
   if (award === "land_ticket") return "恭喜获得 4级农田升级券 ×1！可用于一块空置的 3级农田。";
   if (award === "missing_collectible") {
-    if (result.all_collectibles_owned) return "已集齐全部纪念品，本次未获得物品。";
+    if (result.all_collectibles_owned) return "已集齐全部纪念品，获得皮肤碎片 ×1！";
     const name = estateStore.snapshot?.catalog?.fishing_treasures?.[result.collectible_id]?.name || "纪念品";
     return `恭喜获得尚未拥有的纪念品：${name}！`;
   }
@@ -45,13 +45,13 @@ export function renderLotteryGame(target, snapshot, onBusyChange) {
   button.className = "estate-button estate-button-gold";
   button.textContent = `${price.toLocaleString("zh-CN")} 金币 · 开始抽奖`;
   const canDraw = (current) => Number(current.coins) >= price
-    && Number(current.profile.warehouse_capacity) - Number(current.profile.warehouse_used) >= 5;
+    && Number(current.profile.warehouse_capacity) - Number(current.profile.warehouse_used) >= 2;
   button.disabled = !canDraw(snapshot);
   if (!button.disabled) status.textContent = "指针所指的奖项，就是本次抽奖结果。";
   else status.textContent = Number(snapshot.coins) < price
     ? "金币不足，暂时不能抽奖。" : "请先腾出至少 2 格仓位。";
   const rules = document.createElement("p"); rules.className = "estate-sheet-note";
-  rules.textContent = "神秘大奖：10% 得 100,000 金币、40% 免费再抽一次、10% 得农田升级券、20% 得 5,000 金币、20% 得 10,000 金币。传说花需种植成熟后出售；纪念品集齐时该项无奖品。";
+  rules.textContent = "神秘大奖：10% 得 100,000 金币、40% 免费再抽一次、10% 得农田升级券、20% 得 5,000 金币、20% 得 10,000 金币。传说花需种植成熟后出售；纪念品集齐后抽中该奖项可获得 1 个皮肤碎片。";
   wrap.append(note, stage, status, button, rules); target.append(wrap);
 
   let busy = false; let rotation = 0;

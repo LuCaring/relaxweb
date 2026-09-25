@@ -14,7 +14,7 @@ from estate.activities import (
     buy_tool, finish_fishing, finish_mining, mine_cell, repair_tool,
     simulate_fishing, start_fishing, start_mining, upgrade_tool,
 )
-from estate.pets import buy_or_upgrade_pet
+from estate.pets import buy_or_upgrade_pet, buy_or_upgrade_penguin
 from estate.visits import (
     fertilize, list_estates, mark_notifications_read, notifications, public_estate_state,
     steal_crop,
@@ -30,7 +30,7 @@ __all__ = [
     "draw_lottery",
     # 工具
     "buy_tool", "upgrade_tool", "repair_tool",
-    "buy_or_upgrade_pet",
+    "buy_or_upgrade_pet", "buy_or_upgrade_penguin",
     # 钓鱼
     "start_fishing", "finish_fishing", "simulate_fishing",
     # 矿场

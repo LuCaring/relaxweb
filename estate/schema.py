@@ -12,6 +12,8 @@ def init_estate(conn):
             plot_count INTEGER NOT NULL DEFAULT 0 CHECK(plot_count >= 0),
             reserved_capacity INTEGER NOT NULL DEFAULT 0 CHECK(reserved_capacity >= 0),
             pet_level INTEGER NOT NULL DEFAULT 0 CHECK(pet_level BETWEEN 0 AND 4),
+            penguin_level INTEGER NOT NULL DEFAULT 0 CHECK(penguin_level BETWEEN 0 AND 4),
+            penguin_active_at INTEGER NOT NULL DEFAULT 0,
             version INTEGER NOT NULL DEFAULT 1 CHECK(version >= 1),
             created_at INTEGER NOT NULL,
             updated_at INTEGER NOT NULL
@@ -30,6 +32,10 @@ def init_estate(conn):
         conn.execute("ALTER TABLE estate_profiles ADD COLUMN reserved_capacity INTEGER NOT NULL DEFAULT 0")
     if "pet_level" not in profile_columns:
         conn.execute("ALTER TABLE estate_profiles ADD COLUMN pet_level INTEGER NOT NULL DEFAULT 0")
+    if "penguin_level" not in profile_columns:
+        conn.execute("ALTER TABLE estate_profiles ADD COLUMN penguin_level INTEGER NOT NULL DEFAULT 0")
+    if "penguin_active_at" not in profile_columns:
+        conn.execute("ALTER TABLE estate_profiles ADD COLUMN penguin_active_at INTEGER NOT NULL DEFAULT 0")
     conn.execute("""
         CREATE TABLE IF NOT EXISTS estate_plots (
             username TEXT NOT NULL COLLATE NOCASE,

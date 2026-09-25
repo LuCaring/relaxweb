@@ -87,6 +87,8 @@ FERTILIZER_SECONDS = 60 * 60
 FERTILIZER_FISH_CHANCE = {"worm": .05, "glow_grub": .10}
 FERTILIZER_MINE_CHANCE = .01
 LAND_UPGRADE_TICKET = "supply:land_upgrade_ticket"
+SKIN_FRAGMENT_ITEM = "supply:skin_fragment"
+PENGUIN_FRAGMENT_COST = 28
 LOTTERY_PRICE = 3000.0
 LOTTERY_PRIZES = ("thanks", "coins_250", "coins_1000", "coins_2000",
                   "legendary_seed", "missing_collectible", "fertilizer_2", "grand")
@@ -271,6 +273,13 @@ PET_LEVELS = {
     3: {"name": "豆豆", "defend_chance": .40, "upgrade_price": 50000.0},
     4: {"name": "豆豆", "defend_chance": .50, "upgrade_price": None},
 }
+PENGUIN_LEVELS = {
+    1: {"name": "臭企鹅", "harvest_delay_minutes": 80, "upgrade_price": 20000.0},
+    2: {"name": "臭企鹅", "harvest_delay_minutes": 60, "upgrade_price": 40000.0},
+    3: {"name": "臭企鹅", "harvest_delay_minutes": 40, "upgrade_price": 60000.0},
+    4: {"name": "臭企鹅", "harvest_delay_minutes": 30, "upgrade_price": None,
+        "auto_replant": True},
+}
 
 
 def item_id(kind, key):
@@ -315,6 +324,9 @@ def grow_seconds(crop_id, land_level):
 
 
 def item_info(item_id):
+    if item_id == SKIN_FRAGMENT_ITEM:
+        return {"id": item_id, "kind": "supply", "name": "皮肤碎片",
+                "sellable": False, "sell_price": None}
     if item_id == LAND_UPGRADE_TICKET:
         return {"id": item_id, "kind": "supply", "name": "4级农田升级券",
                 "sellable": False, "sell_price": None}
@@ -379,6 +391,9 @@ def public_catalog():
                      for key, value in MINERALS.items()},
         "mining_levels": MINING_LEVELS,
         "pet_levels": PET_LEVELS,
+        "penguin_levels": PENGUIN_LEVELS,
+        "penguin_fragment_item": SKIN_FRAGMENT_ITEM,
+        "penguin_fragment_cost": PENGUIN_FRAGMENT_COST,
         # 客户端要用它推进钓鱼进度条并预判结局；不下发就会各自硬编码一份。
         "fishing_rules": {
             "steps": FISHING_STEPS,

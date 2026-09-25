@@ -4,8 +4,24 @@ import { drawCharacterSkin, DEFAULT_SKIN_ID } from "./characters.js";
 const ROOT = "assets/estate/nature";
 export const FERTILIZER_ASSET = `${ROOT}/supplies/fertilizer.png`;
 export const ESTATE_SIGN = "assets/estate/signs/estate-sign.png";
-export const PET_SPRITE = "assets/estate/pets/doudou-sheet.png";
-export const PET_SLEEP_SPRITE = "assets/estate/pets/doudou-sleep-sheet.png";
+export const PET_ASSETS = Object.freeze({
+  doudou: Object.freeze({
+    walk: "assets/estate/pets/doudou-sheet.png",
+    sleep: "assets/estate/pets/doudou-sleep-sheet.png",
+    sleepTop: 64,
+    sleepHeight: 644,
+    trimRightFrame: true,
+  }),
+  stinky_penguin: Object.freeze({
+    walk: "assets/estate/pets/stinky-penguin-sheet.png",
+    sleep: "assets/estate/pets/stinky-penguin-sheet.png",
+    walkRows: 5,
+    sleepRow: 4,
+    trimRightFrame: false,
+  }),
+});
+export const PET_SPRITE = PET_ASSETS.doudou.walk;
+export const PET_SLEEP_SPRITE = PET_ASSETS.doudou.sleep;
 export const BUILDING_ASSETS = {
   shop: "assets/estate/buildings/seed-shop.png",
   generalStore: "assets/estate/buildings/store.png",
@@ -107,11 +123,12 @@ export function drawPlayerAsset(ctx, player, tick, skinId = DEFAULT_SKIN_ID) {
   return drawCharacterSkin(ctx, skinId, player, tick);
 }
 
-export function drawPetAsset(ctx, pet, tick) {
+export function drawPetAsset(ctx, pet, tick, petId = "doudou") {
+  const sprites = PET_ASSETS[petId] || PET_ASSETS.doudou;
   const sleeping = pet.mode === "sleeping";
-  const sleepRecord = sleeping ? cachedImage(PET_SLEEP_SPRITE) : null;
+  const sleepRecord = sleeping ? cachedImage(sprites.sleep) : null;
   const hasSleepSheet = Boolean(sleepRecord?.ready && !sleepRecord.failed);
-  const record = hasSleepSheet ? sleepRecord : cachedImage(PET_SPRITE);
+  const record = hasSleepSheet ? sleepRecord : cachedImage(sprites.walk);
   if (!record?.ready || record.failed) return false;
   const rows = { down: 0, left: 1, right: 2, up: 3 };
   const row = hasSleepSheet ? 0 : (rows[pet.direction] ?? 0);
@@ -119,14 +136,17 @@ export function drawPetAsset(ctx, pet, tick) {
   const column = hasSleepSheet ? Math.floor(tick / 650) % 4
     : moving ? Math.floor(pet.walking * .7) % 4 : 0;
   const cellWidth = record.image.naturalWidth / 4;
-  const regularCellHeight = record.image.naturalHeight / 4;
-  const trimsRightFrameArtifacts = !hasSleepSheet && row === rows.right;
+  const regularCellHeight = record.image.naturalHeight / (sprites.walkRows || 4);
+  const trimsRightFrameArtifacts = sprites.trimRightFrame && !hasSleepSheet && row === rows.right;
   // 睡觉原稿上下保留了大量透明区；统一裁掉空白并保留相同脚底线，
   // 避免逐帧按内容裁切造成呼吸动画忽大忽小。
-  const sourceY = hasSleepSheet ? 64 : row * regularCellHeight;
+  const sourceY = hasSleepSheet ? (sprites.sleepRow ?? 0) * regularCellHeight + (sprites.sleepTop || 0)
+    : row * regularCellHeight;
   // 原始向右行走四帧底部各有两块脱离角色的黑色残留像素；只缩短这行的
   // 源裁切高度，目标尺寸按同比缩短，角色本身的大小与脚底锚点保持不变。
-  const sourceHeight = hasSleepSheet ? 644 : trimsRightFrameArtifacts ? 285 : regularCellHeight;
+  const sourceHeight = hasSleepSheet ? (sprites.sleepHeight || (sprites.sleepRow != null
+    ? regularCellHeight : record.image.naturalHeight - sourceY))
+    : trimsRightFrameArtifacts ? 285 : regularCellHeight;
   const baseHeight = sleeping && !hasSleepSheet ? 38 : 54;
   const height = trimsRightFrameArtifacts
     ? Math.round(baseHeight * sourceHeight / regularCellHeight) : baseHeight;

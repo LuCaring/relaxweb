@@ -58,6 +58,7 @@ function note(text) {
 
 function inventoryFallback(item) {
   if (item.id === "supply:land_upgrade_ticket") return "🎟️";
+  if (item.id === "supply:skin_fragment") return "🧩";
   return catalogEntry({ seed: "🌱", crop: "🌾", bait: "🪱", fish: "🐟",
     collectible: "🎁", mineral: "◆", supply: "🧪" }, item.kind) || "◆";
 }
@@ -136,6 +137,30 @@ export function createEstateUI(root, activities = {}) {
       sheetBody.append(card);
     }
     sheetBody.append(note("宠物"));
+    const penguinLevel = Number(snapshot.profile.penguin_level || 0);
+    const fragmentCost = snapshot.catalog.penguin_fragment_cost;
+    const fragments = Number(snapshot.inventory.find(item => item.id === snapshot.catalog.penguin_fragment_item)?.quantity || 0);
+    const penguin = catalogEntry(snapshot.catalog.penguin_levels, penguinLevel);
+    const nextPenguin = catalogEntry(snapshot.catalog.penguin_levels, penguinLevel + 1);
+    const penguinDelay = penguin?.harvest_delay_minutes || 80;
+    const penguinButton = penguinLevel === 0
+      ? button(fragments >= fragmentCost ? `${fragmentCost} 个碎片 · 兑换` : `碎片 ${fragments}/${fragmentCost}`,
+        () => estateCommand("estate_penguin"),
+        { disabled: fragments < fragmentCost, className: "estate-button estate-button-gold" })
+      : nextPenguin
+        ? button(`${formatCoinsWhole(penguin.upgrade_price)} 金币 · 升到 Lv.${penguinLevel + 1}`,
+          () => estateCommand("estate_penguin"),
+          { disabled: snapshot.coins < penguin.upgrade_price, className: "estate-button estate-button-gold" })
+        : button("已经达到最高等级", () => {}, { disabled: true });
+    sheetBody.append(itemCard({ icon: "🐧", title: penguinLevel ? `臭企鹅 Lv.${penguinLevel}` : "臭企鹅",
+      meta: penguinLevel ? `成熟后 ${penguinDelay} 分钟自动收获${penguinLevel === 4 ? "，并尝试自动播种" : ""}`
+        : `纪念品集齐后抽奖可获皮肤碎片 · ${fragmentCost} 个碎片兑换`,
+      controls: [penguinButton] }));
+    if (penguinLevel) {
+      sheetBody.append(note("臭企鹅已替换豆豆出场，豆豆的偷菜防守暂不生效。仓库满时，成熟作物会留在田里等待空位。"));
+      if (penguinLevel === 4) sheetBody.append(note("自动播种沿用该田上种作物，并直接扣除对应种子费用；金币不足或种子仅限抽奖时，田地会保持空置。"));
+      return;
+    }
     const level = Number(snapshot.profile.pet_level || 0);
     const rules = snapshot.catalog.pet_levels;
     if (!level) {

@@ -338,16 +338,18 @@ export function createEstateMap(canvas, input, onInteract, onTarget, onMove = ()
       ctx.strokeRect(target.x - 24, target.y - 24, 48, 48); ctx.setLineDash([]);
     }
     if (!drawPlayerAsset(ctx, player, performance.now(), (estateStore.homeSnapshot || estateStore.snapshot)?.profile.skin_id)) drawCharacter(ctx, player, performance.now());
-    const petLevel = Number(estateStore.snapshot?.profile?.pet_level || 0);
+    const penguinLevel = Number(estateStore.snapshot?.profile?.penguin_level || 0);
+    const petLevel = penguinLevel || Number(estateStore.snapshot?.profile?.pet_level || 0);
     if (petLevel > 0) {
       const visiblePet = estateStore.visit
         ? { x: 650, y: 285, direction: "left", walking: 0, lastMove: 0 }
         : pet;
-      drawPetAsset(ctx, visiblePet, performance.now());
+      drawPetAsset(ctx, visiblePet, performance.now(), penguinLevel ? "stinky_penguin" : "doudou");
       ctx.font = 'bold 11px "Microsoft YaHei", sans-serif'; ctx.textAlign = "center";
       ctx.lineWidth = 3; ctx.strokeStyle = "#26372d"; ctx.fillStyle = "#fff3c2";
-      ctx.strokeText(`豆豆 Lv.${petLevel}`, visiblePet.x, visiblePet.y - 49);
-      ctx.fillText(`豆豆 Lv.${petLevel}`, visiblePet.x, visiblePet.y - 49);
+      const petLabel = `${penguinLevel ? "臭企鹅" : "豆豆"} Lv.${petLevel}`;
+      ctx.strokeText(petLabel, visiblePet.x, visiblePet.y - 49);
+      ctx.fillText(petLabel, visiblePet.x, visiblePet.y - 49);
     }
     ctx.setTransform(1, 0, 0, 1, 0, 0);
   }
@@ -367,7 +369,8 @@ export function createEstateMap(canvas, input, onInteract, onTarget, onMove = ()
         player.facing = Math.sign(dx); player.direction = dx < 0 ? "left" : "right";
       } else player.direction = dy < 0 ? "up" : "down";
     }
-    if (!estateStore.visit && Number(estateStore.snapshot?.profile?.pet_level || 0) > 0) {
+    if (!estateStore.visit && (Number(estateStore.snapshot?.profile?.pet_level || 0) > 0
+      || Number(estateStore.snapshot?.profile?.penguin_level || 0) > 0)) {
       const petDx = player.x - pet.x; const petDy = player.y - pet.y;
       const distance = Math.hypot(petDx, petDy);
       if (distance > 220) {

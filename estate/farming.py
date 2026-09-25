@@ -1,17 +1,75 @@
 """休闲庄园农场：购买、播种、收获与出售。
 
 金币、库存与等级变更一律通过 ``estate.store`` 的内核原语完成，
-每个操作经 ``store.run_action`` 保证幂等。
+玩家主动操作经 ``store.run_action`` 保证幂等；臭企鹅的到期结算
+由田块成熟时间和当前状态保证重复读取不会重复收获。
 """
 from estate.catalog import (
     BAITS, CROPS, FERTILIZER_ITEM, LAND_UPGRADE_TICKET, LAND_LEVELS, PLOT_UNLOCKS, WAREHOUSE_LEVELS,
+    PENGUIN_LEVELS,
     bait_item, crop_item, grow_seconds, item_info, seed_item,
 )
 from estate.store import (
     CROP_DATA_BROKEN, LEVEL_LOCKED, PLOT_LOCKED, PLOT_NOT_FOUND,
-    award_xp, change_inventory, credit, debit, estate_error, inventory_rows,
-    load_profile, plot_index, positive_int, require_capacity, run_action,
+    award_xp, bump_version, capacity, change_inventory, credit, debit, estate_error,
+    inventory_rows, inventory_used, load_profile, plot_index, positive_int,
+    require_capacity, run_action,
 )
+
+
+def auto_harvest_penguin(conn, username, now, adjust_coins=None):
+    """按实际到期时间补算离线收获；满仓时保留作物供下次访问重试。"""
+    profile = load_profile(conn, username)
+    level = int(profile["penguin_level"])
+    if not level:
+        return 0
+    delay = PENGUIN_LEVELS[level]["harvest_delay_minutes"] * 60
+    rows = conn.execute(
+        "SELECT plot_index,land_level,crop_id,ready_at FROM estate_plots "
+        "WHERE username=? AND crop_id IS NOT NULL AND ready_at+?<=? "
+        "ORDER BY ready_at,plot_index", (username, delay, int(now)),
+    ).fetchall()
+    harvested = 0
+    for index, land_level, crop_id, ready_at in rows:
+        if index >= profile["plot_count"]:
+            continue
+        crop = CROPS.get(crop_id)
+        if not crop:
+            continue
+        while max(ready_at + delay, profile["penguin_active_at"]) <= int(now):
+            quantity = int(crop["yield"])
+            if inventory_used(conn, username) + profile["reserved_capacity"] + quantity > capacity(profile):
+                break
+            changed = conn.execute(
+                "UPDATE estate_plots SET crop_id=NULL,planted_at=NULL,ready_at=NULL "
+                "WHERE username=? AND plot_index=? AND crop_id=? AND ready_at=?",
+                (username, index, crop_id, ready_at),
+            ).rowcount
+            if not changed:
+                break
+            change_inventory(conn, username, crop_item(crop_id), quantity)
+            award_xp(conn, username, crop["xp"])
+            harvested += 1
+            if level != 4 or not adjust_coins or crop.get("lottery_only"):
+                break
+            if load_profile(conn, username)["level"] < crop["unlock_level"]:
+                break
+            event_at = max(ready_at + delay, profile["penguin_active_at"])
+            try:
+                adjust_coins(conn, username, -crop["seed_price"], "estate_purchase",
+                             f"臭企鹅自动播种：{crop['name']}种子",
+                             ref=f"estate:penguin:{username}:{index}:{ready_at}")
+            except ValueError:
+                break  # 金币不足时保留空田，不借款、不消耗仓库里的种子。
+            ready_at = event_at + grow_seconds(crop_id, land_level)
+            conn.execute(
+                "UPDATE estate_plots SET crop_id=?,planted_at=?,ready_at=? "
+                "WHERE username=? AND plot_index=? AND crop_id IS NULL",
+                (crop_id, event_at, ready_at, username, index),
+            )
+    if harvested:
+        bump_version(conn, username, now)
+    return harvested
 
 
 def _ensure_level(profile, rule):

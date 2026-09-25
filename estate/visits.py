@@ -45,11 +45,13 @@ def list_estates(conn, username, query="", now=0):
     return [{"username": row[0], "mature_plots": int(row[1] or 0)} for row in rows]
 
 
-def public_estate_state(conn, visitor, owner, now):
+def public_estate_state(conn, visitor, owner, now, adjust_coins=None):
     _require_visit_level(conn, visitor)
     if not isinstance(owner, str) or not owner.strip() or owner.lower() == visitor.lower():
         raise estate_error(("invalid_visit", "不能拜访自己的庄园"))
     owner = owner.strip()
+    from estate.farming import auto_harvest_penguin
+    auto_harvest_penguin(conn, owner, now, adjust_coins)
     owner_profile = load_profile(conn, owner)
     rows = conn.execute(
         "SELECT plot_index,land_level,crop_id,planted_at,ready_at FROM estate_plots "
@@ -76,7 +78,8 @@ def public_estate_state(conn, visitor, owner, now):
         "server_time": int(now),
         "profile": {"username": owner, "level": owner_profile["level"],
                     "plot_count": owner_profile["plot_count"],
-                    "pet_level": owner_profile["pet_level"]},
+                    "pet_level": owner_profile["pet_level"],
+                    "penguin_level": owner_profile["penguin_level"]},
         "plots": plots, "catalog": public_catalog(),
         "steal_limits": {
             "visitor_remaining": max(0, VISITOR_DAILY_LIMIT - pair_used),
@@ -131,6 +134,8 @@ def steal_crop(conn, visitor, request_id, owner, plot_id, now,
         if not owner or owner.lower() == visitor.lower():
             raise estate_error(("invalid_visit", "不能偷自己的作物"))
         owner_profile = load_profile(conn, owner)
+        from estate.farming import auto_harvest_penguin
+        auto_harvest_penguin(conn, owner, now, adjust_coins)
         if index >= owner_profile["plot_count"]:
             raise estate_error(("plot_locked", "土地尚未解锁"))
         row = conn.execute(
@@ -158,7 +163,7 @@ def steal_crop(conn, visitor, request_id, owner, plot_id, now,
         if owner_used >= OWNER_DAILY_LIMIT:
             raise estate_error(("owner_protected", "该庄园今日已被偷满 6 块"))
         quantity = int(crop["yield"])
-        pet_level = int(owner_profile.get("pet_level", 0))
+        pet_level = int(owner_profile.get("pet_level", 0)) if not owner_profile["penguin_level"] else 0
         roll = random_int or (lambda low, high: low + secrets.randbelow(high - low + 1))
         defended = pet_level > 0 and roll(1, 100) <= round(
             PET_LEVELS[pet_level]["defend_chance"] * 100)

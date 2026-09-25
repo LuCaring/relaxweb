@@ -3,7 +3,7 @@ import secrets
 
 from estate.catalog import (
     FERTILIZER_ITEM, FISHING_TREASURES, LAND_UPGRADE_TICKET,
-    LOTTERY_GRAND_PRIZES, LOTTERY_PRICE, LOTTERY_PRIZES,
+    LOTTERY_GRAND_PRIZES, LOTTERY_PRICE, LOTTERY_PRIZES, SKIN_FRAGMENT_ITEM,
     collectible_item, seed_item,
 )
 from estate.store import (
@@ -75,6 +75,8 @@ def draw_lottery(conn, username, request_id, now, adjust_coins):
                                "quantity": 1})
             else:
                 result["all_collectibles_owned"] = True
+                change_inventory(conn, username, SKIN_FRAGMENT_ITEM, 1)
+                result.update({"item_id": SKIN_FRAGMENT_ITEM, "quantity": 1})
         result["coins"] = conn.execute(
             "SELECT coins FROM users WHERE username=?", (username,)).fetchone()[0]
         return result

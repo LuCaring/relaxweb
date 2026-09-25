@@ -147,7 +147,8 @@ def plot_index(value):
 
 PROFILE_COLUMNS = (
     "skin_id", "level", "xp", "warehouse_level", "plot_count",
-    "reserved_capacity", "pet_level", "version", "created_at", "updated_at",
+    "reserved_capacity", "pet_level", "penguin_level", "penguin_active_at",
+    "version", "created_at", "updated_at",
 )
 
 
@@ -478,10 +479,12 @@ def skin_state(conn, username):
             "missing_collectibles": missing_collectibles}
 
 
-def estate_state(conn, username, now):
+def estate_state(conn, username, now, adjust_coins=None):
     """组装客户端所需的完整快照；读取本身也幂等建档并清扫过期钓鱼局。"""
     now = int(now)
     ensure_estate(conn, username, now)
+    from estate.farming import auto_harvest_penguin
+    auto_harvest_penguin(conn, username, now, adjust_coins)
     normalize_collectibles(conn, username)
     sweep_expired_fishing(conn, username, now)
     refresh_daily_pickaxe(conn, username, now)

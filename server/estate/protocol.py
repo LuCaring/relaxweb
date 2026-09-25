@@ -12,6 +12,7 @@ from estate import (
     buy as estate_buy,
     buy_tool as estate_buy_tool,
     buy_or_upgrade_pet as estate_buy_or_upgrade_pet,
+    buy_or_upgrade_penguin as estate_buy_or_upgrade_penguin,
     estate_state,
     draw_lottery as estate_draw_lottery,
     fertilize as estate_fertilize,
@@ -64,6 +65,7 @@ class EstateProtocol:
             "estate_upgrade_tool": self.handle_estate_upgrade_tool,
             "estate_repair_tool": self.handle_estate_repair_tool,
             "estate_pet": self.handle_estate_pet,
+            "estate_penguin": self.handle_estate_penguin,
             "estate_start_fishing": self.handle_estate_start_fishing,
             "estate_finish_fishing": self.handle_estate_finish_fishing,
             "estate_start_mining": self.handle_estate_start_mining,
@@ -116,8 +118,8 @@ class EstateProtocol:
         try:
             with self.database() as conn:
                 now = int(time.time())
-                snapshot = public_estate_state(conn, user["username"], data.get("owner_username"), now)
-                visitor = estate_state(conn, user["username"], now)
+                snapshot = public_estate_state(conn, user["username"], data.get("owner_username"), now, adjust_coins)
+                visitor = estate_state(conn, user["username"], now, adjust_coins)
             players = await self.presence.join(websocket, state, snapshot["owner_username"],
                                                visitor["profile"]["skin_id"])
             await self.send_json(websocket, {"type": "estate_visit_state", **snapshot,
@@ -157,7 +159,7 @@ class EstateProtocol:
                 now = int(time.time())
                 result = estate_steal_crop(conn, user["username"], request_id, owner,
                                            plot_id, now, adjust_coins)
-                snapshot = public_estate_state(conn, user["username"], owner, now)
+                snapshot = public_estate_state(conn, user["username"], owner, now, adjust_coins)
             await self.send_json(websocket, {"type": "estate_steal_result", "result": result,
                                         "state": snapshot, "request_id": request_id})
             if not result.get("replayed") and result.get("outcome") == "stolen":
@@ -198,9 +200,9 @@ class EstateProtocol:
                 conn.execute("BEGIN IMMEDIATE")
                 now = int(time.time())
                 result = estate_fertilize(conn, user["username"], request_id, owner, plot_id, now)
-                visit_snapshot = public_estate_state(conn, user["username"], owner, now)
-                own_snapshot = estate_state(conn, user["username"], now)
-                owner_snapshot = estate_state(conn, owner, now)
+                visit_snapshot = public_estate_state(conn, user["username"], owner, now, adjust_coins)
+                own_snapshot = estate_state(conn, user["username"], now, adjust_coins)
+                owner_snapshot = estate_state(conn, owner, now, adjust_coins)
             await self.send_json(websocket, {"type": "estate_visit_fertilize_result",
                                              "result": result, "state": visit_snapshot,
                                              "home_state": own_snapshot,
@@ -296,6 +298,8 @@ class EstateProtocol:
                                                 data.get("tool_type"), now, adjust_coins)
                 elif action == "pet":
                     result = estate_buy_or_upgrade_pet(conn, username, request_id, now, adjust_coins)
+                elif action == "penguin":
+                    result = estate_buy_or_upgrade_penguin(conn, username, request_id, now, adjust_coins)
                 elif action == "start_fishing":
                     result = estate_start_fishing(conn, username, request_id,
                                                   data.get("bait_id"), now)
@@ -311,7 +315,7 @@ class EstateProtocol:
                 elif action == "finish_mining":
                     result = estate_finish_mining(conn, username, request_id,
                                                   data.get("run_id"), now)
-                snapshot = estate_state(conn, username, now)
+                snapshot = estate_state(conn, username, now, adjust_coins)
         except (EstateError, ValueError, sqlite3.Error) as error:
             code = error.code if isinstance(error, EstateError) else "estate_failed"
             if isinstance(error, sqlite3.Error):
@@ -326,7 +330,7 @@ class EstateProtocol:
             }
             try:
                 with self.database() as conn:
-                    payload["state"] = estate_state(conn, username, int(time.time()))
+                    payload["state"] = estate_state(conn, username, int(time.time()), adjust_coins)
             except (EstateError, sqlite3.Error):
                 pass
             await self.send_json(websocket, payload)
@@ -393,6 +397,9 @@ class EstateProtocol:
 
     async def handle_estate_pet(self, websocket, state, data):
         await self.handle_estate_action(websocket, state, data, "pet")
+
+    async def handle_estate_penguin(self, websocket, state, data):
+        await self.handle_estate_action(websocket, state, data, "penguin")
 
     async def handle_estate_start_fishing(self, websocket, state, data):
         await self.handle_estate_action(websocket, state, data, "start_fishing")
