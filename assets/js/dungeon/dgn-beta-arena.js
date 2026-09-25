@@ -55,8 +55,11 @@ export class Arena {
     load("slime", "assets/dungeon/enemies/ruins_slime/move.png");
     load("bat", "assets/dungeon/beta/enemies/cave_bat/idle.png");
     load("brute", "assets/dungeon/beta/enemies/stone_brute/idle.png");
+    load("bruteMove", "assets/dungeon/beta/enemies/stone_brute/move.png");
     load("playerIdle", "assets/dungeon/beta/player/idle-source.png");
     load("playerMove", "assets/dungeon/beta/player/move-source.png");
+    load("playerBladeAttack", "assets/dungeon/beta/player/blade-attack.png");
+    load("playerStaffAttack", "assets/dungeon/beta/player/staff-attack.png");
     load("floor", "assets/dungeon/beta/arena/stone-floor.png");
     load("material", "assets/dungeon/beta/arena/material.png");
   }
@@ -90,7 +93,7 @@ export class Arena {
     this.wave = wave;
     this.config = waveConfig(wave);
     this.rand = mulberry32(0xd1ce + wave * 977);
-    this.player = { x: WIDTH / 2, y: HEIGHT / 2, radius: 15, moving: false, facing: "down", attackTimers: {}, swing: null };
+    this.player = { x: WIDTH / 2, y: HEIGHT / 2, radius: 15, moving: false, facing: "down", attackTimers: {}, swing: null, attackVisual: null };
     this.enemies = [];
     this.projectiles = [];
     this.pickups = [];
@@ -277,6 +280,9 @@ export class Arena {
       this.player.swing.life -= dt;
       if (this.player.swing.life <= 0) this.player.swing = null;
     }
+    if (this.player.attackVisual && this.elapsed - this.player.attackVisual.start >= this.player.attackVisual.duration) {
+      this.player.attackVisual = null;
+    }
   }
 
   weaponById(weaponId) {
@@ -301,6 +307,9 @@ export class Arena {
   meleeAttack(weapon, target, stats) {
     const angle = Math.atan2(target.y - this.player.y, target.x - this.player.x);
     this.player.swing = { angle, range: weapon.range, arc: weapon.arc, life: 0.12 };
+    if (weapon.id === "starter_blade" || weapon.id === "ruins_blade") {
+      this.player.attackVisual = { kind: "blade", angle, start: this.elapsed, duration: 0.36 };
+    }
     for (const enemy of [...this.enemies]) {
       const toEnemy = Math.atan2(enemy.y - this.player.y, enemy.x - this.player.x);
       let diff = Math.abs(((toEnemy - angle + Math.PI * 3) % (Math.PI * 2)) - Math.PI);
@@ -312,6 +321,9 @@ export class Arena {
 
   rangedAttack(weapon, target, stats) {
     const angle = Math.atan2(target.y - this.player.y, target.x - this.player.x);
+    if (weapon.id === "flame_staff") {
+      this.player.attackVisual = { kind: "staff", angle, start: this.elapsed, duration: 0.36 };
+    }
     this.projectiles.push({
       x: this.player.x,
       y: this.player.y,
@@ -464,9 +476,17 @@ export class Arena {
   renderPlayer(ctx) {
     const { x, y } = this.player;
     const sprite = this.sprites[this.player.moving ? "playerMove" : "playerIdle"];
+    const attack = this.player.attackVisual;
+    const attackSprite = attack && this.sprites[attack.kind === "staff" ? "playerStaffAttack" : "playerBladeAttack"];
+    const drawAttack = attackSprite?.complete && attackSprite.naturalWidth > 0;
     ctx.save();
     ctx.translate(x, y);
-    if (sprite?.complete && sprite.naturalWidth) {
+    if (drawAttack) {
+      const progress = Math.min(0.999, (this.elapsed - attack.start) / attack.duration);
+      const frame = Math.floor(progress * 6);
+      if (Math.cos(attack.angle) > 0) ctx.scale(-1, 1);
+      ctx.drawImage(attackSprite, frame * 362, 0, 362, 724, -28, -78, 55, 110);
+    } else if (sprite?.complete && sprite.naturalWidth) {
       const bounds = PLAYER_FRAMES[this.player.moving ? "move" : "idle"];
       const columns = bounds.x.length - 1;
       const frame = Math.floor(this.elapsed * (this.player.moving ? 10 : 5)) % columns;
@@ -482,7 +502,7 @@ export class Arena {
       ctx.fill();
     }
     ctx.restore();
-    if (this.player.swing) {
+    if (this.player.swing && !drawAttack) {
       const swing = this.player.swing;
       ctx.save();
       ctx.translate(x, y);
@@ -506,15 +526,16 @@ export class Arena {
 
   renderEnemies(ctx) {
     for (const enemy of this.enemies) {
-      const sprite = this.sprites[enemy.type];
+      const movingBrute = enemy.type === "brute" && this.sprites.bruteMove?.naturalWidth > 0;
+      const sprite = movingBrute ? this.sprites.bruteMove : this.sprites[enemy.type];
       const hasSprite = sprite?.complete && sprite.naturalWidth > 0;
       ctx.save();
       ctx.translate(enemy.x, enemy.y);
       if (hasSprite) {
-        const frame = Math.floor((this.elapsed - enemy.animStart) * 7) % 6;
+        const frame = Math.floor((this.elapsed - enemy.animStart) * (movingBrute ? 6 : 7)) % 6;
         const w = enemy.radius * (enemy.type === "bat" ? 4 : 2.5);
         const h = w * 2;
-        if (enemy.type === "brute") {
+        if (enemy.type === "brute" && !movingBrute) {
           const step = (this.elapsed - enemy.animStart) * 11;
           ctx.translate(Math.sin(step) * 2, -Math.abs(Math.sin(step)) * 4);
           ctx.rotate(Math.sin(step) * 0.07);
