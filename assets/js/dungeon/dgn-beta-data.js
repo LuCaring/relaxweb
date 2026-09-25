@@ -1,0 +1,275 @@
+/**
+ * 地下城 Beta 原型 · 本地模拟数据。
+ * 正式内容包（content/dungeon/packs/）接入后，本文件的常量由合同 fixture 替换。
+ */
+
+export const STATS = [
+  { key: "maxHp", name: "最大生命", format: (v) => `${v}` },
+  { key: "regen", name: "生命再生", format: (v) => `${v.toFixed(1)}/秒` },
+  { key: "speed", name: "移动速度", format: (v) => `${Math.round(v * 100)}%` },
+  { key: "meleeDmg", name: "近战伤害", format: (v) => `${Math.round(v * 100)}%` },
+  { key: "rangedDmg", name: "远程伤害", format: (v) => `${Math.round(v * 100)}%` },
+  { key: "attackSpeed", name: "攻击速度", format: (v) => `${Math.round(v * 100)}%` },
+  { key: "armor", name: "护甲", format: (v) => `${v}` },
+  { key: "luck", name: "幸运", format: (v) => `${v}` },
+];
+
+export const BASE_STATS = {
+  maxHp: 20,
+  regen: 0,
+  speed: 1,
+  meleeDmg: 1,
+  rangedDmg: 1,
+  attackSpeed: 1,
+  armor: 0,
+  luck: 0,
+};
+
+const IMG = (file) => `assets/dungeon/items/${file}`;
+
+export const WEAPONS = [
+  {
+    id: "starter_blade",
+    name: "最初的刀",
+    kind: "melee",
+    icon: IMG("starter_blade.png"),
+    emoji: "🗡️",
+    damage: 6,
+    cooldown: 0.9,
+    range: 70,
+    arc: Math.PI / 2,
+    knockback: 60,
+    price: 10,
+    tier: 1,
+    desc: "近战 · 快速挥砍身前的敌人",
+  },
+  {
+    id: "club",
+    name: "硬木棒",
+    kind: "melee",
+    icon: null,
+    emoji: "🏏",
+    damage: 13,
+    cooldown: 1.5,
+    range: 78,
+    arc: Math.PI / 2.2,
+    knockback: 220,
+    price: 14,
+    tier: 1,
+    desc: "近战 · 高伤害，重击击退",
+  },
+  {
+    id: "throwing_knife",
+    name: "飞刀",
+    kind: "ranged",
+    icon: null,
+    emoji: "🎯",
+    damage: 3,
+    cooldown: 0.45,
+    range: 300,
+    projectileSpeed: 420,
+    pierce: 0,
+    price: 12,
+    tier: 1,
+    desc: "远程 · 高频投掷小刀",
+  },
+  {
+    id: "crossbow",
+    name: "猎弩",
+    kind: "ranged",
+    icon: null,
+    emoji: "🏹",
+    damage: 7,
+    cooldown: 1.2,
+    range: 340,
+    projectileSpeed: 480,
+    pierce: 1,
+    price: 16,
+    tier: 2,
+    desc: "远程 · 箭矢可穿透 1 名敌人",
+  },
+  {
+    id: "flame_staff",
+    name: "火焰法杖",
+    kind: "ranged",
+    icon: null,
+    emoji: "🔥",
+    damage: 10,
+    cooldown: 1.7,
+    range: 280,
+    projectileSpeed: 300,
+    pierce: 2,
+    blast: 46,
+    price: 20,
+    tier: 2,
+    desc: "远程 · 火球爆炸波及周围",
+  },
+  {
+    id: "ruins_blade",
+    name: "遗迹之刃",
+    kind: "melee",
+    icon: IMG("ruins_blade.png"),
+    emoji: "⚔️",
+    damage: 18,
+    cooldown: 1.1,
+    range: 95,
+    arc: Math.PI / 1.4,
+    knockback: 120,
+    price: 26,
+    tier: 3,
+    desc: "近战 · 遗物大剑，横扫一切",
+  },
+];
+
+export const ITEMS = [
+  {
+    id: "starter_helm",
+    name: "新手头盔",
+    icon: IMG("starter_helm.png"),
+    tier: 1,
+    price: 8,
+    stats: { maxHp: 4 },
+    desc: "最大生命 +4",
+  },
+  {
+    id: "starter_belt",
+    name: "新手腰带",
+    icon: IMG("starter_belt.png"),
+    tier: 1,
+    price: 8,
+    stats: { maxHp: 2, regen: 0.3 },
+    desc: "最大生命 +2，生命再生 +0.3/秒",
+  },
+  {
+    id: "starter_boots",
+    name: "新手靴子",
+    icon: IMG("starter_boots.png"),
+    tier: 1,
+    price: 9,
+    stats: { speed: 0.1 },
+    desc: "移动速度 +10%",
+  },
+  {
+    id: "starter_chest",
+    name: "新手胸甲",
+    icon: IMG("starter_chest.png"),
+    tier: 2,
+    price: 14,
+    stats: { armor: 2, maxHp: 2 },
+    desc: "护甲 +2，最大生命 +2",
+  },
+  {
+    id: "starter_charm",
+    name: "幸运护符",
+    icon: IMG("starter_charm.png"),
+    tier: 2,
+    price: 12,
+    stats: { luck: 2, attackSpeed: 0.08 },
+    desc: "幸运 +2，攻击速度 +8%",
+  },
+  {
+    id: "whetstone",
+    name: "磨刀石",
+    icon: null,
+    emoji: "🪨",
+    tier: 1,
+    price: 11,
+    stats: { meleeDmg: 0.15 },
+    desc: "近战伤害 +15%",
+  },
+  {
+    id: "scope",
+    name: "瞄准镜",
+    icon: null,
+    emoji: "🔭",
+    tier: 2,
+    price: 15,
+    stats: { rangedDmg: 0.2 },
+    desc: "远程伤害 +20%",
+  },
+  {
+    id: "adrenaline",
+    name: "肾上腺素",
+    icon: null,
+    emoji: "💉",
+    tier: 3,
+    price: 22,
+    stats: { attackSpeed: 0.25, speed: 0.05 },
+    desc: "攻击速度 +25%，移动速度 +5%",
+  },
+  {
+    id: "iron_heart",
+    name: "铁石心肠",
+    icon: null,
+    emoji: "🫀",
+    tier: 3,
+    price: 24,
+    stats: { maxHp: 8, armor: 1 },
+    desc: "最大生命 +8，护甲 +1",
+  },
+];
+
+export const UPGRADES = [
+  { key: "maxHp", name: "野猪体质", value: 3, desc: "最大生命 +3" },
+  { key: "regen", name: "苔藓回复", value: 0.5, desc: "生命再生 +0.5/秒" },
+  { key: "speed", name: "轻步", value: 0.05, desc: "移动速度 +5%" },
+  { key: "meleeDmg", name: "重击训练", value: 0.15, desc: "近战伤害 +15%" },
+  { key: "rangedDmg", name: "精准射击", value: 0.15, desc: "远程伤害 +15%" },
+  { key: "attackSpeed", name: "快手", value: 0.1, desc: "攻击速度 +10%" },
+  { key: "armor", name: "硬化皮肤", value: 1, desc: "护甲 +1" },
+  { key: "luck", name: "幸运星", value: 1, desc: "幸运 +1" },
+];
+
+export const ENEMY_TYPES = {
+  slime: {
+    name: "遗迹史莱姆",
+    spriteDir: "assets/dungeon/enemies/ruins_slime",
+    radius: 16,
+    hp: 9,
+    speed: 62,
+    damage: 4,
+    materials: 1,
+    color: "#6fbf5e",
+  },
+  bat: {
+    name: "洞蝠",
+    spriteDir: null,
+    radius: 12,
+    hp: 5,
+    speed: 115,
+    damage: 3,
+    materials: 1,
+    color: "#b06fd9",
+    shape: "triangle",
+  },
+  brute: {
+    name: "石壳巨物",
+    spriteDir: null,
+    radius: 30,
+    hp: 36,
+    speed: 38,
+    damage: 9,
+    materials: 4,
+    color: "#8a8378",
+    shape: "square",
+  },
+};
+
+/** 每波敌人生成节奏与构成（正式版由内容包路线定义） */
+export function waveConfig(wave) {
+  const scale = 1 + (wave - 1) * 0.35;
+  return {
+    duration: Math.min(60, 18 + wave * 2),
+    spawnInterval: Math.max(0.55, 1.6 - wave * 0.08),
+    pool: [
+      { type: "slime", weight: 10, count: 1, hpScale: scale, dmgScale: 1 + (wave - 1) * 0.12 },
+      { type: "bat", weight: wave >= 2 ? 6 : 0, count: 2, hpScale: scale, dmgScale: 1 + (wave - 1) * 0.12 },
+      { type: "brute", weight: wave >= 3 ? 2 + wave : 0, count: 1, hpScale: scale, dmgScale: 1 + (wave - 1) * 0.12 },
+    ],
+    boss: wave % 3 === 0,
+  };
+}
+
+export const MAX_WAVE = 12;
+export const MAX_WEAPON_SLOTS = 6;
+export const XP_FOR_LEVEL = (level) => 4 + level * 4;

@@ -22,7 +22,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 ASSETS = ROOT / "assets"
 JS_DIR = ASSETS / "js"
-PAGES = ["index.html", "game.html"]
+PAGES = ["index.html", "game.html", "dungeon-beta.html"]
 
 # 原生弹窗调用：alert( / confirm( / prompt(（含 window.alert 写法）
 NATIVE_DIALOG = re.compile(r"(?<![\w.$])(?:window\.)?(alert|confirm|prompt)\s*\(")
@@ -168,8 +168,8 @@ def main():
     entries = set()
     for page in PAGES:
         html = (ROOT / page).read_text(encoding="utf-8")
-        for src in re.findall(r'<script[^>]+type="module"[^>]+src="assets/js/([\w-]+)\.js', html):
-            entries.add(src)
+        for src in re.findall(r'<script[^>]+type="module"[^>]+src="assets/js/([\w/-]+)\.js', html):
+            entries.add(src.split("/")[-1])
     reachable = set(entries)
     queue = list(entries)
     while queue:

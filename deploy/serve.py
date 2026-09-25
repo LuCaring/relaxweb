@@ -71,6 +71,8 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             return os.path.join(ROOT, "index.html")
         if clean in ("/game", "/game.html"):
             return os.path.join(ROOT, "game.html")
+        if clean in ("/dungeon-beta", "/dungeon-beta.html"):
+            return os.path.join(ROOT, "dungeon-beta.html")
         if clean.startswith("/assets/"):
             # normpath 已消掉 ../，仍然再校验一次解析结果是否落在 assets 内
             return asset_path(clean[len("/assets/"):]) or DEAD_END
@@ -79,7 +81,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
     def send_head(self):
         """页面走注入分支，其余静态文件沿用父类实现。"""
         path = self.translate_path(self.path)
-        if os.path.basename(path) in ("index.html", "game.html") and os.path.isfile(path):
+        if os.path.basename(path) in ("index.html", "game.html", "dungeon-beta.html") and os.path.isfile(path):
             body = render_page(path)
             self.send_response(200)
             self.send_header("Content-Type", "text/html; charset=utf-8")
