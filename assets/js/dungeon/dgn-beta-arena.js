@@ -8,6 +8,11 @@ import { applyDamage, grantXp, statsOf } from "./dgn-beta-state.js";
 
 const WIDTH = 960;
 const HEIGHT = 600;
+// Source sheets were generated with uneven cells; dividing by the image size cuts off neighboring frames.
+const PLAYER_FRAMES = {
+  idle: { x: [0, 232, 468, 695, 920, 1139, 1374], y: [0, 247, 462, 690, 900, 1145] },
+  move: { x: [0, 238, 428, 634, 834, 1030, 1231, 1425, 1586], y: [0, 218, 407, 601, 798, 992] },
+};
 
 /** 可复现的伪随机（正式版使用 SimulatorServices.random_int 命名流） */
 function mulberry32(seed) {
@@ -232,7 +237,7 @@ export class Arena {
     }
     const length = Math.hypot(dx, dy);
     this.player.moving = length > 0;
-    if (length > 0) this.player.facing = Math.abs(dx) > Math.abs(dy) ? "side" : dy < 0 ? "up" : "down";
+    if (length > 0) this.player.facing = Math.abs(dx) > Math.abs(dy) ? (dx < 0 ? "left" : "right") : dy < 0 ? "up" : "down";
     if (length > 0) {
       const speed = 170 * stats.speed;
       this.player.x += (dx / length) * speed * dt;
@@ -462,13 +467,14 @@ export class Arena {
     ctx.save();
     ctx.translate(x, y);
     if (sprite?.complete && sprite.naturalWidth) {
-      const columns = this.player.moving ? 8 : 6;
-      const frameWidth = sprite.naturalWidth / columns;
-      const frameHeight = sprite.naturalHeight / 5;
+      const bounds = PLAYER_FRAMES[this.player.moving ? "move" : "idle"];
+      const columns = bounds.x.length - 1;
       const frame = Math.floor(this.elapsed * (this.player.moving ? 10 : 5)) % columns;
-      const row = this.player.facing === "up" ? 4 : this.player.facing === "side" ? 2 : 0;
-      if (this.player.facing === "side" && this.keys.has("a")) ctx.scale(-1, 1);
-      ctx.drawImage(sprite, frame * frameWidth, row * frameHeight, frameWidth, frameHeight, -27, -31, 54, 54);
+      const row = this.player.facing === "up" ? 4 : (this.player.facing === "left" || this.player.facing === "right") ? 2 : 0;
+      if (this.player.facing === "right") ctx.scale(-1, 1);
+      const sx = bounds.x[frame];
+      const sy = bounds.y[row];
+      ctx.drawImage(sprite, sx, sy, bounds.x[frame + 1] - sx, bounds.y[row + 1] - sy, -27, -31, 54, 54);
     } else {
       ctx.fillStyle = "#d65a40";
       ctx.beginPath();
@@ -508,6 +514,11 @@ export class Arena {
         const frame = Math.floor((this.elapsed - enemy.animStart) * 7) % 6;
         const w = enemy.radius * (enemy.type === "bat" ? 4 : 2.5);
         const h = w * 2;
+        if (enemy.type === "brute") {
+          const step = (this.elapsed - enemy.animStart) * 11;
+          ctx.translate(Math.sin(step) * 2, -Math.abs(Math.sin(step)) * 4);
+          ctx.rotate(Math.sin(step) * 0.07);
+        }
         if (enemy.hitFlash > 0) ctx.filter = "brightness(1.8)";
         ctx.drawImage(sprite, frame * 362, 0, 362, 724, -w / 2, -h * 0.72, w, h);
         ctx.filter = "none";
