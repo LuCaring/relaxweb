@@ -10,7 +10,9 @@ const PEER_VOLUMES_KEY = "voicePeerVolumes";
 const MIC_SETTINGS_KEY = "voiceMicSettings";
 const PEER_VOLUME_LIMIT = 200;
 const PEER_VOLUME_DEFAULT = 100;
-const GATE_THRESHOLD_MAX = 60;
+/* 阈值上限 50：电平条按 RMS×200 绘制，50% 恰好是条满格，
+   这样阈值滑块（0–50 线性映射到条上）与电平填充共用同一刻度。 */
+const GATE_THRESHOLD_MAX = 50;
 const GATE_THRESHOLD_DEFAULT = 8;
 
 /** 迟滞噪声门参数：低于 0.6×阈值持续 250ms 才关门，防止字尾被咬掉。 */

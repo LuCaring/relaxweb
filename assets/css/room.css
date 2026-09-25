@@ -903,15 +903,24 @@
 .voice-meter-head { display:flex; align-items:baseline; justify-content:space-between; gap:10px; }
 .voice-meter-head strong { color:#285841; font-size:12px; }
 .voice-meter-note { color:#aa4938; font-size:11px; }
-.voice-meter { position:relative; height:9px; border-radius:6px; background:#dcebe1; }
+.voice-meter-note[data-tone="info"] { color:#5f7d6d; }
+.voice-meter { --gate-at:16%; position:relative; height:9px; border-radius:6px; background:#dcebe1; }
+.voice-meter.gate-on { background:linear-gradient(90deg,#c3d5c9 var(--gate-at),#dcebe1 var(--gate-at)); }
 .voice-meter-fill { display:block; width:0%; height:100%; border-radius:6px; background:linear-gradient(90deg,#39a877,#d8b13c 78%,#cf5a49); }
-.voice-meter-gate { position:absolute; top:-3px; bottom:-3px; width:2px; border-radius:1px; background:#25527e; }
-.voice-meter-gate[hidden] { display:none; }
+.voice-meter-fill.is-gated { opacity:.35; }
+/* 阈值滑块直接叠在电平条上：轨道透明，蓝色把手即静默分界线 */
+.voice-meter-threshold { position:absolute; left:0; top:-6px; width:100%; height:21px; margin:0; background:transparent; -webkit-appearance:none; appearance:none; cursor:ew-resize; }
+.voice-meter-threshold:disabled { cursor:default; }
+.voice-meter-threshold:focus-visible { outline:3px solid #b491ff; outline-offset:2px; }
+.voice-meter-threshold::-webkit-slider-runnable-track { height:100%; background:transparent; }
+.voice-meter-threshold::-webkit-slider-thumb { -webkit-appearance:none; width:4px; height:21px; margin-top:0; border:none; border-radius:2px; background:#9db4c9; box-shadow:0 0 0 3px rgba(255,255,255,.72); }
+.voice-meter-threshold.is-active::-webkit-slider-thumb { background:#25527e; }
+.voice-meter-threshold::-moz-range-track { height:100%; background:transparent; }
+.voice-meter-threshold::-moz-range-thumb { width:4px; height:21px; border:none; border-radius:2px; background:#9db4c9; box-shadow:0 0 0 3px rgba(255,255,255,.72); }
+.voice-meter-threshold.is-active::-moz-range-thumb { background:#25527e; }
 .waiting-voice-gate { width:100%; align-items:center; flex-wrap:wrap; gap:6px 12px; border-top:1px dashed #cfe4d7; padding-top:9px; display:flex; }
 .voice-gate-check { display:flex; align-items:center; gap:6px; color:#285841; font-size:12px; font-weight:650; cursor:pointer; }
 .voice-gate-check input { width:15px; height:15px; margin:0; accent-color:#1d6b4c; }
-.voice-gate-range { flex:1 1 140px; min-width:120px; min-height:20px; margin:0; accent-color:#1d6b4c; cursor:pointer; }
-.voice-gate-range:disabled { cursor:default; opacity:.55; }
 .voice-gate-value { color:#5f7d6d; font-size:11px; font-variant-numeric:tabular-nums; }
 .voice-gate-hint { color:#a3742a; font-size:11px; }
 .voice-gate-hint[hidden] { display:none; }

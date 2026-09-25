@@ -33,7 +33,7 @@ const source = fs.readFileSync(path.resolve(__dirname, '../assets/js/voice-mic.j
   assert.deepEqual(mic.micGateSettings(), { gateEnabled: false, gateThreshold: 8 },
     'defaults without persisted settings');
   let settings = mic.setMicGateSettings({ gateEnabled: true, gateThreshold: 999 });
-  assert.deepEqual(settings, { gateEnabled: true, gateThreshold: 60 }, 'threshold clamps to max');
+  assert.deepEqual(settings, { gateEnabled: true, gateThreshold: 50 }, 'threshold clamps to max');
   settings = mic.setMicGateSettings({ gateThreshold: -3 });
   assert.equal(settings.gateThreshold, 0, 'threshold clamps to min');
   settings = mic.setMicGateSettings({ gateEnabled: 'yes', gateThreshold: 12.6 });

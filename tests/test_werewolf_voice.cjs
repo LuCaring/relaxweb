@@ -305,8 +305,17 @@ print(json.dumps({n: accounts.create_session(n) for n in names}))
     }
     console.log('PASS meter: pipeline publishes and the level meter reads the synthetic mic');
 
-    // 噪声门：高于阈值继续放行；源静默后门关闭但仍发布（发送静音不摘轨）
+    // 噪声门：高于阈值继续放行；源静默后门关闭但仍发布（发送静音不摘轨）。
+    // 阈值滑块嵌在电平条上，与电平同刻度，拖动即持久化。
     await players.va.page.evaluate(() => voiceMic.setMicGateSettings({ gateEnabled: true, gateThreshold: 8 }));
+    await players.va.page.waitForFunction(
+      () => document.querySelector('.voice-meter-threshold')?.value === '8',
+      null, { timeout: 8000, polling: 100 });
+    assert.equal(await players.va.page.locator('.voice-meter-threshold').isDisabled(), false);
+    await players.va.page.locator('.voice-meter-threshold').fill('20');
+    assert.equal((await players.va.page.evaluate(() => voiceMic.micGateSettings())).gateThreshold, 20,
+      'embedded slider persists the threshold');
+    assert.match(await players.va.page.locator('.voice-gate-value').innerText(), /阈值 20%/);
     await players.va.page.waitForFunction(() => voice.voiceDebug().micGateOpen === true,
       null, { timeout: 8000, polling: 100 });
     assert.match(await players.va.page.evaluate(() => localStorage.getItem('voiceMicSettings')),

@@ -5,7 +5,7 @@ import { gameMetaById } from "./game-config.js";
 import { gameView } from "./registry.js";
 import { chatOpenButton, reapplySeatBubbles } from "./room-chat.js";
 import { enableVoiceAudio, toggleMic, voiceMicWanted, voiceStatus } from "./room-voice.js";
-import { getPeerVolume, micGateSettings, micLevel, micPipelineActive, setMicGateSettings,
+import { getPeerVolume, micGateOpen, micGateSettings, micLevel, micPipelineActive, setMicGateSettings,
   setPeerVolume } from "./voice-mic.js";
 
 function el(tag, className, text) {
@@ -194,9 +194,15 @@ function refreshVoiceMeter(root, status) {
   if (meterLoops.has(root)) return;
   meterLoops.set(root, true);
   const fill = block.querySelector(".voice-meter-fill");
-  const marker = block.querySelector(".voice-meter-gate");
+  const bar = block.querySelector(".voice-meter");
+  const threshold = block.querySelector(".voice-meter-threshold");
   const note = block.querySelector(".voice-meter-note");
   let silentSince = 0;
+  const setNote = (text, tone) => {
+    if (note.textContent !== text) note.textContent = text;
+    if (tone) note.dataset.tone = tone;
+    else delete note.dataset.tone;
+  };
   const frame = () => {
     if (!root.isConnected) {
       meterLoops.delete(root);
@@ -206,14 +212,28 @@ function refreshVoiceMeter(root, status) {
     const level = active ? micLevel() : 0;
     fill.style.width = `${Math.min(100, Math.round(level * METER_SCALE))}%`;
     const settings = micGateSettings();
-    marker.hidden = !settings.gateEnabled || !micPipelineActive();
-    marker.style.left = `${Math.min(100, Math.round(settings.gateThreshold * METER_SCALE / 100))}%`;
+    const ready = micPipelineActive();
+    const gateOn = settings.gateEnabled && ready;
+    // 阈值滑块嵌在电平条上：0–50 线性映射与电平刻度（RMS×200）一致，
+    // 把手位置即静默分界，拖动即可对着实时电平选阈值。
+    bar.classList.toggle("gate-on", gateOn);
+    bar.style.setProperty("--gate-at",
+      `${Math.min(100, Math.round(settings.gateThreshold * METER_SCALE / 100))}%`);
+    threshold.disabled = !ready;
+    threshold.classList.toggle("is-active", gateOn);
+    if (threshold.value !== String(settings.gateThreshold)) {
+      threshold.value = String(settings.gateThreshold);
+    }
+    fill.classList.toggle("is-gated", gateOn && !micGateOpen());
     if (active && level < METER_SILENT_RMS) {
       silentSince = silentSince || performance.now();
-      note.textContent = performance.now() - silentSince > 2000 ? "未检测到声音，请检查麦克风" : "";
+      setNote(performance.now() - silentSince > 2000 ? "未检测到声音，请检查麦克风" : "", "warn");
+    } else if (gateOn && !micGateOpen()) {
+      silentSince = 0;
+      setNote("低于阈值 · 静默中", "info");
     } else {
       silentSince = 0;
-      note.textContent = "";
+      setNote("", "");
     }
     requestAnimationFrame(frame);
   };
@@ -226,13 +246,8 @@ function refreshVoiceGate(root, status) {
   block.hidden = !status.connected;
   if (block.hidden) return;
   const settings = micGateSettings();
-  const toggle = block.querySelector(".voice-gate-toggle");
-  const range = block.querySelector(".voice-gate-range");
-  const value = block.querySelector(".voice-gate-value");
-  toggle.checked = settings.gateEnabled;
-  range.disabled = !micPipelineActive();
-  if (range.value !== String(settings.gateThreshold)) range.value = String(settings.gateThreshold);
-  value.textContent = `${settings.gateThreshold}%`;
+  block.querySelector(".voice-gate-toggle").checked = settings.gateEnabled;
+  block.querySelector(".voice-gate-value").textContent = `阈值 ${settings.gateThreshold}%`;
   block.querySelector(".voice-gate-hint").hidden = micPipelineActive();
 }
 
@@ -354,7 +369,14 @@ function voicePanel() {
   meterHead.append(el("strong", "", "麦克风电平"), el("span", "voice-meter-note"));
   const bar = el("div", "voice-meter");
   bar.setAttribute("aria-hidden", "true");
-  bar.append(el("span", "voice-meter-fill"), el("span", "voice-meter-gate"));
+  bar.append(el("span", "voice-meter-fill"));
+  const threshold = el("input", "voice-meter-threshold");
+  threshold.type = "range";
+  threshold.min = "0";
+  threshold.max = "50";
+  threshold.step = "1";
+  threshold.setAttribute("aria-label", "噪声门阈值");
+  bar.append(threshold);
   meter.append(meterHead, bar);
   const gate = el("div", "waiting-voice-gate");
   gate.hidden = true;
@@ -362,22 +384,16 @@ function voicePanel() {
   const gateToggle = el("input", "voice-gate-toggle");
   gateToggle.type = "checkbox";
   gateLabel.append(gateToggle, el("span", "", "低于阈值时自动静默（噪声门）"));
-  const gateRange = el("input", "voice-gate-range");
-  gateRange.type = "range";
-  gateRange.min = "1";
-  gateRange.max = "40";
-  gateRange.step = "1";
-  gateRange.setAttribute("aria-label", "噪声门阈值");
   const gateValue = el("span", "voice-gate-value");
   const gateHint = el("span", "voice-gate-hint", "重新开启麦克风后生效");
   gateToggle.addEventListener("change", () => {
     setMicGateSettings({ gateEnabled: gateToggle.checked });
   });
-  gateRange.addEventListener("input", () => {
-    const settings = setMicGateSettings({ gateThreshold: Number(gateRange.value) || 0 });
-    gateValue.textContent = `${settings.gateThreshold}%`;
+  threshold.addEventListener("input", () => {
+    const settings = setMicGateSettings({ gateThreshold: Number(threshold.value) || 0 });
+    gateValue.textContent = `阈值 ${settings.gateThreshold}%`;
   });
-  gate.append(gateLabel, gateRange, gateValue, gateHint);
+  gate.append(gateLabel, gateValue, gateHint);
   const mixer = el("div", "waiting-voice-mixer");
   const mixerHead = el("div", "waiting-voice-mixer-head");
   mixerHead.append(el("strong", "", "成员音量"),
