@@ -33,7 +33,7 @@ export class Arena {
     this.dataDeps = { WEAPONS, ITEMS };
     this.running = false;
     this.paused = false;
-    this.slimeSprites = null;
+    this.sprites = {};
     this.keys = new Set();
     this.touch = null;
     this.onFrame = this.onFrame.bind(this);
@@ -42,9 +42,18 @@ export class Arena {
   }
 
   loadSprites() {
-    const sheet = new Image();
-    sheet.src = "assets/dungeon/enemies/ruins_slime/idle.png";
-    this.slimeSprites = { sheet, frames: 6, frameWidth: 362, frameHeight: 724 };
+    const load = (key, src) => {
+      const image = new Image();
+      image.src = src;
+      this.sprites[key] = image;
+    };
+    load("slime", "assets/dungeon/enemies/ruins_slime/move.png");
+    load("bat", "assets/dungeon/beta/enemies/cave_bat/idle.png");
+    load("brute", "assets/dungeon/beta/enemies/stone_brute/idle.png");
+    load("playerIdle", "assets/dungeon/beta/player/idle-source.png");
+    load("playerMove", "assets/dungeon/beta/player/move-source.png");
+    load("floor", "assets/dungeon/beta/arena/stone-floor.png");
+    load("material", "assets/dungeon/beta/arena/material.png");
   }
 
   bindInput() {
@@ -76,7 +85,7 @@ export class Arena {
     this.wave = wave;
     this.config = waveConfig(wave);
     this.rand = mulberry32(0xd1ce + wave * 977);
-    this.player = { x: WIDTH / 2, y: HEIGHT / 2, radius: 15, attackTimers: {}, swing: null };
+    this.player = { x: WIDTH / 2, y: HEIGHT / 2, radius: 15, moving: false, facing: "down", attackTimers: {}, swing: null };
     this.enemies = [];
     this.projectiles = [];
     this.pickups = [];
@@ -222,6 +231,8 @@ export class Arena {
       }
     }
     const length = Math.hypot(dx, dy);
+    this.player.moving = length > 0;
+    if (length > 0) this.player.facing = Math.abs(dx) > Math.abs(dy) ? "side" : dy < 0 ? "up" : "down";
     if (length > 0) {
       const speed = 170 * stats.speed;
       this.player.x += (dx / length) * speed * dt;
@@ -429,20 +440,14 @@ export class Arena {
   render() {
     const ctx = this.ctx;
     ctx.clearRect(0, 0, WIDTH, HEIGHT);
-    // 地面网格
-    ctx.strokeStyle = "#241c14";
-    ctx.lineWidth = 1;
-    for (let x = 0; x <= WIDTH; x += 48) {
-      ctx.beginPath();
-      ctx.moveTo(x, 0);
-      ctx.lineTo(x, HEIGHT);
-      ctx.stroke();
-    }
-    for (let y = 0; y <= HEIGHT; y += 48) {
-      ctx.beginPath();
-      ctx.moveTo(0, y);
-      ctx.lineTo(WIDTH, y);
-      ctx.stroke();
+    const floor = this.sprites.floor;
+    if (floor?.complete && floor.naturalWidth) {
+      ctx.drawImage(floor, 0, 0, WIDTH, HEIGHT);
+      ctx.fillStyle = "rgba(12, 15, 18, .38)";
+      ctx.fillRect(0, 0, WIDTH, HEIGHT);
+    } else {
+      ctx.fillStyle = "#24262a";
+      ctx.fillRect(0, 0, WIDTH, HEIGHT);
     }
     this.renderPickups(ctx);
     this.renderEnemies(ctx);
@@ -453,24 +458,23 @@ export class Arena {
 
   renderPlayer(ctx) {
     const { x, y } = this.player;
-    // 土豆占位形象
+    const sprite = this.sprites[this.player.moving ? "playerMove" : "playerIdle"];
     ctx.save();
     ctx.translate(x, y);
-    ctx.fillStyle = "#c89858";
-    ctx.strokeStyle = "#7a5a30";
-    ctx.beginPath();
-    ctx.ellipse(0, 0, 15, 18, 0, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.stroke();
-    ctx.fillStyle = "#2c2013";
-    ctx.beginPath();
-    ctx.arc(-5, -4, 2, 0, Math.PI * 2);
-    ctx.arc(5, -4, 2, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.strokeStyle = "#2c2013";
-    ctx.beginPath();
-    ctx.arc(0, 2, 5, 0.2, Math.PI - 0.2);
-    ctx.stroke();
+    if (sprite?.complete && sprite.naturalWidth) {
+      const columns = this.player.moving ? 8 : 6;
+      const frameWidth = sprite.naturalWidth / columns;
+      const frameHeight = sprite.naturalHeight / 5;
+      const frame = Math.floor(this.elapsed * (this.player.moving ? 10 : 5)) % columns;
+      const row = this.player.facing === "up" ? 4 : this.player.facing === "side" ? 2 : 0;
+      if (this.player.facing === "side" && this.keys.has("a")) ctx.scale(-1, 1);
+      ctx.drawImage(sprite, frame * frameWidth, row * frameHeight, frameWidth, frameHeight, -27, -31, 54, 54);
+    } else {
+      ctx.fillStyle = "#d65a40";
+      ctx.beginPath();
+      ctx.arc(0, 0, 16, 0, Math.PI * 2);
+      ctx.fill();
+    }
     ctx.restore();
     if (this.player.swing) {
       const swing = this.player.swing;
@@ -496,17 +500,16 @@ export class Arena {
 
   renderEnemies(ctx) {
     for (const enemy of this.enemies) {
-      const isSlime = enemy.type === "slime" && this.slimeSprites?.sheet?.complete && this.slimeSprites.sheet.naturalWidth > 0;
+      const sprite = this.sprites[enemy.type];
+      const hasSprite = sprite?.complete && sprite.naturalWidth > 0;
       ctx.save();
       ctx.translate(enemy.x, enemy.y);
-      if (isSlime) {
-        const sheet = this.slimeSprites;
-        const frame = Math.floor((this.elapsed - enemy.animStart) * 7) % sheet.frames;
-        const scale = (enemy.radius * 2.4) / sheet.frameHeight;
-        const w = sheet.frameWidth * scale;
-        const h = sheet.frameHeight * scale;
+      if (hasSprite) {
+        const frame = Math.floor((this.elapsed - enemy.animStart) * 7) % 6;
+        const w = enemy.radius * (enemy.type === "bat" ? 4 : 2.5);
+        const h = w * 2;
         if (enemy.hitFlash > 0) ctx.filter = "brightness(1.8)";
-        ctx.drawImage(sheet.sheet, frame * sheet.frameWidth, 0, sheet.frameWidth, sheet.frameHeight, -w / 2, -h / 2, w, h);
+        ctx.drawImage(sprite, frame * 362, 0, 362, 724, -w / 2, -h * 0.72, w, h);
         ctx.filter = "none";
       } else if (enemy.shape === "triangle") {
         ctx.rotate(Math.atan2(this.player.y - enemy.y, this.player.x - enemy.x));
@@ -550,6 +553,11 @@ export class Arena {
   }
 
   renderPickups(ctx) {
+    const material = this.sprites.material;
+    if (material?.complete && material.naturalWidth) {
+      for (const pickup of this.pickups) ctx.drawImage(material, pickup.x - 9, pickup.y - 9, 18, 18);
+      return;
+    }
     ctx.fillStyle = "#4fc46f";
     for (const pickup of this.pickups) {
       ctx.save();
