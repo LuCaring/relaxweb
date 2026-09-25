@@ -161,6 +161,9 @@ def init_estate(conn):
         source_minute INTEGER NOT NULL DEFAULT -1,
         available INTEGER NOT NULL DEFAULT 0 CHECK(available IN (0,1))
     )""")
+    market_columns = {row[1] for row in conn.execute("PRAGMA table_info(estate_market_index)")}
+    if "source_kind" not in market_columns:
+        conn.execute("ALTER TABLE estate_market_index ADD COLUMN source_kind TEXT NOT NULL DEFAULT 'live'")
     conn.execute("""CREATE TABLE IF NOT EXISTS estate_market_ticks (
         minute INTEGER PRIMARY KEY,
         price_cents INTEGER NOT NULL CHECK(price_cents > 0)

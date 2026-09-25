@@ -64,15 +64,27 @@ class MarketTests(unittest.TestCase):
         self.assertEqual(later["price"], 1070)
         self.assertTrue(later["available"])
 
-    def test_stale_feed_pauses_trade_without_charging(self):
+    def test_stale_feed_uses_shared_simulated_quote_and_can_trade(self):
         market_snapshot(self.conn, "alice", NOW, Decimal("100"))
-        stale = market_snapshot(self.conn, "alice", NOW + 60, None)
-        self.assertFalse(stale["available"])
-        with self.assertRaises(EstateError) as error:
-            trade_market(self.conn, "alice", "market-stale-0001", "buy", "1",
-                         NOW + 60, adjust_coins, None, Decimal("100"))
-        self.assertEqual(error.exception.code, "market_unavailable")
-        self.assertEqual(self.conn.execute("SELECT coins FROM users").fetchone()[0], 10000)
+        with patch("estate.market.secrets.randbelow", return_value=800):
+            fallback = market_snapshot(self.conn, "alice", NOW + 60, None)
+        self.assertTrue(fallback["available"])
+        self.assertEqual(fallback["source_kind"], "simulated")
+        self.assertEqual(fallback["price"], 1000)
+        self.assertEqual(market_snapshot(self.conn, "alice", NOW + 61, None)["price"], 1000)
+        with patch("estate.market.fetch_source_price", side_effect=AssertionError("unexpected fetch")):
+            bought = trade_market(self.conn, "alice", "market-fallback-0001", "buy", "1",
+                                  NOW + 61, adjust_coins, None, None)
+        self.assertEqual(bought["price"], 1000)
+        self.assertEqual(bought["market"]["shares"], 1)
+
+    def test_live_feed_resumes_without_old_reference_jump(self):
+        market_snapshot(self.conn, "alice", NOW, Decimal("100"))
+        market_snapshot(self.conn, "alice", NOW + 60, None)
+        before = market_snapshot(self.conn, "alice", NOW + 61, None)["price"]
+        resumed = market_snapshot(self.conn, "alice", NOW + 120, Decimal("200"))
+        self.assertEqual(resumed["source_kind"], "live")
+        self.assertEqual(resumed["price"], before)
 
     def test_invalid_quantity_and_insufficient_holdings(self):
         market_snapshot(self.conn, "alice", NOW, Decimal("100"))

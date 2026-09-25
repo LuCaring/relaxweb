@@ -58,12 +58,13 @@ print(json.dumps(estate_state(conn,'alice',int(time.time()))))
     await page.waitForFunction(() => sent.some(message => message.type === 'estate_market_get'));
     const request = await page.evaluate(() => sent.find(message => message.type === 'estate_market_get'));
     const market = {name: '星潮模拟指数', price: 1000, quote_minute: 123,
-      available: true, source: 'SOL/USD', fee_rate: 0.005, shares: 0,
+      available: true, source: '游戏内模拟', source_kind: 'simulated', fee_rate: 0.005, shares: 0,
       cost_basis: 0, market_value: 0, realized_pnl: 0,
       history: [{time: 60, price: 995}, {time: 120, price: 1000}]};
     await page.evaluate(({request, market}) => core.handleServerMessage({
       type: 'estate_market_state', request_id: request.request_id, market,
     }), {request, market});
+    assert.match(await page.locator('.estate-market .estate-sheet-note').innerText(), /当前使用游戏内模拟走势/);
     await page.getByRole('spinbutton', {name: '交易份额'}).fill('0.125');
     assert.match(await page.locator('.estate-market-disclosure').first().innerText(), /125/);
     await page.getByRole('button', {name: '买入'}).click();

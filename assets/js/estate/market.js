@@ -40,7 +40,7 @@ export function renderMarketGame(target, market, onTrade, notice = "") {
   title.append(name, price); wrap.append(title);
   const status = document.createElement("p"); status.className = "estate-sheet-note";
   status.textContent = market.available
-    ? `24 小时模拟行情 · 参考 SOL/USD · 每分钟更新 · 买卖各收取 ${(market.fee_rate * 100).toFixed(1)}% 手续费`
+    ? `24 小时模拟行情 · ${market.source_kind === "simulated" ? "外部报价中断，当前使用游戏内模拟走势" : "参考 SOL/USD"} · 每分钟更新 · 买卖各收取 ${(market.fee_rate * 100).toFixed(1)}% 手续费`
     : "参考行情暂不可用，交易已暂停；可查看已有持仓。";
   wrap.append(status);
   if (market.history.length) wrap.append(marketChart(market.history));

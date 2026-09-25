@@ -423,7 +423,10 @@ class EstateProtocol:
                                             "request_id": data.get("request_id")})
             return
         if execution_source is None:
-            execution_source = await asyncio.to_thread(fetch_source_price)
+            with self.database() as conn:
+                row = conn.execute("SELECT source_kind FROM estate_market_index WHERE id=1").fetchone()
+            if row and row[0] == "live":
+                execution_source = await asyncio.to_thread(fetch_source_price)
         await self.handle_estate_action(websocket, state, data, "market_trade",
                                         now_override=now, market_source=None,
                                         execution_source=execution_source)

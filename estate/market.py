@@ -1,4 +1,4 @@
-"""马戏团模拟指数：真实 SOL 报价作参考，私有随机扰动阻断旧价套利。"""
+"""马戏团模拟指数：优先参考 SOL 报价，断线时使用服务端共享模拟行情。"""
 import json
 import math
 import re
@@ -46,18 +46,26 @@ def quote_refresh_due(conn, now):
 def _advance(conn, now, source_price=UNFETCHED):
     minute = int(now) // 60
     conn.execute("INSERT OR IGNORE INTO estate_market_index(id) VALUES (1)")
-    attempt, price_cents, old_source, source_minute, available = conn.execute(
-        "SELECT attempted_minute,price_cents,source_price,source_minute,available "
+    attempt, price_cents, old_source, source_minute, available, source_kind = conn.execute(
+        "SELECT attempted_minute,price_cents,source_price,source_minute,available,source_kind "
         "FROM estate_market_index WHERE id=1").fetchone()
     if attempt >= minute:
         return price_cents, bool(available)
     source = fetch_source_price() if source_price is UNFETCHED else source_price
     if source is None:
-        conn.execute("UPDATE estate_market_index SET attempted_minute=?,available=0 WHERE id=1",
-                     (minute,))
-        return price_cents, False
+        # 每分钟只生成一次全服共享的报价；不按离线时长补算，避免无人访问时跳价。
+        change = Decimal(secrets.randbelow(1601) - 800) / Decimal(100000)
+        price_cents = max(MIN_PRICE_CENTS, min(MAX_PRICE_CENTS,
+            int((Decimal(price_cents) * (1 + change)).to_integral_value())))
+        conn.execute("UPDATE estate_market_index SET attempted_minute=?,price_cents=?,"
+                     "source_kind='simulated',available=1 WHERE id=1",
+                     (minute, price_cents))
+        conn.execute("INSERT OR REPLACE INTO estate_market_ticks(minute,price_cents) VALUES (?,?)",
+                     (minute, price_cents))
+        conn.execute("DELETE FROM estate_market_ticks WHERE minute<?", (minute - 1440,))
+        return price_cents, True
     previous = Decimal(old_source)
-    if previous > 0:
+    if previous > 0 and source_kind == "live":
         gap = max(1, minute - source_minute)
         real_move = max(Decimal("-0.5"), min(Decimal("0.5"), source / previous - 1))
         span = min(6000, 600 * math.isqrt(gap))
@@ -67,7 +75,8 @@ def _advance(conn, now, source_price=UNFETCHED):
         price_cents = max(MIN_PRICE_CENTS, min(MAX_PRICE_CENTS,
             int((Decimal(price_cents) * (1 + change)).to_integral_value())))
     conn.execute(
-        "UPDATE estate_market_index SET attempted_minute=?,price_cents=?,source_price=?,source_minute=?,available=1 WHERE id=1",
+        "UPDATE estate_market_index SET attempted_minute=?,price_cents=?,source_price=?,source_minute=?,"
+        "source_kind='live',available=1 WHERE id=1",
         (minute, price_cents, str(source), minute),
     )
     conn.execute("INSERT OR REPLACE INTO estate_market_ticks(minute,price_cents) VALUES (?,?)",
@@ -91,6 +100,7 @@ def _position(conn, username):
 
 def market_snapshot(conn, username, now, source_price=UNFETCHED):
     price_cents, available = _advance(conn, now, source_price)
+    source_kind = conn.execute("SELECT source_kind FROM estate_market_index WHERE id=1").fetchone()[0]
     shares, basis, realized = _position(conn, username)
     history = conn.execute(
         "SELECT minute,price_cents FROM estate_market_ticks WHERE minute>=? "
@@ -98,7 +108,8 @@ def market_snapshot(conn, username, now, source_price=UNFETCHED):
     ).fetchall()
     return {"name": INDEX_NAME, "price": price_cents / 100,
             "quote_minute": int(now) // 60, "available": available,
-            "source": "SOL/USD", "fee_rate": float(FEE_RATE),
+            "source": "SOL/USD" if source_kind == "live" else "游戏内模拟",
+            "source_kind": source_kind, "fee_rate": float(FEE_RATE),
             "shares": shares / 1000, "cost_basis": basis / 100,
             "market_value": round(price_cents * shares / 100000, 2),
             "realized_pnl": realized / 100,
@@ -127,14 +138,15 @@ def trade_market(conn, username, request_id, side, quantity, now, adjust_coins,
         price_cents, available = _advance(conn, now, source_price)
         if not available:
             raise estate_error(("market_unavailable", "行情暂不可用，交易已暂停"))
-        live_source = fetch_source_price() if execution_source is UNFETCHED else execution_source
-        if live_source is None:
-            raise estate_error(("market_unavailable", "实时行情暂不可用，交易已暂停"))
-        reference = Decimal(conn.execute(
-            "SELECT source_price FROM estate_market_index WHERE id=1").fetchone()[0])
-        movement = max(Decimal("-0.5"), min(Decimal("0.5"), live_source / reference - 1))
-        price_cents = max(MIN_PRICE_CENTS, min(MAX_PRICE_CENTS,
-            int((Decimal(price_cents) * (1 + movement * Decimal("0.7"))).to_integral_value())))
+        source_kind, reference = conn.execute(
+            "SELECT source_kind,source_price FROM estate_market_index WHERE id=1").fetchone()
+        if source_kind == "live":
+            live_source = fetch_source_price() if execution_source is UNFETCHED else execution_source
+            if live_source is None:
+                raise estate_error(("market_unavailable", "实时行情暂不可用，交易已暂停"))
+            movement = max(Decimal("-0.5"), min(Decimal("0.5"), live_source / Decimal(reference) - 1))
+            price_cents = max(MIN_PRICE_CENTS, min(MAX_PRICE_CENTS,
+                int((Decimal(price_cents) * (1 + movement * Decimal("0.7"))).to_integral_value())))
         shares, basis, realized = _position(conn, username)
         notional = Decimal(price_cents) * amount_milli / 1000
         if side == "buy":
