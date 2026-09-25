@@ -5,6 +5,9 @@ import logging
 
 import websockets
 
+from dungeon.application.runs import RunService
+from dungeon.runtime.host import RunHost
+from dungeon.runtime.scheduler import RunScheduler
 from server.accounts import Accounts
 from server.admin import AdminProtocol
 from server.auth import AuthProtocol
@@ -12,6 +15,7 @@ from server.betting import Betting
 from server.chat import ChatProtocol
 from server.database import database as default_database
 from server.estate.presence import EstatePresence
+from server.dungeon.beta_action_protocol import DungeonBetaActionProtocol
 from server.dungeon.beta_protocol import DungeonBetaProtocol
 from server.dungeon.legacy_protocol import DungeonProtocol
 from server.estate.protocol import EstateProtocol
@@ -29,7 +33,7 @@ logger = logging.getLogger("live-chat")
 
 
 class Application:
-    def __init__(self, database, *, disconnect_grace=30.0):
+    def __init__(self, database, *, disconnect_grace=30.0, dungeon_simulator=None):
         self.database = database
         self.hub = ConnectionHub()
         self.accounts = Accounts(database)
@@ -58,6 +62,25 @@ class Application:
         )
         self.dungeon_protocol = DungeonProtocol(database=database, hub=self.hub)
         self.beta_protocol = DungeonBetaProtocol(database=database, hub=self.hub)
+        self.dungeon_runs = None
+        self.dungeon_scheduler = None
+        if dungeon_simulator is not None and self.beta_protocol.ruleset is not None:
+            # The action chain only assembles with a trusted simulator; until B
+            # delivers one, dungeon_beta_* action messages stay unavailable.
+            self.dungeon_runs = RunService(database, self.beta_protocol.ruleset,
+                                           dungeon_simulator)
+            host = RunHost(self.dungeon_runs)
+            self.dungeon_scheduler = RunScheduler(
+                host, on_room_cleared=None, on_frame=None, on_stopped=None)
+            self.dungeon_action = DungeonBetaActionProtocol(
+                database=database, hub=self.hub, run_service=self.dungeon_runs,
+                host=host, scheduler=self.dungeon_scheduler,
+                disconnect_grace=disconnect_grace)
+            self.dungeon_scheduler.on_room_cleared = self.dungeon_action._on_room_cleared
+            self.dungeon_scheduler.on_frame = self.dungeon_action._on_frame
+            self.dungeon_scheduler.on_stopped = self.dungeon_action._on_stopped
+        else:
+            self.dungeon_action = DungeonBetaActionProtocol(database=database, hub=self.hub)
         self.auth = AuthProtocol(database, self.hub, self.accounts, self.rooms, self.betting)
         self.admin = AdminProtocol(database, self.hub, self.wallet)
         self.handlers = merge_handlers(
@@ -65,7 +88,7 @@ class Application:
             self.wallet.handlers(), self.ranking.handlers(), self.rewards.handlers(),
             self.admin.handlers(), self.room_protocol.handlers(),
             self.estate_protocol.handlers(), self.dungeon_protocol.handlers(),
-            self.beta_protocol.handlers(),
+            self.beta_protocol.handlers(), self.dungeon_action.handlers(),
             self.betting.handlers(),
         )
         self._watcher = None
@@ -76,10 +99,14 @@ class Application:
             self._watcher.cancel()
             await asyncio.gather(self._watcher, return_exceptions=True)
             self._watcher = None
+        await self.dungeon_action.aclose()
         await self.rooms.aclose()
 
     async def run(self, host, port):
         init_db(self.database)
+        if self.dungeon_runs is not None:
+            # Unfinished beta runs resume as paused at their durable checkpoints.
+            self.dungeon_runs.recover_unfinished()
         self.settlement.refund_game_escrows()
         self.betting.active_bet = self.betting.load_open_bet()
         if self.betting.active_bet:
@@ -132,10 +159,12 @@ class Application:
             self.hub.clients.pop(websocket, None)
             logger.info("connection closed; online=%d", len(self.hub.clients))
             await self.rooms.cleanup_rooms_on_disconnect(state)
+            await self.dungeon_action.on_disconnect(websocket)
             await self.hub.broadcast_online_count()
 
 
-def create_app(database=None, *, disconnect_grace=30.0):
+def create_app(database=None, *, disconnect_grace=30.0, dungeon_simulator=None):
     """只装配，不建表或启动任务；测试可注入独立的临时库连接工厂。"""
     return Application(default_database if database is None else database,
-                       disconnect_grace=disconnect_grace)
+                       disconnect_grace=disconnect_grace,
+                       dungeon_simulator=dungeon_simulator)

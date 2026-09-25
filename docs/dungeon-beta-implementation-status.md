@@ -12,8 +12,8 @@
 | 装备与成长 | 共享金币、事务升级、成功回执；Beta装备工厂冻结规则、效果、绑定和来源，满包进入pending | 造物是服务端内部能力，没有客户端造物接口 |
 | 玩家交易 | 定向报价、预留、接受、撤销、到期、原子成交，满包转pending | 列表分页、浏览器两账号联调待完成 |
 | 营地查询 | 独立Beta状态读模型，在同一数据库快照中读取钱包、装备、材料、进度与预留 | 不调用旧开档函数，不因查询发新手装备 |
-| 协议 | 升级/交易/目录/回执及状态查询走鉴权`dungeon_beta_*`消息；具体字段以可执行schema为准 | start/input/frame等动作消息未注册 |
-| 运行与奖励 | 注入Simulator的内部运行服务、手动推进、输入/控制权、检查点、恢复及房间奖励事务 | 没有正式动作引擎、自动服务调度和浏览器动作联调；不能宣称可玩Beta已交付 |
+| 协议 | 升级/交易/目录/回执及状态查询走鉴权`dungeon_beta_*`消息；具体字段以可执行schema为准 | 动作消息（start_run/take_control/resume/pause/abandon/input/sync）已在本地实现分支注册（见运行时设计稿），待评审合入 |
+| 运行与奖励 | 注入Simulator的内部运行服务、手动推进、输入/控制权、检查点、恢复及房间奖励事务 | 本地实现分支已补 RunScheduler 调度、帧推送（新增 Simulator.view 合同）、动作协议与 Application 生命周期挂钩；正式动作引擎与浏览器动作联调仍待 B 接入 |
 | 数据管理 | 编号迁移、旧入口门禁、改名/删除检查；报价删除释放预留 | 正式部署前仍需对生产备份做迁移演练 |
 
 内部宿主用于验证框架。只接受受信任模拟器的房间完成事件；金币与掉落金额由固定规则计算。药瓶是局内生成/拾取状态，不能写入永久材料或金币余额。测试模拟器只存在于测试文件。
@@ -47,6 +47,8 @@ uv run --locked python tests/test_dungeon_beta_trading.py
 uv run --locked python tests/test_dungeon_beta_state.py
 uv run --locked python tests/test_dungeon_beta_protocol.py
 uv run --locked python tests/test_dungeon_beta_runtime.py
+uv run --locked python tests/test_dungeon_beta_scheduler.py
+uv run --locked python tests/test_dungeon_beta_action.py
 uv run --locked python scripts/run_python_tests.py
 ```
 
@@ -60,7 +62,7 @@ uv run --locked python scripts/run_python_tests.py
 
 ## 本轮验证与既有基线
 
-本轮最终全量Python回归为 **52/53个文件通过**。唯一失败仍是 `test_frontend.py` 中 `games/liarsbar.js` 与 `games/ludo.js` 的入口可达性检查，和 `fcaf1c0` 阶段50/51文件的既有失败一致；该问题更早已在重构前提交复现。
+本轮最终全量Python回归为 **54/55个文件通过**（新增 `tests/test_dungeon_beta_scheduler.py` 与 `tests/test_dungeon_beta_action.py`）。唯一失败仍是 `test_frontend.py` 中 `games/liarsbar.js` 与 `games/ludo.js` 的入口可达性检查，和 `fcaf1c0` 阶段50/51文件的既有失败一致；该问题更早已在重构前提交复现。
 
 运行宿主13项、营地状态7项、协议9项均通过；子代理另以Python 3.9独立环境验证这些模块及服务器装配10项。两套release校验通过，迁移1/2原SQL逐字比较不变，文档相对文件链接与 `git diff --check` 通过。新增的管理测试前置冲突已修正：新手装备发放现在会创建资产版本，测试改为幂等设置该记录。
 
