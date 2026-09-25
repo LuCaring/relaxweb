@@ -33,5 +33,13 @@ class Simulator(Protocol):
     def snapshot(self, state: Any) -> JsonObject:
         """Return JSON-serializable state including RNG positions and plugin state."""
 
+    def view(self, state: Any) -> JsonObject:
+        """Return a small render-oriented projection for frame push.
+
+        Unlike ``snapshot`` this is never persisted: it must contain only what a
+        client needs to interpolate and draw (positions, facing, animation and
+        health state), and it must stay far below the snapshot size budget.
+        """
+
     def restore(self, snapshot: JsonObject, rules: Any, services: SimulatorServices) -> Any:
         """Restore a state under the same pinned rules and simulator version."""
