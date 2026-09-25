@@ -39,7 +39,10 @@ def is_previous_preview(process):
     if process.pid == os.getpid():
         return False
     try:
-        if process.uids().real != os.getuid():
+        if os.name == "nt":
+            if process.username() != psutil.Process().username():
+                return False
+        elif process.uids().real != os.getuid():
             return False
         if not Path(process.exe()).name.lower().startswith('python'):
             return False
@@ -139,7 +142,7 @@ class PreviewHandler(BaseHTTPRequestHandler):
         if path == "/__preview/watch.js":
             return self.reply(WATCH_JS, "text/javascript; charset=utf-8")
         if path in ("/", "/dungeon-beta.html"):
-            html = PAGE.read_text()
+            html = PAGE.read_text(encoding="utf-8")
             html = html.replace("</body>", '<script src="/__preview/watch.js"></script></body>')
             return self.reply(html, "text/html; charset=utf-8")
         if path.startswith("/assets/"):
