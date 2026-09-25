@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#16110d">
+
+<title>地下城 Beta · 动作原型</title>
+
+<link rel="stylesheet" href="assets/css/dungeon-beta.css?v=1">
+</head>
+
+<body>
+<div id="dgn-beta-root">
+
+  <header class="dgn-dev-banner">
+    前端开发原型 · 本地模拟数据 · 未接入正式 dungeon_beta_* 协议
+  </header>
+
+  <!-- 标题屏 -->
+  <section id="dgn-screen-title" class="dgn-screen">
+    <h1 class="dgn-title">遗迹深探</h1>
+    <p class="dgn-subtitle">地下城 Beta · 动作玩法原型（土豆兄弟式波次循环）</p>
+    <div class="dgn-title-panel">
+      <p>移动：WASD / 方向键 / 左半屏拖动</p>
+      <p>武器自动攻击最近的敌人，你只负责走位</p>
+      <p>波次内击杀掉落材料，波次结束后进入商店消费</p>
+    </div>
+    <button id="dgn-btn-start" class="dgn-btn dgn-btn-primary">进入遗迹</button>
+  </section>
+
+  <!-- 战斗屏 -->
+  <section id="dgn-screen-game" class="dgn-screen dgn-hidden">
+    <div class="dgn-hud">
+      <div class="dgn-hud-left">
+        <div class="dgn-hpbar"><div id="dgn-hp-fill"></div><span id="dgn-hp-text">20/20</span></div>
+        <div class="dgn-xpbar"><div id="dgn-xp-fill"></div><span id="dgn-level-text">Lv.1</span></div>
+        <div id="dgn-weapon-strip" class="dgn-weapon-strip"></div>
+      </div>
+      <div class="dgn-hud-center">
+        <div id="dgn-wave-text">第 1 波</div>
+        <div id="dgn-timer-text">20</div>
+      </div>
+      <div class="dgn-hud-right">
+        <div class="dgn-materials"><span class="dgn-materials-icon"></span><span id="dgn-material-text">0</span></div>
+      </div>
+    </div>
+    <canvas id="dgn-arena" width="960" height="600"></canvas>
+    <div id="dgn-touch-zone"></div>
+    <div id="dgn-levelup" class="dgn-overlay dgn-hidden">
+      <div class="dgn-dialog">
+        <h2>升级！选择一项强化</h2>
+        <div id="dgn-levelup-cards" class="dgn-card-row"></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 波次结算屏 -->
+  <section id="dgn-screen-result" class="dgn-screen dgn-hidden">
+    <h2 id="dgn-result-title">第 1 波 结束</h2>
+    <div class="dgn-result-panel">
+      <p>本波收集材料 <strong id="dgn-result-materials">0</strong></p>
+      <p>当前等级 <strong id="dgn-result-level">1</strong></p>
+    </div>
+    <button id="dgn-btn-shop" class="dgn-btn dgn-btn-primary">进入商店</button>
+  </section>
+
+  <!-- 商店屏 -->
+  <section id="dgn-screen-shop" class="dgn-screen dgn-hidden">
+    <div class="dgn-shop-header">
+      <div class="dgn-materials dgn-materials-big"><span class="dgn-materials-icon"></span><span id="dgn-shop-materials">0</span></div>
+      <h2>商店 · 第 <span id="dgn-shop-wave">1</span> 波前</h2>
+      <div class="dgn-shop-actions">
+        <button id="dgn-btn-reroll" class="dgn-btn">重抽（<span id="dgn-reroll-cost">2</span>）</button>
+        <button id="dgn-btn-nextwave" class="dgn-btn dgn-btn-primary">开始下一波</button>
+      </div>
+    </div>
+    <div class="dgn-shop-body">
+      <div id="dgn-shop-cards" class="dgn-card-grid"></div>
+      <aside class="dgn-side">
+        <div class="dgn-panel">
+          <h3>武器（<span id="dgn-weapon-count">1</span>/6）</h3>
+          <div id="dgn-owned-weapons" class="dgn-owned-weapons"></div>
+        </div>
+        <div class="dgn-panel">
+          <h3>道具（<span id="dgn-item-count">0</span>）</h3>
+          <div id="dgn-owned-items" class="dgn-owned-items"></div>
+        </div>
+        <div class="dgn-panel">
+          <h3>属性</h3>
+          <div id="dgn-stats-panel" class="dgn-stats-panel"></div>
+        </div>
+      </aside>
+    </div>
+  </section>
+
+  <!-- 游戏结束屏 -->
+  <section id="dgn-screen-over" class="dgn-screen dgn-hidden">
+    <h2>你倒在了遗迹里</h2>
+    <div class="dgn-result-panel">
+      <p>坚持到第 <strong id="dgn-over-wave">1</strong> 波</p>
+      <p>累计等级 <strong id="dgn-over-level">1</strong></p>
+    </div>
+    <button id="dgn-btn-restart" class="dgn-btn dgn-btn-primary">再来一局</button>
+  </section>
+
+</div>
+
+<script type="module" src="assets/js/dungeon/dgn-beta-main.js?v=1"></script>
+</body>
+
+</html>
