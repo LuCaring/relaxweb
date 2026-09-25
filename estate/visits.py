@@ -63,7 +63,8 @@ def public_estate_state(conn, visitor, owner, now, adjust_coins=None):
         "AND owner_username=? AND steal_day=?", (visitor, owner, today),
     ).fetchone()[0]
     owner_used = conn.execute(
-        "SELECT COUNT(*) FROM estate_thefts WHERE owner_username=? AND steal_day=?",
+        "SELECT COUNT(*) FROM estate_thefts WHERE owner_username=? AND steal_day=? "
+        "AND outcome='stolen'",
         (owner, today),
     ).fetchone()[0]
     plots = []
@@ -158,7 +159,8 @@ def steal_crop(conn, visitor, request_id, owner, plot_id, now,
         if pair_used >= VISITOR_DAILY_LIMIT:
             raise estate_error(("visitor_limit", "今日已从该庄园尝试偷取 2 块"))
         owner_used = conn.execute(
-            "SELECT COUNT(*) FROM estate_thefts WHERE owner_username=? AND steal_day=?",
+            "SELECT COUNT(*) FROM estate_thefts WHERE owner_username=? AND steal_day=? "
+            "AND outcome='stolen'",
             (owner, today),
         ).fetchone()[0]
         if owner_used >= OWNER_DAILY_LIMIT:
@@ -192,7 +194,7 @@ def steal_crop(conn, visitor, request_id, owner, plot_id, now,
                     "crop_name": crop["name"], "quantity": 0, "coins_dropped": dropped,
                     "pet_level": pet_level,
                     "visitor_remaining": VISITOR_DAILY_LIMIT - pair_used - 1,
-                    "owner_remaining": OWNER_DAILY_LIMIT - owner_used - 1}
+                    "owner_remaining": OWNER_DAILY_LIMIT - owner_used}
         require_capacity(conn, visitor, visitor_profile, quantity)
         changed = conn.execute(
             "UPDATE estate_plots SET crop_id=NULL,planted_at=NULL,ready_at=NULL "
