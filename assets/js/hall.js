@@ -61,13 +61,53 @@ function selectGame(gameId) {
   renderGameView();
 }
 
+function enterVoiceHall() {
+  state.hallPage = "voicehall";
+  renderGameView();
+}
+
+function voiceChannelName(channelId) {
+  return state.voiceHub?.channels?.find((channel) => channel.id === channelId)?.name || channelId;
+}
+
+function voiceCard() {
+  const card = button("", "hall-game-card hall-voice-card", enterVoiceHall);
+  const icon = document.createElement("div");
+  icon.className = "hall-game-icon";
+  icon.textContent = "🎙️";
+  const info = document.createElement("div");
+  const name = document.createElement("div");
+  name.className = "hall-game-name";
+  name.textContent = "语音聊天室";
+  const desc = document.createElement("div");
+  desc.className = "hall-game-desc";
+  desc.textContent = "随时开麦的语音频道，测试与畅聊两相宜。";
+  info.append(name, desc);
+  const go = document.createElement("div");
+  go.className = "hall-game-go";
+  go.textContent = "进入频道 →";
+  card.append(icon, info, go);
+  return card;
+}
+
 function renderHall() {
   const body = elements.gameMain;
   body.replaceChildren();
+  const titleRow = document.createElement("div");
+  titleRow.className = "hall-title-row";
   const heading = document.createElement("div");
   heading.className = "hall-page-title";
   heading.textContent = "选择小游戏";
-  body.append(heading);
+  titleRow.append(heading);
+  // 已在语音频道时，标题行右侧给一枚随时返回频道的胶囊
+  if (state.voiceHub?.myChannel) {
+    titleRow.append(button(
+      `🎙️ ${voiceChannelName(state.voiceHub.myChannel)} · 返回`,
+      "hall-voice-pill",
+      enterVoiceHall,
+    ));
+  }
+  body.append(titleRow);
   const grid = document.createElement("div");
   grid.className = "hall-grid";
   for (const game of GAME_TYPES) {
@@ -89,7 +129,7 @@ function renderHall() {
     card.append(icon, info, go);
     grid.append(card);
   }
-  body.append(grid, ratingCard(), assetCard());
+  body.append(grid, voiceCard(), ratingCard(), assetCard());
 }
 
 function roomKey(room) {

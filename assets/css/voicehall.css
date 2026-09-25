@@ -1,0 +1,509 @@
+/* =========================================================
+   语音聊天室：左栏（麦克风 + 频道树）/ 右栏（分频道文字聊天），
+   以及大厅标题行的返回频道胶囊；配色圆角跟随 room.css / hall.css 卡片风格
+========================================================= */
+
+/* ---- 大厅：标题行与返回频道胶囊 ---- */
+
+.hall-title-row {
+    display: flex;
+
+    align-items: center;
+
+    justify-content: space-between;
+
+    flex-wrap: wrap;
+
+    gap: 10px 12px;
+}
+
+.hall-title-row .hall-page-title {
+    margin: 0;
+}
+
+.hall-voice-pill {
+    padding: 8px 16px;
+
+    border: 1px solid #bfe3d2;
+
+    border-radius: 999px;
+
+    background: #e9f6f0;
+
+    color: #126b4b;
+
+    font: inherit;
+
+    font-size: 13px;
+
+    font-weight: 700;
+
+    white-space: nowrap;
+
+    cursor: pointer;
+}
+
+.hall-voice-pill:hover {
+    background: #dcefe6;
+}
+
+/* ---- 视图骨架：头部 + 两栏 ---- */
+
+.voicehall {
+    display: flex;
+
+    flex-direction: column;
+
+    gap: 12px;
+}
+
+.voicehall-head {
+    display: flex;
+
+    align-items: center;
+
+    gap: 14px;
+
+    padding: 12px 16px;
+
+    border: 1px solid #e7eaed;
+
+    border-radius: 16px;
+
+    background: #fff;
+
+    box-shadow: 0 8px 26px #182c3d08;
+}
+
+.voicehall-title {
+    flex: 1;
+
+    min-width: 0;
+
+    margin: 0;
+
+    overflow: hidden;
+
+    text-overflow: ellipsis;
+
+    white-space: nowrap;
+
+    font-size: 17px;
+
+    font-weight: 750;
+}
+
+.voicehall-hint {
+    flex: none;
+
+    color: #86868b;
+
+    font-size: 12px;
+}
+
+.voicehall-body {
+    display: grid;
+
+    grid-template-columns: 360px minmax(0, 1fr);
+
+    gap: 12px;
+}
+
+.voicehall-side {
+    display: flex;
+
+    flex-direction: column;
+
+    gap: 12px;
+
+    min-width: 0;
+}
+
+/* ---- 左栏：麦克风面板（复用 .waiting-voice 样式，不启用语音时的提示） ---- */
+
+.voicehall-mic.waiting-voice {
+    width: 100%;
+}
+
+.voicehall-voice-disabled {
+    padding: 13px 14px;
+
+    border: 1px dashed #cfd8d2;
+
+    border-radius: 11px;
+
+    background: #f7faf8;
+
+    color: #65756c;
+
+    font-size: 12px;
+
+    line-height: 1.6;
+}
+
+/* ---- 左栏：频道树 ---- */
+
+.voicehall-channels {
+    display: flex;
+
+    flex-direction: column;
+
+    gap: 6px;
+
+    padding: 10px;
+
+    border: 1px solid #e7eaed;
+
+    border-radius: 16px;
+
+    background: #fff;
+
+    box-shadow: 0 8px 26px #182c3d08;
+}
+
+.voicehub-channel {
+    position: relative;
+
+    display: flex;
+
+    align-items: center;
+
+    flex-wrap: wrap;
+
+    gap: 6px 8px;
+
+    min-height: 44px;
+
+    padding: 7px 12px;
+
+    border: 1px solid #e9edef;
+
+    border-radius: 10px;
+
+    background: #fff;
+
+    font-size: 13px;
+
+    cursor: pointer;
+
+    transition: background-color .15s, border-color .15s;
+}
+
+.voicehub-channel:hover {
+    background: #f4f7f6;
+}
+
+.voicehub-channel.is-current {
+    border-color: #8dbce1;
+
+    background: #f1f8ff;
+
+    cursor: default;
+}
+
+.voicehub-channel-name {
+    flex: 1;
+
+    min-width: 0;
+
+    overflow: hidden;
+
+    text-overflow: ellipsis;
+
+    white-space: nowrap;
+
+    color: #263e33;
+
+    font-weight: 700;
+}
+
+.voicehub-channel-mark {
+    margin-left: 5px;
+
+    color: #a8842c;
+
+    font-weight: 600;
+}
+
+.voicehub-channel-count {
+    flex: none;
+
+    padding: 2px 9px;
+
+    border-radius: 999px;
+
+    background: #eef5ef;
+
+    color: #426850;
+
+    font-size: 11px;
+
+    font-weight: 700;
+
+    font-variant-numeric: tabular-nums;
+}
+
+.voicehub-channel-leave,
+.voicehub-channel-rename {
+    flex: none;
+
+    min-height: 30px;
+
+    padding: 4px 10px;
+
+    border: 1px solid #cfd8d2;
+
+    border-radius: 8px;
+
+    background: #fff;
+
+    color: #3c5a4b;
+
+    font: inherit;
+
+    font-size: 12px;
+
+    font-weight: 650;
+
+    cursor: pointer;
+}
+
+.voicehub-channel-leave:hover,
+.voicehub-channel-rename:hover {
+    background: #e5f4eb;
+}
+
+.voicehub-channel-leave:focus-visible,
+.voicehub-channel-rename:focus-visible,
+.hall-voice-pill:focus-visible {
+    outline: 3px solid #b491ff;
+
+    outline-offset: 2px;
+}
+
+/* 当前频道行内的重命名输入（展开时占满整行） */
+
+.voicehub-rename-input {
+    flex-basis: 100%;
+
+    box-sizing: border-box;
+
+    width: 100%;
+
+    height: 32px;
+
+    padding: 0 10px;
+
+    border: 1px solid #1fa971;
+
+    border-radius: 8px;
+
+    background: #fff;
+
+    color: #24292e;
+
+    font: inherit;
+
+    font-size: 13px;
+}
+
+.voicehub-rename-input:focus {
+    outline: 3px solid #1fa97133;
+
+    outline-offset: 0;
+}
+
+/* 当前频道行下的成员条目 */
+
+.voicehub-members {
+    display: flex;
+
+    flex-direction: column;
+
+    gap: 5px;
+
+    margin: -2px 0 4px 16px;
+}
+
+.voicehub-member {
+    position: relative;
+
+    display: flex;
+
+    align-items: center;
+
+    gap: 9px;
+
+    min-height: 42px;
+
+    padding: 6px 12px 6px 9px;
+
+    border: 1px solid #eef2ef;
+
+    border-radius: 9px;
+
+    background: #fafcfb;
+}
+
+.voicehub-member.speaking {
+    border-color: #36b879;
+
+    box-shadow: 0 0 0 2px #5fd39a77;
+}
+
+.voicehub-member-avatar {
+    display: grid;
+
+    flex: none;
+
+    place-items: center;
+
+    width: 28px;
+
+    height: 28px;
+
+    overflow: hidden;
+
+    border-radius: 50%;
+
+    background: #dceee3;
+
+    color: #315a43;
+
+    font-size: 13px;
+
+    font-weight: 800;
+}
+
+.voicehub-member-avatar img {
+    width: 100%;
+
+    height: 100%;
+
+    object-fit: cover;
+}
+
+.voicehub-member-name {
+    flex: 1;
+
+    min-width: 0;
+
+    overflow: hidden;
+
+    text-overflow: ellipsis;
+
+    white-space: nowrap;
+
+    color: #33453c;
+
+    font-size: 12.5px;
+
+    font-weight: 600;
+}
+
+/* ---- 右栏：分频道文字聊天（复用 room-chat 系类名） ---- */
+
+.voicehall-chat {
+    display: flex;
+
+    flex-direction: column;
+
+    min-height: 430px;
+
+    overflow: hidden;
+
+    border: 1px solid #e7eaed;
+
+    border-radius: 16px;
+
+    background: #fff;
+
+    box-shadow: 0 8px 26px #182c3d08;
+}
+
+.voicehall-chat-head {
+    display: flex;
+
+    align-items: center;
+
+    gap: 10px;
+
+    padding: 12px 14px;
+
+    border-bottom: 1px solid #eef0f1;
+
+    font-size: 14px;
+}
+
+.voicehall-chat-title {
+    color: #263139;
+
+    font-weight: 750;
+}
+
+.voicehall-chat-channel {
+    overflow: hidden;
+
+    max-width: 60%;
+
+    padding: 3px 10px;
+
+    border-radius: 999px;
+
+    background: #f1f8ff;
+
+    color: #2b5c80;
+
+    font-size: 12px;
+
+    font-weight: 700;
+
+    text-overflow: ellipsis;
+
+    white-space: nowrap;
+}
+
+.voicehall-chat .room-chat-list {
+    flex: 1;
+
+    min-height: 140px;
+
+    max-height: none;
+
+    padding: 10px 14px;
+}
+
+.voicehall-chat .rc-message {
+    font-size: 13px;
+}
+
+.voicehall-chat .room-chat-composer {
+    border-top: 1px solid #eef0f1;
+
+    background: #fff;
+}
+
+/* ---- 窄屏：两栏纵向堆叠，聊天面板限高滚动 ---- */
+
+@media (max-width:1023px) {
+    .voicehall-body {
+        grid-template-columns: minmax(0, 1fr);
+    }
+
+    .voicehall-chat {
+        min-height: 0;
+
+        height: 56vh;
+    }
+
+    .voicehub-members {
+        margin-left: 10px;
+    }
+}
+
+@media (prefers-reduced-motion:reduce) {
+    .voicehub-channel,
+    .hall-voice-pill {
+        transition: none;
+    }
+}
