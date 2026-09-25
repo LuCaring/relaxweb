@@ -1,4 +1,4 @@
-"""休闲庄园宠物购买与升级。"""
+"""休闲庄园宠物购买、升级与出场切换。"""
 
 from estate.catalog import PET_LEVELS, PENGUIN_FRAGMENT_COST, PENGUIN_LEVELS, SKIN_FRAGMENT_ITEM
 from estate.store import change_inventory, debit, estate_error, load_profile, run_action
@@ -9,8 +9,6 @@ def buy_or_upgrade_pet(conn, username, request_id, now, adjust_coins):
 
     def mutate():
         profile = load_profile(conn, username)
-        if profile["penguin_level"]:
-            raise estate_error(("pet_replaced", "臭企鹅已成为当前宠物，豆豆无法继续升级"))
         level = int(profile["pet_level"])
         if level >= max(PET_LEVELS):
             raise estate_error(("pet_max_level", "豆豆已经达到最高等级"))
@@ -21,8 +19,9 @@ def buy_or_upgrade_pet(conn, username, request_id, now, adjust_coins):
             detail = f"豆豆升级至 Lv.{next_level}"
         balance = debit(adjust_coins, conn, username, price,
                         f"休闲庄园商店：{detail}", request_id)
-        conn.execute("UPDATE estate_profiles SET pet_level=? WHERE username=?",
-                     (next_level, username))
+        conn.execute("UPDATE estate_profiles SET pet_level=?,active_pet=CASE WHEN ?=0 "
+                     "THEN 'doudou' ELSE active_pet END WHERE username=?",
+                     (next_level, level, username))
         return {"action": "pet_upgrade" if level else "pet_buy", "pet": "doudou",
                 "pet_level": next_level, "cost": price, "coins": balance}
 
@@ -47,8 +46,9 @@ def buy_or_upgrade_penguin(conn, username, request_id, now, adjust_coins):
             cost = PENGUIN_LEVELS[level]["upgrade_price"]
             balance = debit(adjust_coins, conn, username, cost,
                             f"休闲庄园：臭企鹅升级至 Lv.{level + 1}", request_id)
-        conn.execute("UPDATE estate_profiles SET penguin_level=?,penguin_active_at=? WHERE username=?",
-                     (level + 1, int(now), username))
+        conn.execute("UPDATE estate_profiles SET penguin_level=?,penguin_active_at=?,"
+                     "active_pet=CASE WHEN ?=0 THEN 'stinky_penguin' ELSE active_pet END "
+                     "WHERE username=?", (level + 1, int(now), level, username))
         return {"action": "penguin_upgrade" if level else "penguin_redeem",
                 "pet": "stinky_penguin", "penguin_level": level + 1,
                 "fragments_spent": PENGUIN_FRAGMENT_COST if level == 0 else 0,
@@ -56,3 +56,24 @@ def buy_or_upgrade_penguin(conn, username, request_id, now, adjust_coins):
 
     return run_action(conn, username, request_id, "penguin_buy_or_upgrade",
                       {"pet": "stinky_penguin"}, now, mutate)
+
+
+def set_active_pet(conn, username, request_id, pet, now):
+    if pet not in ("doudou", "stinky_penguin"):
+        raise estate_error(("pet_invalid", "无效的宠物"))
+
+    def mutate():
+        profile = load_profile(conn, username)
+        level = profile["pet_level"] if pet == "doudou" else profile["penguin_level"]
+        if not level:
+            raise estate_error(("pet_unowned", "尚未拥有该宠物"))
+        if profile["active_pet"] != pet:
+            if pet == "stinky_penguin":
+                conn.execute("UPDATE estate_profiles SET active_pet=?,penguin_active_at=? "
+                             "WHERE username=?", (pet, int(now), username))
+            else:
+                conn.execute("UPDATE estate_profiles SET active_pet=? WHERE username=?",
+                             (pet, username))
+        return {"action": "pet_select", "pet": pet}
+
+    return run_action(conn, username, request_id, "pet_select", {"pet": pet}, now, mutate)

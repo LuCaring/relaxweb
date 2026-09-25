@@ -5,10 +5,10 @@ from unittest.mock import patch
 
 from estate.catalog import CROPS, FISHING_TREASURES, SKIN_FRAGMENT_ITEM, collectible_item, crop_item, grow_seconds
 from estate.farming import auto_harvest_penguin
-from estate.lottery import draw_lottery
-from estate.pets import buy_or_upgrade_penguin
+from estate.lottery import draw_lottery, lottery_history
+from estate.pets import buy_or_upgrade_penguin, set_active_pet
 from estate.schema import init_estate
-from estate.store import ensure_estate, estate_state
+from estate.store import EstateError, ensure_estate, estate_state
 from estate.visits import steal_crop
 
 
@@ -62,7 +62,7 @@ class PenguinTests(unittest.TestCase):
         self.assertEqual(self.conn.execute("SELECT coins FROM users WHERE username='alice'").fetchone()[0], 80000)
 
     def test_delayed_harvest_full_warehouse_and_auto_replant(self):
-        self.conn.execute("UPDATE estate_profiles SET penguin_level=1 WHERE username='alice'")
+        self.conn.execute("UPDATE estate_profiles SET penguin_level=1,active_pet='stinky_penguin' WHERE username='alice'")
         ready = NOW - 80 * 60
         self.conn.execute("UPDATE estate_plots SET crop_id='wheat',planted_at=?,ready_at=? WHERE username='alice' AND plot_index=0",
                           (ready - 1000, ready))
@@ -83,7 +83,7 @@ class PenguinTests(unittest.TestCase):
         self.assertEqual(self.conn.execute("SELECT coins FROM users WHERE username='alice'").fetchone()[0], before - CROPS["wheat"]["seed_price"])
 
     def test_penguin_disables_doudou_defense(self):
-        self.conn.execute("UPDATE estate_profiles SET pet_level=4,penguin_level=1 WHERE username='alice'")
+        self.conn.execute("UPDATE estate_profiles SET pet_level=4,penguin_level=1,active_pet='stinky_penguin' WHERE username='alice'")
         self.conn.execute("UPDATE estate_profiles SET level=3 WHERE username='bob'")
         self.conn.execute("UPDATE estate_plots SET crop_id='wheat',planted_at=?,ready_at=? WHERE username='alice' AND plot_index=0",
                           (NOW - 1000, NOW - 10))
@@ -92,7 +92,7 @@ class PenguinTests(unittest.TestCase):
         self.assertEqual(result["outcome"], "stolen")
 
     def test_level_four_leaves_plot_empty_when_seed_unaffordable(self):
-        self.conn.execute("UPDATE estate_profiles SET penguin_level=4 WHERE username='alice'")
+        self.conn.execute("UPDATE estate_profiles SET penguin_level=4,active_pet='stinky_penguin' WHERE username='alice'")
         self.conn.execute("UPDATE users SET coins=0 WHERE username='alice'")
         self.conn.execute("UPDATE estate_plots SET crop_id='wheat',planted_at=?,ready_at=? WHERE username='alice' AND plot_index=0",
                           (NOW - 3000, NOW - 1800))
@@ -101,7 +101,7 @@ class PenguinTests(unittest.TestCase):
         self.assertEqual(self.conn.execute("SELECT coins FROM users WHERE username='alice'").fetchone()[0], 0)
 
     def test_level_four_catches_up_offline_cycles(self):
-        self.conn.execute("UPDATE estate_profiles SET penguin_level=4,penguin_active_at=? WHERE username='alice'",
+        self.conn.execute("UPDATE estate_profiles SET penguin_level=4,active_pet='stinky_penguin',penguin_active_at=? WHERE username='alice'",
                           (NOW - 100000,))
         cycle = 30 * 60 + grow_seconds("wheat", 1)
         first_ready = NOW - 30 * 60 - 3 * cycle
@@ -113,11 +113,49 @@ class PenguinTests(unittest.TestCase):
         self.assertEqual(self.conn.execute("SELECT crop_id FROM estate_plots WHERE username='alice' AND plot_index=0").fetchone()[0], "wheat")
 
     def test_level_four_does_not_purchase_lottery_only_seed(self):
-        self.conn.execute("UPDATE estate_profiles SET penguin_level=4 WHERE username='alice'")
+        self.conn.execute("UPDATE estate_profiles SET penguin_level=4,active_pet='stinky_penguin' WHERE username='alice'")
         self.conn.execute("UPDATE estate_plots SET crop_id='legendary_flower',planted_at=?,ready_at=? WHERE username='alice' AND plot_index=0",
                           (NOW - 3000, NOW - 1800))
         self.assertEqual(auto_harvest_penguin(self.conn, "alice", NOW, adjust_coins), 1)
         self.assertIsNone(self.conn.execute("SELECT crop_id FROM estate_plots WHERE username='alice' AND plot_index=0").fetchone()[0])
+
+    def test_owned_pets_switch_and_only_active_ability_runs(self):
+        self.conn.execute("UPDATE estate_profiles SET pet_level=4,penguin_level=1,"
+                          "active_pet='stinky_penguin' WHERE username='alice'")
+        ready = NOW - 80 * 60
+        self.conn.execute("UPDATE estate_plots SET crop_id='wheat',planted_at=?,ready_at=? "
+                          "WHERE username='alice' AND plot_index=0", (ready - 1000, ready))
+        selected = set_active_pet(self.conn, "alice", "select-doudou-0001", "doudou", NOW)
+        self.assertEqual(selected["pet"], "doudou")
+        self.assertEqual(auto_harvest_penguin(self.conn, "alice", NOW + 60, adjust_coins), 0)
+        self.conn.execute("UPDATE estate_profiles SET level=3 WHERE username='bob'")
+        defended = steal_crop(self.conn, "bob", "doudou-visit-0001", "alice", 0, NOW + 60,
+                              adjust_coins, lambda low, high: 1)
+        self.assertEqual(defended["outcome"], "defended")
+        replay = set_active_pet(self.conn, "alice", "select-doudou-0001", "doudou", NOW)
+        self.assertTrue(replay["replayed"])
+        set_active_pet(self.conn, "alice", "select-penguin-0001", "stinky_penguin", NOW + 120)
+        self.assertEqual(auto_harvest_penguin(self.conn, "alice", NOW + 119, adjust_coins), 0)
+        self.assertEqual(auto_harvest_penguin(self.conn, "alice", NOW + 120, adjust_coins), 1)
+        self.assertEqual(estate_state(self.conn, "alice", NOW + 120)["profile"]["active_pet"],
+                         "stinky_penguin")
+        with self.assertRaises(EstateError):
+            set_active_pet(self.conn, "bob", "select-unowned-0001", "stinky_penguin", NOW)
+
+    def test_lottery_history_keeps_latest_100_once_per_draw(self):
+        self.conn.execute("UPDATE users SET coins=1000000 WHERE username='alice'")
+        with patch("estate.lottery.secrets.randbelow", return_value=0):
+            for index in range(101):
+                draw_lottery(self.conn, "alice", f"history-draw-{index:04d}", NOW + index,
+                             adjust_coins)
+            draw_lottery(self.conn, "alice", "history-draw-0100", NOW + 100,
+                         adjust_coins)
+        rows = lottery_history(self.conn, "alice")
+        self.assertEqual(len(rows), 100)
+        self.assertEqual((rows[0]["created_at"], rows[-1]["created_at"]),
+                         (NOW + 100, NOW + 1))
+        self.assertEqual(rows[0]["award"], "thanks")
+        self.assertEqual(lottery_history(self.conn, "bob"), [])
 
 
 if __name__ == "__main__":

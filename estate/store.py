@@ -147,7 +147,7 @@ def plot_index(value):
 
 PROFILE_COLUMNS = (
     "skin_id", "level", "xp", "warehouse_level", "plot_count",
-    "reserved_capacity", "pet_level", "penguin_level", "penguin_active_at",
+    "reserved_capacity", "pet_level", "penguin_level", "penguin_active_at", "active_pet",
     "version", "created_at", "updated_at",
 )
 

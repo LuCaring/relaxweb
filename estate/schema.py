@@ -14,6 +14,7 @@ def init_estate(conn):
             pet_level INTEGER NOT NULL DEFAULT 0 CHECK(pet_level BETWEEN 0 AND 4),
             penguin_level INTEGER NOT NULL DEFAULT 0 CHECK(penguin_level BETWEEN 0 AND 4),
             penguin_active_at INTEGER NOT NULL DEFAULT 0,
+            active_pet TEXT NOT NULL DEFAULT 'doudou' CHECK(active_pet IN ('doudou','stinky_penguin')),
             version INTEGER NOT NULL DEFAULT 1 CHECK(version >= 1),
             created_at INTEGER NOT NULL,
             updated_at INTEGER NOT NULL
@@ -36,6 +37,9 @@ def init_estate(conn):
         conn.execute("ALTER TABLE estate_profiles ADD COLUMN penguin_level INTEGER NOT NULL DEFAULT 0")
     if "penguin_active_at" not in profile_columns:
         conn.execute("ALTER TABLE estate_profiles ADD COLUMN penguin_active_at INTEGER NOT NULL DEFAULT 0")
+    if "active_pet" not in profile_columns:
+        conn.execute("ALTER TABLE estate_profiles ADD COLUMN active_pet TEXT NOT NULL DEFAULT 'doudou'")
+        conn.execute("UPDATE estate_profiles SET active_pet='stinky_penguin' WHERE penguin_level>0")
     conn.execute("""
         CREATE TABLE IF NOT EXISTS estate_plots (
             username TEXT NOT NULL COLLATE NOCASE,

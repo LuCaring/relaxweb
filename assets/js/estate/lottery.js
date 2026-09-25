@@ -52,7 +52,29 @@ export function renderLotteryGame(target, snapshot, onBusyChange) {
     ? "金币不足，暂时不能抽奖。" : "请先腾出至少 2 格仓位。";
   const rules = document.createElement("p"); rules.className = "estate-sheet-note";
   rules.textContent = "神秘大奖：10% 得 100,000 金币、40% 免费再抽一次、10% 得农田升级券、20% 得 5,000 金币、20% 得 10,000 金币。传说花需种植成熟后出售；纪念品集齐后抽中该奖项可获得 1 个皮肤碎片。";
-  wrap.append(note, stage, status, button, rules); target.append(wrap);
+  const historyButton = document.createElement("button"); historyButton.type = "button";
+  historyButton.className = "estate-button"; historyButton.textContent = "查看抽奖记录";
+  const historyList = document.createElement("div"); historyList.className = "estate-lottery-history";
+  historyList.hidden = true;
+  const loadHistory = async () => {
+    historyList.textContent = "正在读取记录…";
+    try {
+      const rows = await estateRequest("estate_lottery_history", {}, { timeoutMs: 12000 });
+      historyList.replaceChildren();
+      if (!rows.length) historyList.textContent = "暂无抽奖记录。";
+      for (const row of rows) {
+        const entry = document.createElement("p");
+        entry.textContent = `${new Date(row.created_at * 1000).toLocaleString("zh-CN")} · ${rewardLabel(row)}`;
+        historyList.append(entry);
+      }
+    } catch (error) { historyList.textContent = error.message || "记录读取失败，请重试。"; }
+  };
+  historyButton.addEventListener("click", () => {
+    historyList.hidden = !historyList.hidden;
+    historyButton.textContent = historyList.hidden ? "查看抽奖记录" : "收起抽奖记录";
+    if (!historyList.hidden) void loadHistory();
+  });
+  wrap.append(note, stage, status, button, rules, historyButton, historyList); target.append(wrap);
 
   let busy = false; let rotation = 0;
   button.addEventListener("click", async () => {
@@ -73,6 +95,7 @@ export function renderLotteryGame(target, snapshot, onBusyChange) {
         if (spin.grand_prize === "reroll") status.textContent = "神秘大奖：免费再抽一次！";
       }
       status.textContent = rewardLabel(result);
+      if (!historyList.hidden) void loadHistory();
     } catch (error) {
       status.textContent = error.message || "抽奖失败，请稍后重试";
     } finally {

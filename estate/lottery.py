@@ -1,4 +1,5 @@
 """抽奖马戏团：服务端决定全部落点并在同一事务内结算。"""
+import json
 import secrets
 
 from estate.catalog import (
@@ -82,3 +83,11 @@ def draw_lottery(conn, username, request_id, now, adjust_coins):
         return result
 
     return run_action(conn, username, request_id, "lottery_draw", {}, now, mutate)
+
+
+def lottery_history(conn, username):
+    rows = conn.execute("SELECT created_at,result_json FROM estate_actions "
+                        "WHERE username=? AND action_type='lottery_draw' "
+                        "ORDER BY created_at DESC,rowid DESC LIMIT 100", (username,)).fetchall()
+    return [{"created_at": created_at, **json.loads(result_json)}
+            for created_at, result_json in rows]

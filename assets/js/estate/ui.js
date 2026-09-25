@@ -142,6 +142,10 @@ export function createEstateUI(root, activities = {}) {
       sheetBody.append(card);
     }
     sheetBody.append(note("宠物"));
+    const activePet = snapshot.profile.active_pet || "doudou";
+    const selectPetButton = (pet) => button(activePet === pet ? "出场中" : "设为出场宠物",
+      () => estateCommand("estate_select_pet", { pet }),
+      { disabled: activePet === pet || pendingEstateAction() });
     const penguinLevel = Number(snapshot.profile.penguin_level || 0);
     const fragmentCost = snapshot.catalog.penguin_fragment_cost;
     const fragments = Number(snapshot.inventory.find(item => item.id === snapshot.catalog.penguin_fragment_item)?.quantity || 0);
@@ -160,11 +164,11 @@ export function createEstateUI(root, activities = {}) {
     sheetBody.append(itemCard({ icon: "🐧", title: penguinLevel ? `臭企鹅 Lv.${penguinLevel}` : "臭企鹅",
       meta: penguinLevel ? `成熟后 ${penguinDelay} 分钟自动收获${penguinLevel === 4 ? "，并尝试自动播种" : ""}；仓库满时作物留在田里等待空位`
         : `纪念品集齐后抽奖可获皮肤碎片 · ${fragmentCost} 个碎片兑换；兑换后 Lv.1 于成熟 80 分钟后自动收获`,
-      controls: [penguinButton] }));
+      controls: penguinLevel ? [penguinButton, selectPetButton("stinky_penguin")] : [penguinButton] }));
     if (penguinLevel) {
-      sheetBody.append(note("臭企鹅已替换豆豆出场，豆豆的偷菜防守暂不生效。"));
+      sheetBody.append(note(activePet === "stinky_penguin"
+        ? "臭企鹅出场时，豆豆的偷菜防守暂不生效。" : "臭企鹅未出场时不会自动收获。"));
       if (penguinLevel === 4) sheetBody.append(note("自动播种沿用该田上种作物，并直接扣除对应种子费用；金币不足或种子仅限抽奖时，田地会保持空置。"));
-      return;
     }
     const level = Number(snapshot.profile.pet_level || 0);
     const rules = snapshot.catalog.pet_levels;
@@ -180,9 +184,9 @@ export function createEstateUI(root, activities = {}) {
     const next = catalogEntry(rules, level + 1);
     sheetBody.append(itemCard({ icon: "🐕", title: `豆豆 Lv.${level}`,
       meta: `偷菜防守概率 ${Math.round(current.defend_chance * 100)}%；防守成功会保住作物，消耗对方一次偷菜机会，并获得对方掉落的 1–1000 金币`,
-      controls: next ? [button(`${formatCoinsWhole(current.upgrade_price)} 金币 · 升到 Lv.${level + 1}`,
-        () => estateCommand("estate_pet"), { className: "estate-button estate-button-gold" })]
-        : [button("已经达到最高等级", () => {}, { disabled: true })] }));
+      controls: [next ? button(`${formatCoinsWhole(current.upgrade_price)} 金币 · 升到 Lv.${level + 1}`,
+        () => estateCommand("estate_pet"), { className: "estate-button estate-button-gold" })
+        : button("已经达到最高等级", () => {}, { disabled: true }), selectPetButton("doudou")] }));
   }
 
   function renderLottery() {

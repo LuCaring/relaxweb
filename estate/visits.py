@@ -79,7 +79,8 @@ def public_estate_state(conn, visitor, owner, now, adjust_coins=None):
         "profile": {"username": owner, "level": owner_profile["level"],
                     "plot_count": owner_profile["plot_count"],
                     "pet_level": owner_profile["pet_level"],
-                    "penguin_level": owner_profile["penguin_level"]},
+                    "penguin_level": owner_profile["penguin_level"],
+                    "active_pet": owner_profile["active_pet"]},
         "plots": plots, "catalog": public_catalog(),
         "steal_limits": {
             "visitor_remaining": max(0, VISITOR_DAILY_LIMIT - pair_used),
@@ -163,7 +164,7 @@ def steal_crop(conn, visitor, request_id, owner, plot_id, now,
         if owner_used >= OWNER_DAILY_LIMIT:
             raise estate_error(("owner_protected", "该庄园今日已被偷满 6 块"))
         quantity = int(crop["yield"])
-        pet_level = int(owner_profile.get("pet_level", 0)) if not owner_profile["penguin_level"] else 0
+        pet_level = int(owner_profile.get("pet_level", 0)) if owner_profile["active_pet"] == "doudou" else 0
         roll = random_int or (lambda low, high: low + secrets.randbelow(high - low + 1))
         defended = pet_level > 0 and roll(1, 100) <= round(
             PET_LEVELS[pet_level]["defend_chance"] * 100)

@@ -77,6 +77,24 @@ print(json.dumps(estate_state(conn,'alice',int(time.time()))))
     }), {snapshot, trade, market});
     await page.waitForFunction(() => document.querySelector('.estate-market-holdings')?.textContent.includes('0.125'));
     assert.match(await page.locator('.estate-market-message').innerText(), /买入 0.125 份/);
+    await page.evaluate(async () => {
+      const {estateStore} = await import('/assets/js/estate/state.js');
+      estateStore.snapshot.profile.pet_level = 4;
+      estateStore.snapshot.profile.penguin_level = 1;
+      estateStore.snapshot.profile.active_pet = 'stinky_penguin';
+      marketUi.interact({kind: 'general_store'});
+    });
+    assert.equal(await page.getByRole('button', {name: '设为出场宠物'}).count(), 1);
+    await page.getByRole('button', {name: '设为出场宠物'}).click();
+    assert.equal((await page.evaluate(() => sent.at(-1))).pet, 'doudou');
+    await page.evaluate(() => marketUi.interact({kind: 'lottery'}));
+    await page.getByRole('button', {name: '查看抽奖记录'}).click();
+    await page.waitForFunction(() => sent.some(message => message.type === 'estate_lottery_history'));
+    const historyRequest = await page.evaluate(() => sent.find(message => message.type === 'estate_lottery_history'));
+    await page.evaluate(requestId => core.handleServerMessage({type: 'estate_lottery_history',
+      request_id: requestId, history: [{created_at: 2000000000, award: 'coins_250', coins_awarded: 250}]}),
+    historyRequest.request_id);
+    assert.match(await page.locator('.estate-lottery-history').innerText(), /250 金币/);
     assert.deepEqual(errors, []);
     console.log('PASS circus sidebar, minute quote, fractional trade request and holdings');
   } finally { await browser.close(); }

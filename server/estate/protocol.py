@@ -15,8 +15,10 @@ from estate import (
     buy_tool as estate_buy_tool,
     buy_or_upgrade_pet as estate_buy_or_upgrade_pet,
     buy_or_upgrade_penguin as estate_buy_or_upgrade_penguin,
+    set_active_pet as estate_set_active_pet,
     estate_state,
     draw_lottery as estate_draw_lottery,
+    lottery_history as estate_lottery_history,
     market_snapshot as estate_market_snapshot,
     trade_market as estate_trade_market,
     fertilize as estate_fertilize,
@@ -70,6 +72,7 @@ class EstateProtocol:
             "estate_buy_skin": self.handle_estate_buy_skin,
             "estate_buy": self.handle_estate_buy,
             "estate_lottery_draw": self.handle_estate_lottery_draw,
+            "estate_lottery_history": self.handle_estate_lottery_history,
             "estate_market_get": self.handle_estate_market_get,
             "estate_market_trade": self.handle_estate_market_trade,
             "estate_use_land_upgrade_ticket": self.handle_estate_use_land_upgrade_ticket,
@@ -83,6 +86,7 @@ class EstateProtocol:
             "estate_repair_tool": self.handle_estate_repair_tool,
             "estate_pet": self.handle_estate_pet,
             "estate_penguin": self.handle_estate_penguin,
+            "estate_select_pet": self.handle_estate_select_pet,
             "estate_start_fishing": self.handle_estate_start_fishing,
             "estate_finish_fishing": self.handle_estate_finish_fishing,
             "estate_start_mining": self.handle_estate_start_mining,
@@ -322,6 +326,8 @@ class EstateProtocol:
                     result = estate_buy_or_upgrade_pet(conn, username, request_id, now, adjust_coins)
                 elif action == "penguin":
                     result = estate_buy_or_upgrade_penguin(conn, username, request_id, now, adjust_coins)
+                elif action == "select_pet":
+                    result = estate_set_active_pet(conn, username, request_id, data.get("pet"), now)
                 elif action == "start_fishing":
                     result = estate_start_fishing(conn, username, request_id,
                                                   data.get("bait_id"), now)
@@ -389,6 +395,17 @@ class EstateProtocol:
 
     async def handle_estate_lottery_draw(self, websocket, state, data):
         await self.handle_estate_action(websocket, state, data, "lottery_draw")
+
+    async def handle_estate_lottery_history(self, websocket, state, data):
+        user = state.get("user")
+        if not user:
+            await self.send_json(websocket, {"type": "estate_error", "code": "auth_required",
+                                           "message": "请先登录", "request_id": data.get("request_id")})
+            return
+        with self.database() as conn:
+            history = estate_lottery_history(conn, user["username"])
+        await self.send_json(websocket, {"type": "estate_lottery_history",
+                                       "history": history, "request_id": data.get("request_id")})
 
     async def handle_estate_market_get(self, websocket, state, data):
         user = state.get("user")
@@ -463,6 +480,9 @@ class EstateProtocol:
 
     async def handle_estate_penguin(self, websocket, state, data):
         await self.handle_estate_action(websocket, state, data, "penguin")
+
+    async def handle_estate_select_pet(self, websocket, state, data):
+        await self.handle_estate_action(websocket, state, data, "select_pet")
 
     async def handle_estate_start_fishing(self, websocket, state, data):
         await self.handle_estate_action(websocket, state, data, "start_fishing")

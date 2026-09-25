@@ -87,7 +87,8 @@ function renderEstate() {
   if (estateStore.snapshot) ui.render(); else requestEstate();
   // 在线停留时定期向服务端确认自动收获，离线时由下次访问或拜访触发补算。
   const autoHarvestPoll = window.setInterval(() => {
-    if (!estateStore.visit && Number(estateStore.snapshot?.profile?.penguin_level || 0) > 0) {
+    if (!estateStore.visit && estateStore.snapshot?.profile?.active_pet === "stinky_penguin"
+      && Number(estateStore.snapshot?.profile?.penguin_level || 0) > 0) {
       requestEstate();
     }
   }, 60_000);

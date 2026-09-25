@@ -30,6 +30,7 @@ const SOUND_CUES = {
   estate_repair_tool: "shop",
   estate_pet: "shop",
   estate_penguin: "shop",
+  estate_select_pet: "shop",
 };
 
 function requestId(prefix) {
@@ -103,6 +104,10 @@ onMessage("estate_visit_list", (data) => {
 
 onMessage("estate_market_state", (data) => {
   settleRequest(data.request_id, { result: data.market });
+});
+
+onMessage("estate_lottery_history", (data) => {
+  settleRequest(data.request_id, { result: data.history || [] });
 });
 
 onMessage("online_users", (data) => {

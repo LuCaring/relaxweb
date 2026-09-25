@@ -338,16 +338,17 @@ export function createEstateMap(canvas, input, onInteract, onTarget, onMove = ()
       ctx.strokeRect(target.x - 24, target.y - 24, 48, 48); ctx.setLineDash([]);
     }
     if (!drawPlayerAsset(ctx, player, performance.now(), (estateStore.homeSnapshot || estateStore.snapshot)?.profile.skin_id)) drawCharacter(ctx, player, performance.now());
-    const penguinLevel = Number(estateStore.snapshot?.profile?.penguin_level || 0);
-    const petLevel = penguinLevel || Number(estateStore.snapshot?.profile?.pet_level || 0);
+    const activePet = estateStore.snapshot?.profile?.active_pet === "stinky_penguin" ? "stinky_penguin" : "doudou";
+    const petLevel = Number(activePet === "stinky_penguin"
+      ? estateStore.snapshot?.profile?.penguin_level : estateStore.snapshot?.profile?.pet_level) || 0;
     if (petLevel > 0) {
       const visiblePet = estateStore.visit
         ? { x: 650, y: 285, direction: "left", walking: 0, lastMove: 0 }
         : pet;
-      drawPetAsset(ctx, visiblePet, performance.now(), penguinLevel ? "stinky_penguin" : "doudou");
+      drawPetAsset(ctx, visiblePet, performance.now(), activePet);
       ctx.font = 'bold 11px "Microsoft YaHei", sans-serif'; ctx.textAlign = "center";
       ctx.lineWidth = 3; ctx.strokeStyle = "#26372d"; ctx.fillStyle = "#fff3c2";
-      const petLabel = `${penguinLevel ? "臭企鹅" : "豆豆"} Lv.${petLevel}`;
+      const petLabel = `${activePet === "stinky_penguin" ? "臭企鹅" : "豆豆"} Lv.${petLevel}`;
       ctx.strokeText(petLabel, visiblePet.x, visiblePet.y - 49);
       ctx.fillText(petLabel, visiblePet.x, visiblePet.y - 49);
     }

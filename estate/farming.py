@@ -21,7 +21,7 @@ def auto_harvest_penguin(conn, username, now, adjust_coins=None):
     """按实际到期时间补算离线收获；满仓时保留作物供下次访问重试。"""
     profile = load_profile(conn, username)
     level = int(profile["penguin_level"])
-    if not level:
+    if not level or profile["active_pet"] != "stinky_penguin":
         return 0
     delay = PENGUIN_LEVELS[level]["harvest_delay_minutes"] * 60
     rows = conn.execute(
