@@ -1,0 +1,30 @@
+[
+  {
+    "id": "beta.p0.loot.rm01",
+    "entries": [
+      {"item_template_id": "beta.p0.weapon.bulwark_blade", "weight": 60},
+      {"item_template_id": "beta.p0.weapon.tempo_blade", "weight": 40}
+    ]
+  },
+  {
+    "id": "beta.p0.loot.rm02",
+    "entries": [
+      {"item_template_id": "beta.p0.weapon.bulwark_blade", "weight": 60},
+      {"item_template_id": "beta.p0.weapon.tempo_blade", "weight": 40}
+    ]
+  },
+  {
+    "id": "beta.p0.loot.rm03",
+    "entries": [
+      {"item_template_id": "beta.p0.weapon.bulwark_blade", "weight": 50},
+      {"item_template_id": "beta.p0.weapon.tempo_blade", "weight": 50}
+    ]
+  },
+  {
+    "id": "beta.p0.loot.rm04",
+    "entries": [
+      {"item_template_id": "beta.p0.weapon.bulwark_blade", "weight": 50},
+      {"item_template_id": "beta.p0.weapon.tempo_blade", "weight": 50}
+    ]
+  }
+]
