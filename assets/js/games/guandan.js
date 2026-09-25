@@ -512,32 +512,39 @@ function levelsBarNode() {
   return bar;
 }
 
+function tablePlayNode(player, position) {
+  const room = state.myRoom;
+  const play = room.table_plays?.[player.username]
+    || (room.standing?.by === player.username ? room.standing : null);
+  if (!play?.cards?.length) return null;
+  const area = document.createElement("div");
+  area.className = `gd-table-play ${position}`;
+  if (room.standing?.by === player.username) area.classList.add("is-standing");
+  area.dataset.username = player.username;
+  area.setAttribute("aria-label", `${player.nickname} 上轮出牌：${play.label}`);
+  const cards = document.createElement("div");
+  cards.className = `gd-play-cards combo-${play.type}`;
+  const wildRank = wildRankForPlayer(player.username);
+  for (const card of play.cards) {
+    cards.append(gcardNode(card, {
+      wild: isWildCard(card, wildRank),
+    }));
+  }
+  const label = document.createElement("div");
+  label.className = "gd-play-label";
+  label.textContent = play.label;
+  area.append(cards, label);
+  return area;
+}
+
 function centerNode() {
   const room = state.myRoom;
   const center = document.createElement("div");
   center.className = "gd-center";
-  const standing = room.standing;
-  if (standing) {
-    const cards = document.createElement("div");
-    cards.className = "gd-standing-cards";
-    cards.classList.add(`combo-${standing.type}`);
-    const standingWildRank = wildRankForPlayer(standing.by);
-    for (const card of standing.cards || []) {
-      cards.append(gcardNode(card, {
-        small: (standing.cards || []).length > 8,
-        wild: isWildCard(card, standingWildRank),
-      }));
-    }
-    const by = document.createElement("div");
-    by.className = "gd-standing-by";
-    by.textContent = `${displayNameOf(standing.by)} · ${standing.label}`;
-    center.append(cards, by);
-  } else if (room.status === "playing" && room.to_act) {
+  if (room.status === "playing" && room.free_lead && room.to_act) {
     const free = document.createElement("div");
     free.className = "gd-free-lead";
-    free.textContent = room.free_lead
-      ? `${displayNameOf(room.to_act)} 自由出牌`
-      : "等待出牌…";
+    free.textContent = `${displayNameOf(room.to_act)} 自由出牌`;
     center.append(free);
   }
   return center;
@@ -738,18 +745,23 @@ function renderGuandanTable() {
 
   const seats = document.createElement("div");
   seats.className = "gd-seats";
+  const plays = document.createElement("div");
+  plays.className = "gd-table-plays";
   const players = room.players;
   const myIndex = Math.max(0, players.findIndex((p) => p.username === selfUsername()));
   const positions = ["pos-bottom", "pos-left", "pos-top", "pos-right"];
   players.forEach((p, index) => {
     const seat = seatNode(p);
     const relative = (index - myIndex + players.length) % players.length;
-    seat.classList.add(positions[relative] || "pos-top");
+    const position = positions[relative] || "pos-top";
+    seat.classList.add(position);
     seats.append(seat);
+    const play = tablePlayNode(p, position);
+    if (play) plays.append(play);
   });
   const arena = document.createElement("div");
   arena.className = "gd-arena";
-  arena.append(seats, centerNode());
+  arena.append(seats, plays, centerNode());
   table.append(arena);
 
   if (room.result) table.append(gdResultNode(room.result));

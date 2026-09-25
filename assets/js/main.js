@@ -17,7 +17,7 @@ import "./hall.js";
 import "./room.js";
 import "./games/holdem.js";
 import "./games/uno.js";
-import "./games/guandan.js";
+import "./games/guandan.js?v=2";
 import "./games/mahjong.js";
 import "./games/ludo.js?v=2";
 import "./games/liarsbar.js?v=2";

@@ -81,6 +81,24 @@ class TableState(unittest.IsolatedAsyncioTestCase):
         standing = room.view_for("b")["standing"]
         self.assertEqual((standing["tier"], standing["main"], standing["len"]), (0, [1, 7], 1))
 
+    async def test_guandan_table_plays_remain_until_next_free_lead(self):
+        room = await room_for("guandan")
+        room.game["hands"].update({
+            "a": [card(3), card(4)], "b": [card(6), card(7)],
+            "c": [card(8)], "d": [card(9)],
+        })
+        await room.perform_action("a", "play", {"cards": [0]})
+        await room.perform_action("b", "play", {"cards": [0]})
+        view = room.view_for("c")
+        self.assertEqual({name: play["cards"][0]["r"] for name, play in view["table_plays"].items()},
+                         {"a": 3, "b": 6})
+        self.assertEqual(view["standing"]["by"], "b")
+        for name in ("c", "d", "a"):
+            await room.perform_action(name, "pass", {})
+        view = room.view_for("b")
+        self.assertTrue(view["free_lead"])
+        self.assertEqual(view["table_plays"], {})
+
     def test_guandan_combos_are_ordered_by_structure(self):
         cases = [
             ([card(9, 0), card(7, 0), card(9, 1), card(7, 1), card(9, 2)],

@@ -143,6 +143,39 @@ console.log(`PASS Python/JavaScript parity for ${fixtures.cases.length} hands an
   await setRoom('guandan');
   assert.equal(await page.locator('#desktopRoomChat.compact-room-chat').count(), 1);
   assert.equal(await page.locator('.gd-seat .casual-avatar img').count(), 4);
+  assert.equal(await page.locator('.gd-table-play.pos-right .gcard').count(), 2,
+    'the last play is shown in front of its player');
+  assert.equal(await page.locator('.gd-center .gcard').count(), 0,
+    'played cards are no longer shown in the center');
+  const allSeatPlays = {table_plays:{
+    p0:{type:'single',label:'单张 3',cards:[{r:3,s:0}]},
+    p1:{type:'single',label:'单张 4',cards:[{r:4,s:0}]},
+    p2:{type:'single',label:'单张 7',cards:[{r:7,s:0}]},
+    p3:{type:'pair',label:'对子 5',cards:[{r:5,s:0},{r:5,s:1}]},
+  }};
+  await setRoom('guandan', allSeatPlays);
+  assert.equal(await page.locator('.gd-table-play').count(), 4,
+    'each player keeps their latest play for the current round');
+  assert.equal(await page.locator('.gd-table-play.is-standing').getAttribute('data-username'), 'p3');
+  for (const [width,height] of [[320,568],[844,390],[1440,900]]) {
+    await page.setViewportSize({width,height});
+    await setRoom('guandan', allSeatPlays);
+    const layout = await page.evaluate(() => {
+      const boxes = [...document.querySelectorAll('.gd-table-play, .gd-seat')]
+        .map(node => ({name:node.className, rect:node.getBoundingClientRect()}));
+      const overlapping = boxes.flatMap((a,i) => boxes.slice(i+1).filter(b =>
+        a.rect.left < b.rect.right && a.rect.right > b.rect.left &&
+        a.rect.top < b.rect.bottom && a.rect.bottom > b.rect.top)
+        .map(b => `${a.name} / ${b.name}`));
+      return {boxes:boxes.map(({name,rect})=>({name,x:rect.x,y:rect.y,width:rect.width,height:rect.height})),overlapping};
+    });
+    assert.deepEqual(layout.overlapping, [], `${width}px seat plays must remain separate from seats and each other: ${JSON.stringify(layout.boxes)}`);
+    if (process.env.TABLE_SCREENSHOT_DIR) await page.screenshot({
+      path:path.join(process.env.TABLE_SCREENSHOT_DIR,`guandan-four-plays-${width}.png`),fullPage:true,
+    });
+  }
+  await page.setViewportSize({width:1440,height:900});
+  await setRoom('guandan');
   assert.deepEqual(await page.evaluate(()=>{
    const avatar=document.querySelector('.gd-seat.me .casual-avatar').getBoundingClientRect();
    const status=document.querySelector('.gd-status, .gd-table > .poker-status').getBoundingClientRect();
@@ -184,7 +217,7 @@ console.log(`PASS Python/JavaScript parity for ${fixtures.cases.length} hands an
   await setRoom('guandan', {players:fixtures.rooms.guandan.players.map((p,i)=>({...p,passed:i===1}))});
   assert.equal(await page.evaluate(()=>{
    const a=document.querySelector('.gd-seat.pos-left .gs-pass')?.getBoundingClientRect();
-   const b=document.querySelector('.gd-standing-cards')?.getBoundingClientRect();
+   const b=document.querySelector('.gd-table-play.pos-right')?.getBoundingClientRect();
    return Boolean(a&&b&&a.left<b.right&&a.right>b.left&&a.top<b.bottom&&a.bottom>b.top);
   }),false,'player status must not overlap played cards');
 
@@ -193,10 +226,12 @@ console.log(`PASS Python/JavaScript parity for ${fixtures.cases.length} hands an
    your_hand:[{r:3,s:0},{r:3,s:1},{r:3,s:2},{r:14,s:0},{r:2,s:1}],
    standing:{by:'p3',type:'triple_pair',tier:0,main:[1,3],len:5,label:'三带二 3',
     cards:[{r:3,s:0},{r:3,s:1},{r:3,s:2},{r:2,s:1},{r:14,s:0}]},
+   table_plays:{p3:{type:'triple_pair',label:'三带二 3',
+    cards:[{r:3,s:0},{r:3,s:1},{r:3,s:2},{r:2,s:1},{r:14,s:0}]}},
   });
-  assert.deepEqual(await page.locator('.gd-standing-cards .gcard').evaluateAll(cards=>
+  assert.deepEqual(await page.locator('.gd-table-play.pos-right .gcard').evaluateAll(cards=>
     cards.map(card=>Number(card.dataset.rank))),[3,3,3,2,14]);
-  assert.equal(await page.locator('.gd-standing-cards .gcard.wild').count(),1,
+  assert.equal(await page.locator('.gd-table-play.pos-right .gcard.wild').count(),1,
     'played wild card remains marked inside its represented group');
   assert.equal(await page.locator('.gd-hand .gcard.wild').count(),1,
     'wild card in hand uses the same visual treatment');
@@ -271,7 +306,7 @@ console.log(`PASS Python/JavaScript parity for ${fixtures.cases.length} hands an
      assert.ok(await page.evaluate(()=>{
       const status=document.querySelector('.gd-status').getBoundingClientRect();
       const arena=document.querySelector('.gd-arena').getBoundingClientRect();
-      const cards=document.querySelector('.gd-standing-cards').getBoundingClientRect();
+      const cards=document.querySelector('.gd-table-play.pos-right').getBoundingClientRect();
       const levels=document.querySelector('.gd-levels').getBoundingClientRect();
       return levels.bottom<=status.top&&status.bottom<=arena.top&&status.bottom<=cards.top;
      }),`${width}px long activity text stays above the cards`);

@@ -476,6 +476,15 @@ class GuandanRoom(BaseRoom):
                         "cards": [{"r": c["r"], "s": c["s"]}
                                   for c in standing["cards"]],
                     },
+                    "table_plays": {
+                        name: {
+                            "type": play["type"],
+                            "label": play["label"],
+                            "cards": [{"r": c["r"], "s": c["s"]}
+                                      for c in play["cards"]],
+                        }
+                        for name, play in g["table_plays"].items()
+                    },
                     "passed": sorted(g["passed"]),
                     "last_action": g.get("last_action"),
                     "result": g.get("result"),
@@ -588,6 +597,7 @@ class GuandanRoom(BaseRoom):
             "free_lead": True,
             "standing": None,
             "standing_by": None,
+            "table_plays": {},
             "passed": set(),
             "finish": [],
             "bombs": 0,
@@ -650,6 +660,7 @@ class GuandanRoom(BaseRoom):
             g["bombs"] += 1
         g["standing"] = combo
         g["standing_by"] = username
+        g["table_plays"][username] = combo
         g["free_lead"] = False
         g["passed"] = set()
         g["last_action"] = {
@@ -690,6 +701,7 @@ class GuandanRoom(BaseRoom):
             g["free_lead"] = True
             g["standing"] = None
             g["standing_by"] = None
+            g["table_plays"] = {}
             g["passed"] = set()
             if leader is None or leader not in self.members or leader in g["finish"]:
                 leader = self.next_unfinished(leader or g["ring"][0])

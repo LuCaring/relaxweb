@@ -27,14 +27,25 @@
 .gd-seat .rating-badge { font-size: 10px; color: #c0d4ef; background: none; }
 .gs-role, .gs-pass { border-radius: 12px; padding: 3px 9px; font-size: 12px; background: #ffda82; color: #604018; }
 .gs-pass { background: #ffffff15; color: #bed1e8; }
-.gd-center { position: absolute; left: 50%; top: 66%; transform: translate(-50%, -50%); width: calc(100% - 300px); max-width: 650px; display: flex; flex-direction: column; align-items: center; gap: 12px; }
-.gd-standing-cards { display: flex; justify-content: safe center; max-width: 100%; overflow-x: auto; padding: 5px; }
-.gd-standing-cards .gcard + .gcard { margin-left: -20px; }
-.gd-standing-cards.combo-triple_pair .gcard:nth-child(4),
-.gd-standing-cards.combo-pairs_seq .gcard:nth-child(2n + 3),
-.gd-standing-cards.combo-triple_seq .gcard:nth-child(3n + 4) { margin-left: -8px; }
-.gd-standing-by, .gd-free-lead { font-size: 13px; color: #ffdf95; text-align: center; }
-.gd-free-lead { color: #c1d5ed; }
+.gd-table-plays { position: absolute; inset: 0; pointer-events: none; }
+.gd-table-play { position: absolute; display: flex; flex-direction: column; align-items: center; gap: 4px; max-width: 100%; color: #d2e2f5; }
+.gd-table-play.pos-top { top: 126px; left: 50%; width: 60%; transform: translateX(-50%); }
+.gd-table-play.pos-left { top: 62%; left: 120px; width: calc(50% - 128px); transform: translateY(-50%); }
+.gd-table-play.pos-right { top: 62%; right: 120px; width: calc(50% - 128px); transform: translateY(-50%); }
+.gd-table-play.pos-bottom { bottom: 8px; left: 120px; width: calc(100% - 135px); }
+.gd-play-cards { display: flex; justify-content: safe center; max-width: 100%; overflow-x: auto; padding: 3px; pointer-events: auto; }
+.gd-play-cards .gcard { width: 38px; height: 52px; padding: 4px; border-radius: 5px; }
+.gd-play-cards .gc-rank { font-size: 15px; }
+.gd-play-cards .gc-suit { font-size: 11px; margin-top: 2px; }
+.gd-play-cards .gcard .gc-joker-icon { width: 16px; height: 16px; }
+.gd-play-cards .gcard + .gcard { margin-left: -17px; }
+.gd-play-cards.combo-triple_pair .gcard:nth-child(4),
+.gd-play-cards.combo-pairs_seq .gcard:nth-child(2n + 3),
+.gd-play-cards.combo-triple_seq .gcard:nth-child(3n + 4) { margin-left: -7px; }
+.gd-play-label { max-width: 100%; padding: 2px 7px; border-radius: 10px; background: #0b2341a8; font-size: 11px; line-height: 1.2; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.gd-table-play.is-standing .gd-play-label { background: #6b481c; color: #ffdf95; font-weight: 700; }
+.gd-center { position: absolute; left: 50%; top: 60%; transform: translate(-50%, -50%); width: 40%; display: flex; justify-content: center; pointer-events: none; }
+.gd-free-lead { font-size: 13px; color: #c1d5ed; text-align: center; }
 .gcard { position: relative; display: inline-flex; flex: none; flex-direction: column; align-items: flex-start; justify-content: flex-start; width: 64px; height: 88px; padding: 8px; border: 1px solid #d0d9e4; border-radius: 8px; background: linear-gradient(135deg, #fff, #f1f5fa); box-shadow: 0 3px 5px #08203c44; color: #1d2838; font-weight: 800; line-height: 1.1; }
 .gcard.red { color: #d23a52; }
 .gc-rank { font-size: 21px; }
@@ -72,8 +83,16 @@
     .gs-relation { top: 35px; font-size: 9px; }
     .gd-seat .rating-badge { display: none; }
     .gs-info { gap: 3px; font-size: 10px; }
-    .gd-center { width: calc(100% - 155px); top: 64%; }
-    .gd-standing-by { font-size: 11px; }
+    .gd-table-play.pos-top { top: 99px; width: min(66%, calc(100% - 184px)); }
+    .gd-table-play.pos-left { top: 64%; left: 80px; width: calc(50% - 84px); }
+    .gd-table-play.pos-right { top: 64%; right: 80px; width: calc(50% - 84px); }
+    .gd-table-play.pos-bottom { left: 80px; width: calc(100% - 86px); }
+    .gd-play-cards .gcard { width: 32px; height: 44px; padding: 3px; }
+    .gd-play-cards .gc-rank { font-size: 13px; }
+    .gd-play-cards .gc-suit { font-size: 10px; }
+    .gd-play-cards .gcard + .gcard { margin-left: -19px; }
+    .gd-play-label { font-size: 10px; }
+    .gd-center { top: 56%; width: 30%; }
     .gcard { width: 52px; height: 74px; padding: 6px; }
     .gc-rank { font-size: 19px; }
     .gc-suit { font-size: 14px; }
@@ -107,7 +126,15 @@
     .gd-seat.pos-top .casual-avatar, .gd-seat.pos-top .rating-badge, .gd-seat.pos-bottom .gs-relation { display: none; }
     .gs-relation { position: static; }
     .gd-seat .rating-badge { display: none; }
-    .gd-center { top: 78%; gap: 3px; }
+    .gd-table-play.pos-top { top: 69px; }
+    .gd-table-play.pos-left, .gd-table-play.pos-right { top: 63%; }
+    .gd-table-play.pos-bottom { bottom: 5px; }
+    .gd-play-cards .gcard { width: 28px; height: 36px; padding: 3px; }
+    .gd-play-cards .gc-rank { font-size: 12px; }
+    .gd-play-cards .gc-suit { font-size: 9px; }
+    .gd-play-cards .gcard .gc-joker-icon { width: 12px; height: 12px; }
+    .gd-play-label { font-size: 9px; }
+    .gd-center { top: 57%; }
     .gd-dock > .countdown, .gd-selection-status { display: none; }
     .gcard { width: 40px; height: 56px; padding: 5px; }
     .gc-rank { font-size: 15px; }
