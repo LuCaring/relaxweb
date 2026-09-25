@@ -376,6 +376,17 @@ html, body {
   object-fit: cover;
 }
 .dgn-owned-items .dgn-none { color: #55483a; font-size: 12px; }
+.dgn-owned-item { display: inline-flex; cursor: pointer; border: 1px solid transparent; border-radius: 8px; }
+.dgn-owned-weapons .dgn-selected, .dgn-owned-items .dgn-selected { border-color: var(--dgn-accent); box-shadow: 0 0 0 2px rgba(232,163,61,.2); }
+.dgn-gear-detail { white-space: pre-line; font-size: 12px; line-height: 1.55; color: var(--dgn-text); margin-bottom: 8px; }
+.dgn-currency-panel { display: grid; grid-template-columns: 1fr 1fr; gap: 5px; }
+.dgn-currency-btn { font-size: 11px; padding: 6px 4px; }
+.dgn-affix-odds, .dgn-affix-note { font-size: 11px; color: var(--dgn-dim); line-height: 1.5; }
+.dgn-affix-odds { margin: 8px 0 3px; }
+.dgn-affix-odds-detail { max-height: 180px; overflow: auto; color: var(--dgn-dim); font-size: 11px; line-height: 1.5; }
+.dgn-affix-odds-detail summary { cursor: pointer; color: var(--dgn-accent); }
+.dgn-affix-odds-detail ul { margin: 5px 0 0; padding-left: 18px; }
+.dgn-card-desc { white-space: pre-line; }
 .dgn-stats-panel { display: grid; grid-template-columns: 1fr 1fr; gap: 4px 12px; font-size: 13px; }
 .dgn-stats-panel .dgn-stat b { color: var(--dgn-accent); float: right; }
 

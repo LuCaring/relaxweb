@@ -3,6 +3,7 @@
  * 只做本地模拟；正式版由服务端 dungeon_beta_* 状态读模型持有权威数据。
  */
 import { BASE_STATS, MAX_WEAPON_SLOTS, XP_FOR_LEVEL } from "./dgn-beta-data.js";
+import { makeGear } from "./dgn-beta-crafting.js";
 
 export function createState() {
   return {
@@ -11,8 +12,9 @@ export function createState() {
     level: 1,
     xp: 0,
     materials: 10,
-    weapons: ["starter_blade"],
+    weapons: [makeGear("weapon", "starter_blade", 1, () => 0, "normal")],
     items: [],
+    currencies: { transmutation: 1 },
     bonus: {}, // 升级选择累计的属性增量
     rerollCount: 0,
     shopOffers: [],
@@ -30,9 +32,17 @@ export function statsOf(run, deps = {}) {
     }
   };
   add(run.bonus);
-  for (const itemId of run.items) {
-    const item = itemPool.find((entry) => entry.id === itemId);
+  for (const gear of run.items) {
+    const item = itemPool.find((entry) => entry.id === gear.id);
     if (item) add(item.stats);
+  }
+  for (const gear of [...run.items, ...run.weapons]) {
+    for (const affix of gear.affixes || []) {
+      const key = affix.stat === "damage"
+        ? (gear.kind === "weapon" && deps.WEAPONS?.find((entry) => entry.id === gear.id)?.kind === "ranged" ? "rangedDmg" : "meleeDmg")
+        : affix.stat;
+      add({ [key]: affix.value });
+    }
   }
   return stats;
 }

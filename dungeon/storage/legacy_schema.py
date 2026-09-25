@@ -23,6 +23,7 @@ def init_dungeon(conn):
         tags_json TEXT NOT NULL DEFAULT '[]',
         effects_json TEXT NOT NULL DEFAULT '[]',
         affixes_json TEXT NOT NULL DEFAULT '[]',
+        item_level INTEGER NOT NULL DEFAULT 1 CHECK(item_level BETWEEN 1 AND 100),
         sell_coins INTEGER NOT NULL DEFAULT 0 CHECK(sell_coins >= 0),
         locked INTEGER NOT NULL DEFAULT 0 CHECK(locked IN (0,1)),
         location TEXT NOT NULL DEFAULT 'bag' CHECK(location IN ('bag','pending','sold')),
@@ -34,6 +35,18 @@ def init_dungeon(conn):
     for column in ("display_name", "visual_id"):
         if column not in columns:
             conn.execute(f"ALTER TABLE dungeon_items ADD COLUMN {column} TEXT")
+    if "item_level" not in columns:
+        conn.execute("ALTER TABLE dungeon_items ADD COLUMN item_level INTEGER NOT NULL DEFAULT 1 CHECK(item_level BETWEEN 1 AND 100)")
+    conn.execute("""CREATE TABLE IF NOT EXISTS dungeon_currency (
+        username TEXT NOT NULL COLLATE NOCASE,
+        currency_id TEXT NOT NULL,
+        amount INTEGER NOT NULL DEFAULT 0 CHECK(amount >= 0),
+        PRIMARY KEY(username,currency_id)
+    )""")
+    conn.execute("""CREATE TRIGGER IF NOT EXISTS delete_user_dungeon_currency
+        AFTER DELETE ON users BEGIN
+            DELETE FROM dungeon_currency WHERE username=OLD.username;
+        END""")
     conn.execute("CREATE INDEX IF NOT EXISTS idx_dungeon_items_owner ON dungeon_items(owner,location)")
     conn.execute("""CREATE TABLE IF NOT EXISTS dungeon_loadout (
         username TEXT NOT NULL COLLATE NOCASE,

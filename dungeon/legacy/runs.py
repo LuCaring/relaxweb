@@ -8,6 +8,7 @@ from uuid import uuid4
 
 from dungeon.legacy.catalog import (CATALOG, DungeonConfigError,
                                     prerequisite_key, validate_catalog)
+from dungeon.legacy.crafting import deterministic_rng, roll_affix
 from dungeon.legacy.combat import (BattleSnapshot, CombatError, advance,
                                    make_battle_snapshot, start)
 from dungeon.legacy.receipts import (REQUEST_ID_PATTERN, load_receipt,
@@ -194,7 +195,26 @@ def _roll_reward_v1(data, battle_id):
     return items
 
 
-REWARD_ROLLERS = {1: _roll_reward_v1}
+def _roll_reward_v2(data, battle_id):
+    """New snapshots freeze item level and independent currency probabilities."""
+    items = _roll_reward_v1(data, battle_id)
+    seed = bytes.fromhex(data["seed_hex"])
+    item_level = data["reward_table"].get("item_level", 1)
+    for index, item in enumerate(items):
+        item["item_level"] = item_level
+        target = 1 if item["quality"] == "excellent" else 4 if item["quality"] == "rare" else 0
+        rng = deterministic_rng(seed, b":affix:" + index.to_bytes(4, "big"))
+        for _ in range(target):
+            affix = roll_affix(item["slot"], item_level, item["affixes"], rng,
+                               rules=data.get("affix_rules"))
+            item["affixes"].append(affix)
+            stat = affix["stat"]
+            item["stats"] = dict(item["stats"])
+            item["stats"][stat] = item["stats"].get(stat, 0) + affix["value"]
+    return items
+
+
+REWARD_ROLLERS = {1: _roll_reward_v1, 2: _roll_reward_v2}
 
 
 def _award(conn, run, now_ms, adjust_coins):
@@ -212,22 +232,35 @@ def _award(conn, run, now_ms, adjust_coins):
     for item in items:
         item["location"] = "bag" if occupied < capacity else "pending"
         occupied += item["location"] == "bag"
-    payload = {"reward_token": token, "coins": reward["coins"], "items": items}
+    currencies = {}
+    if data.get("reward_rng_version") == 2:
+        seed = bytes.fromhex(data["seed_hex"])
+        for drop in reward.get("currency_drops", []):
+            rng = deterministic_rng(seed, b":currency:" + drop["currency_id"].encode())
+            if rng(10000) < drop["chance_bp"]:
+                currencies[drop["currency_id"]] = drop["amount"]
+    payload = {"reward_token": token, "coins": reward["coins"],
+               "items": items, "currencies": currencies}
     conn.execute("""INSERT INTO dungeon_rewards
         (reward_token,username,battle_id,payload_json,created_at) VALUES (?,?,?,?,?)""",
         (token, run["username"], run["battle_id"], _json(payload), now_ms // 1000))
     if reward["coins"]:
         adjust_coins(conn, run["username"], reward["coins"], "dungeon_reward",
                      "地下城挑战奖励", ref=f"dungeon:{run['battle_id']}")
+    for currency_id, amount in currencies.items():
+        conn.execute("""INSERT INTO dungeon_currency(username,currency_id,amount)
+            VALUES (?,?,?) ON CONFLICT(username,currency_id)
+            DO UPDATE SET amount=amount+excluded.amount""",
+            (run["username"], currency_id, amount))
     for item in items:
         conn.execute("""INSERT INTO dungeon_items
             (item_id,owner,template_id,template_version,display_name,visual_id,
-             slot,quality,stats_json,tags_json,effects_json,affixes_json,sell_coins,location,created_at)
-            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+             slot,quality,stats_json,tags_json,effects_json,affixes_json,item_level,sell_coins,location,created_at)
+            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
             (item["item_id"], run["username"], item["template_id"], item["template_version"],
              item["name"], item["visual_id"], item["slot"], item["quality"],
              _json(item["stats"]), _json(item["tags"]),
-             _json(item["effects"]), _json(item["affixes"]), item["sell_coins"],
+             _json(item["effects"]), _json(item["affixes"]), item.get("item_level", 1), item["sell_coins"],
              item["location"], now_ms // 1000))
     conn.execute("""UPDATE dungeon_progress
         SET clear_count=clear_count+1,first_clear_at=COALESCE(first_clear_at,?)
@@ -271,6 +304,7 @@ def _write_step(conn, run, step, now_ms, adjust_coins, command=None, rate=None,
         if step.result["outcome"] == "victory":
             reward = _award(conn, run, now_ms, adjust_coins)
             result.update({"coins_gained": reward["coins"], "items": reward["items"],
+                           "currencies": reward["currencies"],
                            "reward_token": reward["reward_token"]})
             token = reward["reward_token"]
     elif command == "abandon":

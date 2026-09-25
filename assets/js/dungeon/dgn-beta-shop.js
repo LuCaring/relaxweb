@@ -2,8 +2,9 @@
  * 地下城 Beta 原型 · 局间商店。
  * 卡片池 / 定价 / 重抽均为本地模拟；正式版由服务端发价、发奖事务结算。
  */
-import { ITEMS, STATS, UPGRADES, WEAPONS, MAX_WEAPON_SLOTS } from "./dgn-beta-data.js";
+import { ITEMS, STATS, WEAPONS, MAX_WEAPON_SLOTS } from "./dgn-beta-data.js";
 import { hasFreeWeaponSlot, statsOf } from "./dgn-beta-state.js";
+import { affixOdds, CURRENCIES, craftGear, formatAffix, makeGear, RARITY_NAMES } from "./dgn-beta-crafting.js";
 
 const OFFER_COUNT = 4;
 const BASE_REROLL_COST = 2;
@@ -14,12 +15,16 @@ function offerPrice(offer, wave) {
 }
 
 function rollOffer(rand, wave) {
-  const weapon = WEAPONS[Math.floor(rand() * WEAPONS.length)];
-  const item = ITEMS[Math.floor(rand() * ITEMS.length)];
-  // 武器出现概率 40%，其余为道具
-  return rand() < 0.4
-    ? { kind: "weapon", id: weapon.id }
-    : { kind: "item", id: item.id };
+  const maxTier = Math.min(3, 1 + Math.floor((wave - 1) / 4));
+  const kindRoll = rand();
+  if (kindRoll >= 0.85) {
+    const pool = CURRENCIES.filter((entry) => entry.tier <= maxTier);
+    return { kind: "currency", id: pool[Math.floor(rand() * pool.length)].id };
+  }
+  const kind = kindRoll < 0.38 ? "weapon" : "item";
+  const pool = (kind === "weapon" ? WEAPONS : ITEMS).filter((entry) => entry.tier <= maxTier);
+  const entry = pool[Math.floor(rand() * pool.length)];
+  return { kind, id: entry.id, gear: makeGear(kind, entry.id, wave, rand) };
 }
 
 export class Shop {
@@ -37,12 +42,16 @@ export class Shop {
       weaponCount: document.getElementById("dgn-weapon-count"),
       itemCount: document.getElementById("dgn-item-count"),
       statsPanel: document.getElementById("dgn-stats-panel"),
+      currencyPanel: document.getElementById("dgn-currency-panel"),
+      gearDetail: document.getElementById("dgn-gear-detail"),
+      affixOdds: document.getElementById("dgn-affix-odds"),
+      affixOddsDetail: document.getElementById("dgn-affix-odds-detail"),
     };
     this.el.reroll.addEventListener("click", () => this.reroll());
   }
 
   findById(kind, id) {
-    const pool = kind === "weapon" ? WEAPONS : ITEMS;
+    const pool = kind === "weapon" ? WEAPONS : kind === "item" ? ITEMS : CURRENCIES;
     return pool.find((entry) => entry.id === id);
   }
 
@@ -95,7 +104,7 @@ export class Shop {
     const run = this.state;
     const offer = run.shopOffers[index];
     const entry = this.findById(offer.kind, offer.id);
-    const price = offerPrice(offer, run.wave);
+    const price = offerPrice(entry, run.wave);
     if (run.materials < price) {
       this.hooks.onError?.("材料不足");
       return;
@@ -104,12 +113,13 @@ export class Shop {
       this.hooks.onError?.("武器栏已满（6），先卖掉一把");
       return;
     }
+    const beforeHp = statsOf(run, { ITEMS, WEAPONS }).maxHp;
     run.materials -= price;
-    if (offer.kind === "weapon") {
-      run.weapons.push(offer.id);
-    } else {
-      run.items.push(offer.id);
-    }
+    if (offer.kind === "weapon") run.weapons.push(offer.gear);
+    else if (offer.kind === "item") run.items.push(offer.gear);
+    else run.currencies[offer.id] = (run.currencies[offer.id] || 0) + 1;
+    const afterHp = statsOf(run, { ITEMS, WEAPONS }).maxHp;
+    run.hp = Math.min(afterHp, run.hp + Math.max(0, afterHp - beforeHp));
     run.shopOffers[index] = null;
     this.hooks.onBuy?.(offer);
     this.render();
@@ -118,10 +128,11 @@ export class Shop {
 
   sell(index) {
     const run = this.state;
-    const weaponId = run.weapons[index];
-    const weapon = this.findById("weapon", weaponId);
+    const weapon = this.findById("weapon", run.weapons[index].id);
     const refund = Math.max(1, Math.floor(weapon.price / 2));
     run.weapons.splice(index, 1);
+    run.hp = Math.min(run.hp, statsOf(run, { ITEMS, WEAPONS }).maxHp);
+    if (this.selected?.kind === "weapon") this.selected = null;
     run.materials += refund;
     this.render();
     this.hooks.onMaterialsChanged?.(run.materials);
@@ -131,9 +142,37 @@ export class Shop {
     return BASE_REROLL_COST + this.state.rerollCount;
   }
 
+  selectedGear() {
+    if (!this.selected) return null;
+    return this.state[this.selected.kind === "weapon" ? "weapons" : "items"][this.selected.index] || null;
+  }
+
+  selectGear(kind, index) {
+    this.selected = { kind, index };
+    this.render();
+  }
+
+  useCurrency(currencyId) {
+    const gear = this.selectedGear();
+    if (!gear) return this.hooks.onError?.("先选择一件装备");
+    if (!this.state.currencies[currencyId]) return this.hooks.onError?.("通货数量不足");
+    try {
+      const crafted = craftGear(gear, currencyId, Math.random);
+      const before = statsOf(this.state, { ITEMS, WEAPONS }).maxHp;
+      const pool = this.selected.kind === "weapon" ? this.state.weapons : this.state.items;
+      pool[this.selected.index] = crafted;
+      this.state.currencies[currencyId] -= 1;
+      const after = statsOf(this.state, { ITEMS, WEAPONS }).maxHp;
+      this.state.hp = Math.min(after, this.state.hp + Math.max(0, after - before));
+      this.render();
+    } catch (error) {
+      this.hooks.onError?.(error.message);
+    }
+  }
+
   render() {
     const run = this.state;
-    const stats = statsOf(run, { ITEMS });
+    const stats = statsOf(run, { ITEMS, WEAPONS });
     this.el.materials.textContent = run.materials;
     this.el.wave.textContent = run.wave;
     this.el.rerollCost.textContent = this.rerollCost();
@@ -152,13 +191,17 @@ export class Shop {
 
     this.el.weaponCount.textContent = run.weapons.length;
     this.el.itemCount.textContent = run.items.length;
-    const ownedSlots = this.state.weapons.map((id) => this.findById("weapon", id));
+    const ownedSlots = this.state.weapons.map((gear) => ({ gear, entry: this.findById("weapon", gear.id) }));
     while (ownedSlots.length < MAX_WEAPON_SLOTS) ownedSlots.push(null);
     const slots = ownedSlots;
-    this.el.ownedWeapons.replaceChildren(...slots.map((weapon, index) => {
+    this.el.ownedWeapons.replaceChildren(...slots.map((owned, index) => {
       const slot = document.createElement("div");
       slot.className = "dgn-wslot";
-      if (weapon) {
+      if (owned) {
+        const { gear, entry: weapon } = owned;
+        if (this.selected?.kind === "weapon" && this.selected.index === index) slot.classList.add("dgn-selected");
+        slot.title = `${weapon.name} · ${RARITY_NAMES[gear.rarity]} · 物品等级 ${gear.itemLevel}`;
+        slot.addEventListener("click", () => this.selectGear("weapon", index));
         if (weapon.icon) {
           const img = document.createElement("img");
           img.src = weapon.icon;
@@ -171,7 +214,7 @@ export class Shop {
         sell.className = "dgn-sell";
         sell.textContent = "×";
         sell.title = `卖掉（返还 ${Math.max(1, Math.floor(weapon.price / 2))}）`;
-        sell.addEventListener("click", () => this.sell(index));
+        sell.addEventListener("click", (event) => { event.stopPropagation(); this.sell(index); });
         slot.appendChild(sell);
       } else {
         slot.textContent = "+";
@@ -186,10 +229,12 @@ export class Shop {
       none.textContent = "还没有道具";
       this.el.ownedItems.appendChild(none);
     } else {
-      for (const itemId of run.items) {
-        const item = this.findById("item", itemId);
+      for (const [index, gear] of run.items.entries()) {
+        const item = this.findById("item", gear.id);
         const label = document.createElement("span");
-        label.title = `${item.name}：${item.desc}`;
+        label.title = `${item.name} · ${RARITY_NAMES[gear.rarity]} · ${gear.affixes.map((a) => formatAffix(a, gear)).join("，")}`;
+        label.className = "dgn-owned-item" + (this.selected?.kind === "item" && this.selected.index === index ? " dgn-selected" : "");
+        label.addEventListener("click", () => this.selectGear("item", index));
         if (item.icon) {
           const img = document.createElement("img");
           img.src = item.icon;
@@ -213,6 +258,47 @@ export class Shop {
       row.append(name, value);
       return row;
     }));
+    this.renderCrafting();
+  }
+
+  renderCrafting() {
+    const gear = this.selectedGear();
+    const entry = gear ? this.findById(gear.kind, gear.id) : null;
+    this.el.gearDetail.textContent = gear
+      ? `${entry.name} · ${RARITY_NAMES[gear.rarity]} · 物品等级 ${gear.itemLevel}\n${gear.affixes.length ? gear.affixes.map((a) => formatAffix(a, gear)).join("\n") : "尚无词条"}`
+      : "点击上方武器或道具选择改造目标";
+    this.el.currencyPanel.replaceChildren(...CURRENCIES.map((currency) => {
+      const button = document.createElement("button");
+      button.className = "dgn-btn dgn-currency-btn";
+      button.textContent = `${currency.emoji} ${currency.name} ×${this.state.currencies[currency.id] || 0}`;
+      button.title = `${currency.desc} · 每波独立掉落概率 ${(currency.chance * 100).toFixed(1)}%`;
+      button.disabled = !gear || !this.state.currencies[currency.id];
+      button.addEventListener("click", () => this.useCurrency(currency.id));
+      return button;
+    }));
+    const augmentKind = gear?.rarity === "magic" && gear.affixes.length === 1
+      ? (gear.affixes[0].kind === "prefix" ? "suffix" : "prefix") : null;
+    const odds = gear ? affixOdds(gear, augmentKind) : [];
+    const oddsScope = augmentKind ? "增幅石新增词条" : "自由新增词条";
+    const grouped = [1, 2, 3].map((tier) => ({ tier, chance: odds.filter((row) => row.tier === tier)
+      .reduce((sum, row) => sum + row.probability, 0) })).filter((row) => row.chance > 0);
+    this.el.affixOdds.textContent = gear
+      ? `${oddsScope}：${grouped.map((row) => `T${row.tier} ${(row.chance * 100).toFixed(1)}%`).join(" · ") || "无可用词条"}。单条概率按当前可选词条权重计算。`
+      : "词条概率会随物品等级和已有词条变化。";
+    this.el.affixOddsDetail.replaceChildren();
+    if (odds.length) {
+      const details = document.createElement("details");
+      const summary = document.createElement("summary");
+      summary.textContent = "查看每条词条概率";
+      const list = document.createElement("ul");
+      for (const row of odds.sort((a, b) => a.tier - b.tier || a.name.localeCompare(b.name))) {
+        const line = document.createElement("li");
+        line.textContent = `T${row.tier} ${row.name}：${(row.probability * 100).toFixed(2)}%（权重 ${row.weight}）`;
+        list.appendChild(line);
+      }
+      details.append(summary, list);
+      this.el.affixOddsDetail.appendChild(details);
+    }
   }
 
   renderCard(offer, index) {
@@ -246,20 +332,22 @@ export class Shop {
     name.textContent = entry.name;
     const tag = document.createElement("span");
     tag.className = "dgn-card-tag";
-    tag.textContent = offer.kind === "weapon" ? `武器 · T${entry.tier}` : `道具 · T${entry.tier}`;
+    tag.textContent = offer.kind === "currency" ? "通货" : `${offer.kind === "weapon" ? "武器" : "道具"} · 基底 T${entry.tier} · ${RARITY_NAMES[offer.gear.rarity]}`;
     head.append(name, tag);
     card.appendChild(head);
 
     const desc = document.createElement("div");
     desc.className = "dgn-card-desc";
-    desc.textContent = entry.desc;
+    desc.textContent = offer.gear
+      ? `${entry.desc} · 物品等级 ${offer.gear.itemLevel}${offer.gear.affixes.length ? "\n" + offer.gear.affixes.map((a) => formatAffix(a, offer.gear)).join(" · ") : ""}`
+      : entry.desc;
     card.appendChild(desc);
 
     const foot = document.createElement("div");
     foot.className = "dgn-card-foot";
     const price = document.createElement("span");
     price.className = "dgn-price";
-    price.textContent = offerPrice(offer, this.state.wave);
+    price.textContent = offerPrice(entry, this.state.wave);
     const buy = document.createElement("button");
     buy.className = "dgn-btn dgn-btn-primary";
     buy.textContent = "购买";

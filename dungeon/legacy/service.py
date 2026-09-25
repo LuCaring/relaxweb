@@ -5,6 +5,7 @@ from uuid import uuid4
 
 from dungeon.legacy.catalog import CATALOG, SLOTS, prerequisite_key, public_catalog
 from dungeon.legacy.effects import resolve_stats
+from dungeon.legacy.crafting import CURRENCIES, probability_table, public_rules
 from dungeon.domain.errors import DungeonError
 
 
@@ -77,7 +78,7 @@ def dungeon_state(conn, username, now, catalog=CATALOG):
     templates = {item["template_id"]: item for item in catalog["items"]}
     rows = conn.execute("""SELECT item_id,template_id,template_version,slot,quality,
         stats_json,tags_json,effects_json,affixes_json,sell_coins,locked,location,version,
-        display_name,visual_id FROM dungeon_items
+        display_name,visual_id,item_level FROM dungeon_items
         WHERE owner=? AND location<>'sold' ORDER BY created_at,item_id""", (username,)).fetchall()
     items = []
     for row in rows:
@@ -89,7 +90,7 @@ def dungeon_state(conn, username, now, catalog=CATALOG):
                       "stats": json.loads(row[5]), "tags": json.loads(row[6]),
                       "effects": json.loads(row[7]), "affixes": json.loads(row[8]),
                       "sell_coins": row[9], "locked": bool(row[10]),
-                      "location": row[11], "version": row[12]})
+                      "location": row[11], "version": row[12], "item_level": row[15]})
     loadout = dict(conn.execute("SELECT slot,item_id FROM dungeon_loadout WHERE username=?",
                                 (username,)).fetchall())
     by_id = {item["item_id"]: item for item in items}
@@ -110,14 +111,19 @@ def dungeon_state(conn, username, now, catalog=CATALOG):
     active = conn.execute("SELECT job_kind,job_id FROM dungeon_active_jobs WHERE username=?",
                           (username,)).fetchone()
     coins = conn.execute("SELECT coins FROM users WHERE username=?", (username,)).fetchone()[0]
+    currencies = {currency_id: amount for currency_id, amount in conn.execute(
+        "SELECT currency_id,amount FROM dungeon_currency WHERE username=? AND amount>0",
+        (username,))}
     return {"phase": "battle" if active else "equipment", "profile_version": profile[1],
             "bag_capacity": profile[0], "catalog": public_catalog(catalog),
             "items": items, "loadout": loadout, "stats": panel,
+            "currencies": currencies, "crafting_rules": public_rules(),
             "progress": progress, "pending_count": sum(item["location"] == "pending" for item in items),
             "active_job": {"kind": active[0], "id": active[1]} if active else None,
             "coins": round(coins or 0, 2),
             "available_actions": ["dungeon_equip", "dungeon_lock_item", "dungeon_sell_item",
-                                  "dungeon_claim_items", "dungeon_compare_item",
+                                  "dungeon_claim_items", "dungeon_use_currency",
+                                  "dungeon_compare_item", "dungeon_affix_probabilities",
                                   "dungeon_start", "dungeon_sync", "dungeon_control",
                                   "dungeon_get_result"]}
 
@@ -139,3 +145,32 @@ def compare_item(conn, username, item_id, now, catalog=CATALOG):
             "profile_version": state["profile_version"],
             "current": current, "preview": preview,
             "delta": {stat: value - current[stat] for stat, value in preview["values"].items()}}
+
+
+def affix_probabilities(conn, username, item_id, now, catalog=CATALOG,
+                        currency_id=None):
+    state = dungeon_state(conn, username, now, catalog)
+    item = next((entry for entry in state["items"] if entry["item_id"] == item_id), None)
+    if item is None:
+        raise DungeonError("not_found", "装备不存在")
+    kind = None
+    if currency_id is not None:
+        if currency_id not in CURRENCIES:
+            raise DungeonError("invalid_request", "通货编号无效")
+        rarity, affixes = item["quality"], item["affixes"]
+        if currency_id == "transmutation" and rarity == "normal" and not affixes:
+            pass
+        elif currency_id == "augmentation" and rarity == "excellent" and len(affixes) == 1:
+            kind = "suffix" if affixes[0]["kind"] == "prefix" else "prefix"
+        elif currency_id == "regal" and rarity == "excellent" and 1 <= len(affixes) <= 2:
+            pass
+        elif currency_id == "exalted" and rarity == "rare" and len(affixes) < 6:
+            pass
+        else:
+            raise DungeonError("currency_unavailable", "该通货没有单次新增词条的概率表")
+    pool = probability_table(item["slot"], item["item_level"], item["affixes"], kind=kind)
+    return {"item_id": item_id, "item_level": item["item_level"],
+            "affix_version": state["crafting_rules"]["version"],
+            "probability_model": "game_config_weighted", "currency_id": currency_id,
+            "probability_scope": "single_add" if currency_id else "generic_add",
+            "entries": pool}

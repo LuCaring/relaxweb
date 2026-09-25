@@ -7,6 +7,7 @@ import json
 from typing import Optional
 
 from dungeon.legacy.catalog import CATALOG, validate_catalog
+from dungeon.legacy.crafting import public_rules
 from dungeon.legacy.effects import STAT_FIELDS, validate_base_stats
 
 PLAYER_ID = "player:0"
@@ -57,6 +58,8 @@ def make_battle_snapshot(challenge_id, difficulty_id, player_stats, equipment,
     templates = {row["template_id"]: row for row in catalog["items"]}
     reward_table = {"reward_table_id": reward["reward_table_id"],
                     "coins": reward["coins"], "rolls": reward["rolls"],
+                    "item_level": reward.get("item_level", 1),
+                    "currency_drops": deepcopy(reward.get("currency_drops", [])),
                     "entries": [{"weight": entry["weight"],
                                  "item": templates[entry["template_id"]]}
                                 for entry in reward["entries"]]}
@@ -67,12 +70,13 @@ def make_battle_snapshot(challenge_id, difficulty_id, player_stats, equipment,
     # cannot affect a live run or its hash.
     payload = {"battle_id": battle_id, "config_version": catalog["config_version"],
                "simulation_version": catalog["simulation_version"],
-               "rng_version": catalog["rng_version"], "reward_rng_version": 1,
+               "rng_version": catalog["rng_version"], "reward_rng_version": 2,
                "seed_hex": seed.hex(),
                "challenge_id": challenge_id, "difficulty_id": difficulty_id,
                "player_stats": player_stats, "equipment": equipment,
                "effect_sources": effect_sources, "enemy": enemy,
                "combat": catalog["combat"], "reward_table": reward_table,
+               "affix_rules": public_rules(),
                "unlock_rules": unlock_rules}
     if set(player_stats) != set(STAT_FIELDS):
         raise ValueError("玩家属性字段不完整")
