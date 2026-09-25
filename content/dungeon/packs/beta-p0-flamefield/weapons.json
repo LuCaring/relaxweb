@@ -1,0 +1,20 @@
+[
+  {
+    "id": "beta.p0.weapon.bulwark_blade",
+    "name": "萤灯长剑·稳盾",
+    "slot": "weapon",
+    "visual_id": "beta.p0.visual.ruins_blade",
+    "stats": {"atk": 72},
+    "effects": ["beta.p0.effect.bulwark_guard"],
+    "trade": {"allowed": true, "reason": null}
+  },
+  {
+    "id": "beta.p0.weapon.tempo_blade",
+    "name": "萤灯长剑·蓄势",
+    "slot": "weapon",
+    "visual_id": "beta.p0.visual.ruins_blade",
+    "stats": {"atk": 72},
+    "effects": ["beta.p0.effect.tempo_guard"],
+    "trade": {"allowed": true, "reason": null}
+  }
+]
