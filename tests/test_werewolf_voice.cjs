@@ -253,26 +253,33 @@ print(json.dumps({n: accounts.create_session(n) for n in names}))
     }
     console.log('PASS lobby: creator and joiners share voice; two microphones publish and play audio');
 
-    // 按人音量混音器：除自己外每人一条滑杆；调整后写入缓存并作用于已挂载音轨
-    assert.equal(await players.va.page.locator('.voice-mixer-row').count(), 3,
-      'va should see one mixer row per other player');
-    await players.va.page.locator('.voice-mixer-row[data-voice-peer="vb"] .voice-mixer-range').fill('40');
+    // 按人音量齿轮菜单：除自己外每个成员条目一个齿轮；打开浮层调整后
+    // 写入缓存并作用于已挂载音轨
+    assert.equal(await players.va.page.locator('.waiting-seat .seat-volume-gear:visible').count(), 3,
+      'va should see one volume gear per other player');
+    assert.equal(await players.va.page.locator('.waiting-seat.is-me .seat-volume-gear').isVisible(), false,
+      'own seat must not show a volume gear');
+    await players.va.page.locator('.waiting-seat[data-username="vb"] .seat-volume-gear').click();
+    assert.equal(await players.va.page.locator('.waiting-seat[data-username="vb"] .peer-volume-popover').isVisible(), true,
+      'gear click opens the volume popover');
+    await players.va.page.locator('.waiting-seat[data-username="vb"] .peer-volume-range').fill('40');
     assert.equal(await players.va.page.evaluate(() => {
       const saved = JSON.parse(localStorage.getItem('voicePeerVolumes') || '[]');
       const pair = saved.find(([name]) => name === 'vb');
       return pair ? pair[1] : null;
-    }), 40, 'slider input persists the per-peer volume');
+    }), 40, 'popover slider input persists the per-peer volume');
     await players.va.page.waitForFunction(() => {
       const element = document.querySelector('audio[data-voice-peer="vb"]');
       return element && Math.abs(element.volume - 0.4) < 0.01;
     }, null, { timeout: 5000, polling: 100 });
-    // 缓存继承：刷新页面后滑杆恢复为保存的值
+    // 缓存继承：刷新页面后重新打开浮层，滑杆恢复为保存的值
     await players.va.page.reload();
     await players.va.page.waitForFunction(
-      () => Boolean(document.querySelector('.voice-mixer-row[data-voice-peer="vb"] .voice-mixer-range')),
+      () => Boolean(document.querySelector('.waiting-seat[data-username="vb"] .seat-volume-gear')),
       null, { timeout: 15000, polling: 100 });
-    assert.equal(await players.va.page.locator('.voice-mixer-row[data-voice-peer="vb"] .voice-mixer-range').inputValue(), '40',
-      'mixer slider restores persisted volume after reload');
+    await players.va.page.locator('.waiting-seat[data-username="vb"] .seat-volume-gear').click();
+    assert.equal(await players.va.page.locator('.waiting-seat[data-username="vb"] .peer-volume-range').inputValue(), '40',
+      'volume popover restores persisted value after reload');
     // 恢复测试用的模块绑定（刷新后 window.voice/window.core 丢失）
     await players.va.page.evaluate(async () => {
       const main = [...document.scripts].find((script) => script.type === 'module'
@@ -285,7 +292,7 @@ print(json.dumps({n: accounts.create_session(n) for n in names}))
     await players.va.page.waitForFunction(
       () => core.state.currentUser?.username && voice.voiceDebug().room?.endsWith('-lobby'),
       null, { timeout: 15000, polling: 100 });
-    console.log('PASS mixer: per-peer sliders render, persist and survive reload');
+    console.log('PASS mixer: per-peer volume gears render, persist and survive reload');
 
     // 本地电平表与阈值门控：刷新后重新上麦（假麦为 440Hz 振荡器，电平稳非零）
     for (const name of ['va', 'vb']) {

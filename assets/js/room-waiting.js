@@ -2,11 +2,11 @@
 
 import { elements, formatCoins, formatCoinsWhole, isRoomOwner, ratingBadge, send, state, stopHallTicker } from "./core.js";
 import { gameMetaById } from "./game-config.js";
+import { attachPeerVolumeMenu } from "./peer-volume-menu.js";
 import { gameView } from "./registry.js";
 import { chatOpenButton, reapplySeatBubbles } from "./room-chat.js";
-import { enableVoiceAudio, toggleMic, voiceMicWanted, voiceStatus } from "./room-voice.js";
-import { getPeerVolume, micGateOpen, micGateSettings, micLevel, micPipelineActive, setMicGateSettings,
-  setPeerVolume } from "./voice-mic.js";
+import { voiceStatus } from "./room-voice.js";
+import { mountVoiceControls } from "./voice-controls.js";
 
 function el(tag, className, text) {
   const node = document.createElement(tag);
@@ -14,6 +14,9 @@ function el(tag, className, text) {
   if (text !== undefined) node.textContent = text;
   return node;
 }
+
+// 成员条目上的按人音量菜单句柄，按行元素记取，updatePlayerRow 里按需显隐
+const seatVolumeMenus = new WeakMap();
 
 function playerRow() {
   const row = el("div", "waiting-seat");
@@ -30,7 +33,9 @@ function playerRow() {
   const rating = el("div", "waiting-seat-rating");
   const stack = el("div", "waiting-seat-stack");
   stack.append(el("small", "", "筹码"), el("strong"));
-  row.append(number, person, rating, stack);
+  const volume = el("div", "waiting-seat-volume");
+  row.append(number, person, rating, stack, volume);
+  seatVolumeMenus.set(row, attachPeerVolumeMenu(row));
   row.classList.add("waiting-seat-enter");
   window.setTimeout(() => row.classList.remove("waiting-seat-enter"), 420);
   return row;
@@ -71,6 +76,10 @@ function updatePlayerRow(row, player, index, room) {
   if (!(player.stack > 0)) badges.append(el("span", "waiting-no-chips-badge", "筹码不足"));
   row.querySelector(".waiting-seat-rating").replaceChildren(ratingBadge(player.rating));
   row.querySelector(".waiting-seat-stack strong").textContent = formatCoins(player.stack);
+  // 语音房里其他成员的行尾提供按人音量齿轮；自己或无声聊天的游戏隐藏
+  const volumePeer = gameMetaById(room.game_type)?.voice
+    && player.username !== state.currentUser?.username ? player.username : "";
+  seatVolumeMenus.get(row)?.update(volumePeer, Boolean(volumePeer));
 }
 
 function syncPlayers(list, room) {
@@ -159,146 +168,14 @@ function ruleItems(room) {
   }
 }
 
+// 等待页语音面板句柄：voicePanel() 创建时生成，刷新时转交连接状态
+let waitingVoiceControls = null;
+
 function refreshWaitingVoice(root, room) {
   const panel = root.querySelector(".waiting-voice");
   panel.hidden = !gameMetaById(room.game_type)?.voice || !window.LIVE_CONFIG?.voice?.enabled;
   if (panel.hidden) return;
-  const preview = Boolean(window.LIVE_CONFIG?.voice?.preview);
-  const status = voiceStatus();
-  const on = status.connected && status.canPublish && voiceMicWanted();
-  const button = panel.querySelector(".waiting-voice-mic");
-  button.disabled = preview || !status.connected || !status.canPublish;
-  button.classList.toggle("on", on);
-  button.textContent = on ? "🎙 关闭麦克风" : "🎙 开启麦克风";
-  button.setAttribute("aria-pressed", String(on));
-  panel.querySelector(".waiting-voice-status").textContent = preview
-    ? "布局预览 · 麦克风未连接"
-    : !status.connected ? "语音连接中，连接后可测试麦克风"
-    : status.micError || (on ? "麦克风已开启，可以和房内玩家交谈" : "已连接 · 麦克风关闭");
-  panel.querySelector(".waiting-voice-audio").hidden = !status.audioBlocked;
-  refreshVoiceMeter(root, status);
-  refreshVoiceGate(root, status);
-  syncVoiceMixer(root, room);
-}
-
-// 电平条显示刻度：RMS × 200，实测语音（0.1–0.4）落在 20%–80%
-const METER_SCALE = 200;
-const METER_SILENT_RMS = 0.004;
-const meterLoops = new WeakMap();
-
-function refreshVoiceMeter(root, status) {
-  const block = root.querySelector(".waiting-voice-meter");
-  if (!block) return;
-  block.hidden = !status.connected;
-  if (block.hidden) return;
-  if (meterLoops.has(root)) return;
-  meterLoops.set(root, true);
-  const fill = block.querySelector(".voice-meter-fill");
-  const bar = block.querySelector(".voice-meter");
-  const threshold = block.querySelector(".voice-meter-threshold");
-  const note = block.querySelector(".voice-meter-note");
-  let silentSince = 0;
-  const setNote = (text, tone) => {
-    if (note.textContent !== text) note.textContent = text;
-    if (tone) note.dataset.tone = tone;
-    else delete note.dataset.tone;
-  };
-  const frame = () => {
-    if (!root.isConnected) {
-      meterLoops.delete(root);
-      return;
-    }
-    const active = voiceStatus().connected && voiceMicWanted();
-    const level = active ? micLevel() : 0;
-    fill.style.width = `${Math.min(100, Math.round(level * METER_SCALE))}%`;
-    const settings = micGateSettings();
-    const ready = micPipelineActive();
-    const gateOn = settings.gateEnabled && ready;
-    // 阈值滑块嵌在电平条上：0–50 线性映射与电平刻度（RMS×200）一致，
-    // 把手位置即静默分界，拖动即可对着实时电平选阈值。
-    bar.classList.toggle("gate-on", gateOn);
-    bar.style.setProperty("--gate-at",
-      `${Math.min(100, Math.round(settings.gateThreshold * METER_SCALE / 100))}%`);
-    threshold.disabled = !ready;
-    threshold.classList.toggle("is-active", gateOn);
-    if (threshold.value !== String(settings.gateThreshold)) {
-      threshold.value = String(settings.gateThreshold);
-    }
-    fill.classList.toggle("is-gated", gateOn && !micGateOpen());
-    if (active && level < METER_SILENT_RMS) {
-      silentSince = silentSince || performance.now();
-      setNote(performance.now() - silentSince > 2000 ? "未检测到声音，请检查麦克风" : "", "warn");
-    } else if (gateOn && !micGateOpen()) {
-      silentSince = 0;
-      setNote("低于阈值 · 静默中", "info");
-    } else {
-      silentSince = 0;
-      setNote("", "");
-    }
-    requestAnimationFrame(frame);
-  };
-  requestAnimationFrame(frame);
-}
-
-function refreshVoiceGate(root, status) {
-  const block = root.querySelector(".waiting-voice-gate");
-  if (!block) return;
-  block.hidden = !status.connected;
-  if (block.hidden) return;
-  const settings = micGateSettings();
-  block.querySelector(".voice-gate-toggle").checked = settings.gateEnabled;
-  block.querySelector(".voice-gate-value").textContent = `阈值 ${settings.gateThreshold}%`;
-  block.querySelector(".voice-gate-hint").hidden = micPipelineActive();
-}
-
-function voiceMixerRow() {
-  const row = el("div", "voice-mixer-row");
-  const name = el("span", "voice-mixer-name");
-  const slider = el("input", "voice-mixer-range");
-  slider.type = "range";
-  slider.min = "0";
-  slider.max = "100";
-  slider.step = "5";
-  const value = el("span", "voice-mixer-value");
-  slider.addEventListener("input", () => {
-    if (!row.dataset.voicePeer) return;
-    const volume = setPeerVolume(row.dataset.voicePeer, Number(slider.value) || 0);
-    value.textContent = `${volume}%`;
-  });
-  row.append(name, slider, value);
-  return row;
-}
-
-function syncVoiceMixer(root, room) {
-  const rows = root.querySelector(".voice-mixer-rows");
-  if (!rows) return;
-  const me = state.currentUser?.username;
-  const others = (room.players || []).filter((player) => player.username && player.username !== me);
-  const existing = new Map([...rows.querySelectorAll(".voice-mixer-row")]
-    .map((row) => [row.dataset.voicePeer, row]));
-  const keep = new Set();
-  for (const player of others) {
-    keep.add(player.username);
-    let row = existing.get(player.username);
-    if (!row) {
-      row = voiceMixerRow();
-      rows.append(row);
-    }
-    row.dataset.voicePeer = player.username;
-    const label = player.nickname || player.username;
-    row.querySelector(".voice-mixer-name").textContent = label;
-    const slider = row.querySelector(".voice-mixer-range");
-    const value = row.querySelector(".voice-mixer-value");
-    const volume = getPeerVolume(player.username);
-    if (slider.value !== String(volume)) slider.value = String(volume);
-    if (value.textContent !== `${volume}%`) value.textContent = `${volume}%`;
-    if (slider.getAttribute("aria-label") !== `${label} 音量`) {
-      slider.setAttribute("aria-label", `${label} 音量`);
-    }
-  }
-  for (const [username, row] of existing) {
-    if (!keep.has(username)) row.remove();
-  }
+  waitingVoiceControls?.refresh(voiceStatus());
 }
 
 function refreshWaitingRoom(root) {
@@ -350,56 +227,7 @@ function refreshWaitingRoom(root) {
 
 function voicePanel() {
   const voice = el("div", "waiting-voice");
-  const info = el("div", "waiting-voice-info");
-  info.append(el("strong", "", "开局前语音调试"),
-    el("span", "", "等待区可以自由聊天；开局后会自动切换到游戏语音频道。"));
-  const actions = el("div", "waiting-voice-actions");
-  const status = el("span", "waiting-voice-status");
-  status.setAttribute("aria-live", "polite");
-  const audio = el("button", "waiting-voice-audio", "🔊 开启声音");
-  audio.type = "button";
-  audio.addEventListener("click", () => { void enableVoiceAudio(); });
-  const mic = el("button", "waiting-voice-mic");
-  mic.type = "button";
-  mic.addEventListener("click", () => { void toggleMic(); });
-  actions.append(status, audio, mic);
-  const meter = el("div", "waiting-voice-meter");
-  meter.hidden = true;
-  const meterHead = el("div", "voice-meter-head");
-  meterHead.append(el("strong", "", "麦克风电平"), el("span", "voice-meter-note"));
-  const bar = el("div", "voice-meter");
-  bar.setAttribute("aria-hidden", "true");
-  bar.append(el("span", "voice-meter-fill"));
-  const threshold = el("input", "voice-meter-threshold");
-  threshold.type = "range";
-  threshold.min = "0";
-  threshold.max = "50";
-  threshold.step = "1";
-  threshold.setAttribute("aria-label", "噪声门阈值");
-  bar.append(threshold);
-  meter.append(meterHead, bar);
-  const gate = el("div", "waiting-voice-gate");
-  gate.hidden = true;
-  const gateLabel = el("label", "voice-gate-check");
-  const gateToggle = el("input", "voice-gate-toggle");
-  gateToggle.type = "checkbox";
-  gateLabel.append(gateToggle, el("span", "", "低于阈值时自动静默（噪声门）"));
-  const gateValue = el("span", "voice-gate-value");
-  const gateHint = el("span", "voice-gate-hint", "重新开启麦克风后生效");
-  gateToggle.addEventListener("change", () => {
-    setMicGateSettings({ gateEnabled: gateToggle.checked });
-  });
-  threshold.addEventListener("input", () => {
-    const settings = setMicGateSettings({ gateThreshold: Number(threshold.value) || 0 });
-    gateValue.textContent = `阈值 ${settings.gateThreshold}%`;
-  });
-  gate.append(gateLabel, gateValue, gateHint);
-  const mixer = el("div", "waiting-voice-mixer");
-  const mixerHead = el("div", "waiting-voice-mixer-head");
-  mixerHead.append(el("strong", "", "成员音量"),
-    el("span", "waiting-voice-mixer-note", "只调自己听到的音量，下次进房自动沿用"));
-  mixer.append(mixerHead, el("div", "voice-mixer-rows"));
-  voice.append(info, actions, meter, gate, mixer);
+  waitingVoiceControls = mountVoiceControls(voice);
   return voice;
 }
 
