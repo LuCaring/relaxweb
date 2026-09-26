@@ -59,6 +59,7 @@ class Application:
         self.estate_protocol = EstateProtocol(
             database=database, clients=self.hub.clients, send_json=self.hub.send_json,
             send_encoded=self.hub.send_encoded, presence=self.estate_presence,
+            broadcast_system=self.chat.broadcast_system,
         )
         self.auth = AuthProtocol(database, self.hub, self.accounts, self.rooms, self.betting)
         self.admin = AdminProtocol(database, self.hub, self.wallet)

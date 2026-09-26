@@ -24,6 +24,7 @@ const ESTATE_MARKUP = `
       <div class="estate-hud-item"><small>金币</small><b data-estate-coins>--</b></div>
       <div class="estate-hud-item"><small>仓库</small><b data-estate-warehouse>--</b></div>
       <div class="estate-level"><b data-estate-level>Lv.1</b><span><i class="estate-xp-fill"></i></span></div>
+      <button class="estate-market-open" type="button" aria-haspopup="dialog" title="股市">📈 股市</button>
       <button class="estate-wardrobe-open" type="button" aria-label="打开角色衣橱" aria-haspopup="dialog" aria-expanded="false" title="角色衣橱"><span aria-hidden="true">♧</span> 衣橱</button>
       <button class="estate-audio-open" id="estateAudioSettingsButton" type="button" aria-label="音效设置" title="音效设置">🔊</button>
     </div>
@@ -67,6 +68,7 @@ function renderEstate() {
   const brand = root.querySelector(".estate-brand span");
   let notificationsShown = false;
   visitButton.addEventListener("click", () => ui.openVisits());
+  root.querySelector(".estate-market-open").addEventListener("click", () => { input.clear(); ui.openMarket(); });
   returnButton.addEventListener("click", async () => { await leaveEstateVisit(); });
   const unsubscribe = subscribeEstate((snapshot) => {
     root.querySelector(".estate-loading").hidden = Boolean(snapshot);

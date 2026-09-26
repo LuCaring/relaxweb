@@ -7,12 +7,9 @@ import sqlite3
 import time
 
 from server.wallet import adjust_coins
-from estate.market import (
-    NO_ADVANCE,
-    fetch_source_price,
-    quote_refresh_due,
-    refresh_market_quote,
-)
+from estate.market import SLOT_SECONDS
+from estate.market import refresh_market as estate_refresh_market
+from estate.market import split_announcement as estate_split_announcement
 from estate.pets import auto_fertilize_maodie
 from server.estate.presence import ESTATE_PLOT_POSITIONS
 from estate import (
@@ -28,6 +25,8 @@ from estate import (
     lottery_history as estate_lottery_history,
     market_snapshot as estate_market_snapshot,
     trade_market as estate_trade_market,
+    place_order as estate_place_order,
+    cancel_order as estate_cancel_order,
     fertilize as estate_fertilize,
     finish_fishing as estate_finish_fishing,
     finish_mining as estate_finish_mining,
@@ -54,12 +53,15 @@ logger = logging.getLogger("live-chat")
 
 
 class EstateProtocol:
-    def __init__(self, *, database, clients, send_json, send_encoded, presence):
+    def __init__(self, *, database, clients, send_json, send_encoded, presence,
+                 broadcast_system=None):
         self.database = database
         self.clients = clients
         self.send_json = send_json
         self.send_encoded = send_encoded
         self.presence = presence
+        # 拆股是全服事件；没有注入系统广播时（单元测试）静默跳过。
+        self.broadcast_system = broadcast_system
         self._market_quote_lock = asyncio.Lock()
         try:
             loop = asyncio.get_running_loop()
@@ -69,13 +71,14 @@ class EstateProtocol:
             self._market_watcher = loop.create_task(self.market_quote_watcher())
 
     async def market_quote_watcher(self):
-        """服务器运行期间按自然分钟采样，避免玩家未打开面板时出现 K 线空档。"""
+        """服务器运行期间按 10 秒一格推进行情并撮合挂单，无人访问也不断档。"""
         await asyncio.sleep(1)  # 宿主在第一个 await 前完成数据库初始化。
         while True:
             try:
-                await self.refresh_market_quote(int(time.time()))
+                await self.advance_market(int(time.time()))
+                await self.announce_splits()
             except Exception:
-                logger.exception("estate market background quote refresh failed")
+                logger.exception("estate market background advance failed")
             try:
                 with self.database() as conn, conn:
                     now = int(time.time())
@@ -87,17 +90,22 @@ class EstateProtocol:
                         auto_fertilize_maodie(conn, owner, now)
             except Exception:
                 logger.exception("estate maodie background fertilization failed")
-            await asyncio.sleep(max(0.1, 60 - time.time() % 60 + 0.05))
+            await asyncio.sleep(max(0.1, SLOT_SECONDS - time.time() % SLOT_SECONDS + 0.05))
 
-    async def refresh_market_quote(self, now):
+    async def advance_market(self, now):
+        """行情完全由本地模型生成：推进与挂单结算只写数据库，不访问任何外部行情源。"""
         async with self._market_quote_lock:
-            with self.database() as conn:
-                if not quote_refresh_due(conn, now):
-                    return None
-            source = await asyncio.to_thread(fetch_source_price)
             with self.database() as conn, conn:
-                refresh_market_quote(conn, now, source)
-            return source
+                estate_refresh_market(conn, now, adjust_coins)
+
+    async def announce_splits(self):
+        """拆股公告：拆股可能由任何一次行情访问触发，所以每个入口后都查一次。"""
+        if not self.broadcast_system:
+            return
+        with self.database() as conn, conn:
+            message = estate_split_announcement(conn)
+        if message:
+            await self.broadcast_system(message)
 
     def handlers(self):
         return {
@@ -109,6 +117,8 @@ class EstateProtocol:
             "estate_lottery_history": self.handle_estate_lottery_history,
             "estate_market_get": self.handle_estate_market_get,
             "estate_market_trade": self.handle_estate_market_trade,
+            "estate_market_order": self.handle_estate_market_order,
+            "estate_market_cancel": self.handle_estate_market_cancel,
             "estate_use_land_upgrade_ticket": self.handle_estate_use_land_upgrade_ticket,
             "estate_plant": self.handle_estate_plant,
             "estate_harvest": self.handle_estate_harvest,
@@ -291,8 +301,7 @@ class EstateProtocol:
         await self.send_json(websocket, {"type": "estate_notifications_read", "result": result,
                                     "request_id": data.get("request_id")})
 
-    async def handle_estate_action(self, websocket, state, data, action,
-                                   now_override=None, market_source=None, execution_source=None):
+    async def handle_estate_action(self, websocket, state, data, action, now_override=None):
         user = state.get("user")
         if not user:
             await self.send_json(websocket, {
@@ -323,7 +332,14 @@ class EstateProtocol:
                 elif action == "market_trade":
                     result = estate_trade_market(conn, username, request_id,
                                                  data.get("side"), data.get("quantity"), now,
-                                                 adjust_coins, market_source, execution_source)
+                                                 adjust_coins, data.get("symbol"))
+                elif action == "market_order":
+                    result = estate_place_order(conn, username, request_id, data.get("side"),
+                                                data.get("price"), data.get("quantity"), now,
+                                                adjust_coins, data.get("symbol"))
+                elif action == "market_cancel":
+                    result = estate_cancel_order(conn, username, request_id,
+                                                 data.get("order_id"), now, adjust_coins)
                 elif action == "use_land_upgrade_ticket":
                     result = estate_use_land_upgrade_ticket(
                         conn, username, request_id, data.get("plot_id"), now)
@@ -381,6 +397,9 @@ class EstateProtocol:
                     result = estate_finish_mining(conn, username, request_id,
                                                   data.get("run_id"), now)
                 snapshot = estate_state(conn, username, now, adjust_coins)
+            if action in ("market_trade", "market_order", "market_cancel"):
+                # 行情操作也可能推进到拆股的那一分钟，谁触发谁负责播报。
+                await self.announce_splits()
         except (EstateError, ValueError, sqlite3.Error) as error:
             code = error.code if isinstance(error, EstateError) else "estate_failed"
             if isinstance(error, sqlite3.Error):
@@ -452,10 +471,10 @@ class EstateProtocol:
             return
         try:
             now = int(time.time())
-            await self.refresh_market_quote(now)
             with self.database() as conn, conn:
-                # 报价刚刷新过；传 NO_ADVANCE 避免分钟翻转时误补一根模拟 K 线。
-                snapshot = estate_market_snapshot(conn, user["username"], now, NO_ADVANCE)
+                snapshot = estate_market_snapshot(conn, user["username"], now, adjust_coins,
+                                                  data.get("symbol"))
+            await self.announce_splits()
             await self.send_json(websocket, {"type": "estate_market_state", "market": snapshot,
                                             "request_id": data.get("request_id")})
         except sqlite3.Error:
@@ -465,26 +484,13 @@ class EstateProtocol:
                                             "request_id": data.get("request_id")})
 
     async def handle_estate_market_trade(self, websocket, state, data):
-        if not state.get("user"):
-            await self.handle_estate_action(websocket, state, data, "market_trade")
-            return
-        now = int(time.time())
-        try:
-            execution_source = await self.refresh_market_quote(now)
-        except sqlite3.Error:
-            logger.exception("estate market lookup failed")
-            await self.send_json(websocket, {"type": "estate_error", "code": "estate_failed",
-                                            "message": "行情暂不可用，请稍后重试",
-                                            "request_id": data.get("request_id")})
-            return
-        if execution_source is None:
-            with self.database() as conn:
-                row = conn.execute("SELECT source_kind FROM estate_market_index WHERE id=1").fetchone()
-            if row and row[0] == "live":
-                execution_source = await asyncio.to_thread(fetch_source_price)
-        await self.handle_estate_action(websocket, state, data, "market_trade",
-                                        now_override=now, market_source=None,
-                                        execution_source=execution_source)
+        await self.handle_estate_action(websocket, state, data, "market_trade")
+
+    async def handle_estate_market_order(self, websocket, state, data):
+        await self.handle_estate_action(websocket, state, data, "market_order")
+
+    async def handle_estate_market_cancel(self, websocket, state, data):
+        await self.handle_estate_action(websocket, state, data, "market_cancel")
 
     async def handle_estate_use_land_upgrade_ticket(self, websocket, state, data):
         await self.handle_estate_action(websocket, state, data, "use_land_upgrade_ticket")
