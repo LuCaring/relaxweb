@@ -90,8 +90,9 @@ LAND_UPGRADE_TICKET = "supply:land_upgrade_ticket"
 SKIN_FRAGMENT_ITEM = "supply:skin_fragment"
 PENGUIN_FRAGMENT_COST = 28
 LOTTERY_PRICE = 3000.0
+LOTTERY_DAILY_FREE_DRAWS = 5
 LOTTERY_PRIZES = ("thanks", "coins_250", "coins_1000", "coins_2000",
-                  "mystery_seed", "missing_collectible", "fertilizer_2", "grand")
+                  "mystery_seed", "missing_collectible", "fertilizer_1", "grand")
 LOTTERY_GRAND_PRIZES = (
     ("coins_100000", 10), ("reroll", 40), ("land_ticket", 10),
     ("coins_5000", 20), ("coins_10000", 20),
@@ -111,28 +112,28 @@ CROPS = {
     "legendary_flower": _crop("传说花", 0, 36888, 72 * 60, 1440, 1, "🌟", "#f4cc5b"),
     "gpu_fruit": _crop("显卡果", 0, 0, 5 * 60, 100, 1, "🖥️", "#65b866"),
     "wheat": _crop("小麦", 20, 30, 5, 5, 1, "🌾", "#e6cb63"),
-    "carrot": _crop("胡萝卜", 40, 65, 15, 8, 1, "🥕", "#f28b36"),
-    "rice": _crop("水稻", 28, 44, 9, 6, 1, "🌾", "#ddd477"),
+    "carrot": _crop("胡萝卜", 10, 22, 3.75, 8, 1, "🥕", "#f28b36"),
+    "rice": _crop("水稻", 7, 15, 2.25, 6, 1, "🌾", "#ddd477"),
     "potato": _crop("土豆", 34, 54, 12, 7, 1, "🥔", "#c99b61"),
-    "tomato": _crop("番茄", 52, 84, 20, 10, 1, "🍅", "#df5b45"),
+    "tomato": _crop("番茄", 13, 28, 5, 10, 1, "🍅", "#df5b45"),
     "cabbage": _crop("卷心菜", 64, 120, 28, 20, 2, "🥬", "#78b95d"),
-    "cucumber": _crop("黄瓜", 72, 142, 35, 24, 2, "🥒", "#5da653"),
+    "cucumber": _crop("黄瓜", 18, 48, 8.75, 24, 2, "🥒", "#5da653"),
     "soybean": _crop("大豆", 82, 166, 42, 28, 2, "🫘", "#d0b65d"),
-    "corn": _crop("玉米", 100, 220, 60, 40, 2, "🌽", "#f4cf46"),
+    "corn": _crop("玉米", 25, 74, 15, 40, 2, "🌽", "#f4cf46"),
     "peanut": _crop("花生", 116, 266, 75, 48, 2, "🥜", "#c78b50"),
-    "sweet_potato": _crop("红薯", 132, 335, 90, 56, 3, "🍠", "#b75c49"),
+    "sweet_potato": _crop("红薯", 33, 112, 22.5, 56, 3, "🍠", "#b75c49"),
     "eggplant": _crop("茄子", 150, 398, 110, 68, 3, "🍆", "#835c9f"),
-    "pepper": _crop("辣椒", 172, 476, 135, 80, 3, "🌶️", "#d94b3d"),
+    "pepper": _crop("辣椒", 43, 159, 33.75, 80, 3, "🌶️", "#d94b3d"),
     "pumpkin": _crop("南瓜", 260, 800, 240, 140, 3, "🎃", "#ee7a2d"),
-    "strawberry": _crop("草莓", 290, 1040, 300, 175, 4, "🍓", "#e85e67"),
+    "strawberry": _crop("草莓", 72.5, 347, 75, 175, 4, "🍓", "#e85e67"),
     "watermelon": _crop("西瓜", 340, 1315, 390, 225, 4, "🍉", "#52a95e"),
-    "grape": _crop("葡萄", 410, 1610, 480, 280, 4, "🍇", "#8663a8"),
+    "grape": _crop("葡萄", 102.5, 537, 120, 280, 4, "🍇", "#8663a8"),
     "spinach": _crop("菠菜", 460, 2110, 600, 320, 5, "🥬", "#3e9652"),
     "onion": _crop("洋葱", 530, 2593, 750, 400, 5, "🧅", "#d3a5bb"),
     "garlic": _crop("大蒜", 620, 3095, 900, 480, 5, "🧄", "#e7d9b1"),
-    "sunflower": _crop("向日葵", 760, 4000, 1080, 540, 6, "🌻", "#f3c84d"),
+    "sunflower": _crop("向日葵", 190, 1334, 270, 540, 6, "🌻", "#f3c84d"),
     "magic_grass": _crop("神奇草", 1100, 5420, 1440, 720, 6, "🌿", "#64c987"),
-    "miracle_flower": _crop("奇迹花", 1800, 8820, 2160, 1080, 7, "🌸", "#f28fc2"),
+    "miracle_flower": _crop("奇迹花", 450, 2940, 540, 1080, 7, "🌸", "#f28fc2"),
     "starlight_berry": _crop("星露果", 3200, 13280, 2880, 1440, 8, "✨", "#8dd9df"),
 }
 CROPS["legendary_flower"]["lottery_only"] = True
@@ -207,30 +208,30 @@ def _fish(name, sell_price, rarity, xp, difficulty, habitat):
 
 
 FISH = {
-    "minnow": _fish("银鲦", 42, 1, 8, .18, "溪流"),
-    "carp": _fish("湖鲤", 70, 1, 12, .25, "湖泊"),
-    "crucian_carp": _fish("鲫鱼", 58, 1, 10, .22, "湖泊"),
-    "tilapia": _fish("罗非鱼", 64, 1, 11, .24, "暖水湖"),
-    "loach": _fish("泥鳅", 52, 1, 9, .21, "浅滩"),
-    "perch": _fish("金鲈", 115, 2, 18, .36, "湖泊"),
-    "catfish": _fish("鲶鱼", 128, 2, 20, .39, "河底"),
-    "grass_carp": _fish("草鱼", 138, 2, 21, .38, "湖泊"),
-    "silver_carp": _fish("鲢鱼", 146, 2, 22, .41, "河流"),
-    "bream": _fish("鳊鱼", 152, 2, 23, .42, "湖泊"),
-    "snakehead": _fish("黑鱼", 185, 3, 27, .47, "芦苇荡"),
-    "bass": _fish("大口鲈", 205, 3, 30, .5, "深水湖"),
-    "trout": _fish("虹鳟", 228, 3, 33, .53, "溪流"),
-    "koi": _fish("锦鲤", 245, 3, 34, .5, "湖泊"),
-    "pike": _fish("白斑狗鱼", 310, 4, 42, .59, "深水湖"),
-    "salmon": _fish("鲑鱼", 340, 4, 45, .61, "河口"),
-    "sardine": _fish("沙丁鱼", 285, 4, 39, .56, "近海"),
-    "mackerel": _fish("鲭鱼", 390, 4, 50, .64, "近海"),
-    "moon_eel": _fish("欧洲鳗鲡", 430, 4, 52, .66, "夜间河口"),
-    "sturgeon": _fish("中华鲟", 590, 5, 65, .72, "大河"),
-    "tuna": _fish("蓝鳍金枪鱼", 760, 5, 76, .78, "远海"),
-    "crystal_fish": _fish("玻璃鱼", 680, 5, 70, .74, "清澈湖泊"),
-    "cloudfin": _fish("云鳍鱼", 1200, 6, 105, .84, "雨后云影"),
-    "mystery_fish": _fish("神秘鱼", 1680, 6, 135, .9, "静谧湖深处"),
+    "minnow": _fish("银鲦", 63, 1, 8, .18, "溪流"),
+    "carp": _fish("湖鲤", 105, 1, 12, .25, "湖泊"),
+    "crucian_carp": _fish("鲫鱼", 87, 1, 10, .22, "湖泊"),
+    "tilapia": _fish("罗非鱼", 96, 1, 11, .24, "暖水湖"),
+    "loach": _fish("泥鳅", 78, 1, 9, .21, "浅滩"),
+    "perch": _fish("金鲈", 172, 2, 18, .36, "湖泊"),
+    "catfish": _fish("鲶鱼", 192, 2, 20, .39, "河底"),
+    "grass_carp": _fish("草鱼", 207, 2, 21, .38, "湖泊"),
+    "silver_carp": _fish("鲢鱼", 219, 2, 22, .41, "河流"),
+    "bream": _fish("鳊鱼", 228, 2, 23, .42, "湖泊"),
+    "snakehead": _fish("黑鱼", 277, 3, 27, .47, "芦苇荡"),
+    "bass": _fish("大口鲈", 307, 3, 30, .5, "深水湖"),
+    "trout": _fish("虹鳟", 342, 3, 33, .53, "溪流"),
+    "koi": _fish("锦鲤", 367, 3, 34, .5, "湖泊"),
+    "pike": _fish("白斑狗鱼", 465, 4, 42, .59, "深水湖"),
+    "salmon": _fish("鲑鱼", 510, 4, 45, .61, "河口"),
+    "sardine": _fish("沙丁鱼", 427, 4, 39, .56, "近海"),
+    "mackerel": _fish("鲭鱼", 585, 4, 50, .64, "近海"),
+    "moon_eel": _fish("欧洲鳗鲡", 645, 4, 52, .66, "夜间河口"),
+    "sturgeon": _fish("中华鲟", 885, 5, 65, .72, "大河"),
+    "tuna": _fish("蓝鳍金枪鱼", 1140, 5, 76, .78, "远海"),
+    "crystal_fish": _fish("玻璃鱼", 1020, 5, 70, .74, "清澈湖泊"),
+    "cloudfin": _fish("云鳍鱼", 1800, 6, 105, .84, "雨后云影"),
+    "mystery_fish": _fish("神秘鱼", 2520, 6, 135, .9, "静谧湖深处"),
 }
 
 
@@ -259,12 +260,12 @@ if _reward is not None:
 
 
 MINERALS = {
-    "stone": {"name": "石料", "sell_price": 5.0, "rarity": 1, "xp": 2},
-    "coal": {"name": "煤块", "sell_price": 10.0, "rarity": 1, "xp": 3},
-    "copper": {"name": "铜矿", "sell_price": 20.0, "rarity": 2, "xp": 4},
-    "iron": {"name": "铁矿", "sell_price": 38.0, "rarity": 3, "xp": 6},
-    "amethyst": {"name": "紫晶", "sell_price": 85.0, "rarity": 4, "xp": 10},
-    "star_gem": {"name": "星辉宝石", "sell_price": 200.0, "rarity": 5, "xp": 16},
+    "stone": {"name": "石料", "sell_price": 7.0, "rarity": 1, "xp": 2},
+    "coal": {"name": "煤块", "sell_price": 15.0, "rarity": 1, "xp": 3},
+    "copper": {"name": "铜矿", "sell_price": 30.0, "rarity": 2, "xp": 4},
+    "iron": {"name": "铁矿", "sell_price": 57.0, "rarity": 3, "xp": 6},
+    "amethyst": {"name": "紫晶", "sell_price": 127.0, "rarity": 4, "xp": 10},
+    "star_gem": {"name": "星辉宝石", "sell_price": 300.0, "rarity": 5, "xp": 16},
 }
 
 MINING_LEVELS = {
@@ -286,7 +287,7 @@ PENGUIN_LEVELS = {
     1: {"name": "臭企鹅", "harvest_delay_minutes": 80, "upgrade_price": 20000.0},
     2: {"name": "臭企鹅", "harvest_delay_minutes": 60, "upgrade_price": 40000.0},
     3: {"name": "臭企鹅", "harvest_delay_minutes": 40, "upgrade_price": 60000.0},
-    4: {"name": "臭企鹅", "harvest_delay_minutes": 30, "upgrade_price": None,
+    4: {"name": "臭企鹅", "harvest_delay_minutes": 15, "upgrade_price": None,
         "auto_replant": True},
 }
 MAODIE_LEVELS = {
@@ -392,7 +393,8 @@ def public_catalog():
             for crop_id, crop in CROPS.items()
         },
         "land_levels": LAND_LEVELS,
-        "lottery": {"price": LOTTERY_PRICE, "prizes": LOTTERY_PRIZES,
+        "lottery": {"price": LOTTERY_PRICE, "daily_free_draws": LOTTERY_DAILY_FREE_DRAWS,
+                    "prizes": LOTTERY_PRIZES,
                     "grand_prizes": LOTTERY_GRAND_PRIZES,
                     "ticket_item": LAND_UPGRADE_TICKET},
         "plot_unlocks": PLOT_UNLOCKS,

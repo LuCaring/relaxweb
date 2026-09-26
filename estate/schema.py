@@ -184,6 +184,20 @@ def init_estate(conn):
             DELETE FROM estate_fishing_daily WHERE username=OLD.username;
         END
     """)
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS estate_lottery_daily (
+            username TEXT PRIMARY KEY COLLATE NOCASE,
+            draw_day TEXT NOT NULL,
+            free_draws_used INTEGER NOT NULL DEFAULT 0 CHECK(free_draws_used >= 0)
+        )
+    """)
+    conn.execute("""
+        CREATE TRIGGER IF NOT EXISTS delete_estate_lottery_daily
+        AFTER DELETE ON estate_profiles
+        BEGIN
+            DELETE FROM estate_lottery_daily WHERE username=OLD.username;
+        END
+    """)
     mining_columns = {row[1] for row in conn.execute("PRAGMA table_info(estate_mining_runs)")}
     if "reserved_slots" not in mining_columns:
         conn.execute("ALTER TABLE estate_mining_runs ADD COLUMN reserved_slots INTEGER NOT NULL DEFAULT 12")

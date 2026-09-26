@@ -49,7 +49,7 @@ class PenguinTests(unittest.TestCase):
         self.assertTrue(replay["replayed"])
         self.assertEqual(self.conn.execute("SELECT quantity FROM estate_inventory WHERE username='alice' AND item_id=?",
                                            (SKIN_FRAGMENT_ITEM,)).fetchone()[0], 1)
-        self.assertEqual(self.conn.execute("SELECT coins FROM users WHERE username='alice'").fetchone()[0], 197000)
+        self.assertEqual(self.conn.execute("SELECT coins FROM users WHERE username='alice'").fetchone()[0], 200000)
 
     def test_redeem_consumes_28_fragments_then_upgrade_prices(self):
         self.conn.execute("INSERT INTO estate_inventory VALUES (?,?,28)", ("alice", SKIN_FRAGMENT_ITEM))
@@ -205,8 +205,8 @@ class PenguinTests(unittest.TestCase):
     def test_level_four_catches_up_offline_cycles(self):
         self.conn.execute("UPDATE estate_profiles SET penguin_level=4,active_pet='stinky_penguin',penguin_active_at=? WHERE username='alice'",
                           (NOW - 100000,))
-        cycle = 30 * 60 + grow_seconds("wheat", 1)
-        first_ready = NOW - 30 * 60 - 3 * cycle
+        cycle = 15 * 60 + grow_seconds("wheat", 1)
+        first_ready = NOW - 15 * 60 - 3 * cycle
         self.conn.execute("UPDATE estate_plots SET crop_id='wheat',planted_at=?,ready_at=? WHERE username='alice' AND plot_index=0",
                           (first_ready - grow_seconds("wheat", 1), first_ready))
         self.assertEqual(auto_harvest_penguin(self.conn, "alice", NOW, adjust_coins), 4)
@@ -258,6 +258,48 @@ class PenguinTests(unittest.TestCase):
                          (NOW + 100, NOW + 1))
         self.assertEqual(rows[0]["award"], "thanks")
         self.assertEqual(lottery_history(self.conn, "bob"), [])
+
+    def test_five_free_draws_then_paid_and_reset_at_shanghai_midnight(self):
+        from datetime import datetime
+        from zoneinfo import ZoneInfo
+        before_midnight = int(datetime(2033, 5, 17, 23, 59, 50,
+                                       tzinfo=ZoneInfo("Asia/Shanghai")).timestamp())
+        self.conn.execute("UPDATE users SET coins=0 WHERE username='alice'")
+        with patch("estate.lottery.secrets.randbelow", return_value=0):
+            for index in range(5):
+                result = draw_lottery(self.conn, "alice", f"free-draw-{index}",
+                                      before_midnight + index, adjust_coins)
+                self.assertEqual((result["cost"], result["free_draws_remaining"]),
+                                 (0, 4 - index))
+            replay = draw_lottery(self.conn, "alice", "free-draw-4",
+                                  before_midnight + 5, adjust_coins)
+            self.assertTrue(replay["replayed"])
+            with self.assertRaises(EstateError):
+                draw_lottery(self.conn, "alice", "paid-without-coins",
+                             before_midnight + 6, adjust_coins)
+            self.conn.execute("UPDATE users SET coins=3000 WHERE username='alice'")
+            paid = draw_lottery(self.conn, "alice", "paid-after-free",
+                                before_midnight + 7, adjust_coins)
+            self.assertEqual((paid["cost"], paid["free_draws_remaining"]), (3000, 0))
+            self.assertEqual(self.conn.execute(
+                "SELECT coins FROM users WHERE username='alice'").fetchone()[0], 0)
+            other_user = draw_lottery(self.conn, "bob", "bob-first-free",
+                                      before_midnight + 8, adjust_coins)
+            self.assertEqual(other_user["free_draws_remaining"], 4)
+            next_day = draw_lottery(self.conn, "alice", "new-day-free",
+                                    before_midnight + 10, adjust_coins)
+        self.assertEqual((next_day["cost"], next_day["free_draws_remaining"]), (0, 4))
+        self.assertEqual(estate_state(self.conn, "alice", before_midnight + 10)
+                         ["lottery_daily"]["remaining"], 4)
+
+    def test_fertilizer_prize_awards_one(self):
+        with patch("estate.lottery.secrets.randbelow", return_value=6):
+            result = draw_lottery(self.conn, "alice", "one-fertilizer", NOW,
+                                  adjust_coins)
+        self.assertEqual((result["award"], result["quantity"]), ("fertilizer_1", 1))
+        self.assertEqual(self.conn.execute(
+            "SELECT quantity FROM estate_inventory WHERE username='alice' "
+            "AND item_id='supply:fertilizer'").fetchone()[0], 1)
 
 
 if __name__ == "__main__":

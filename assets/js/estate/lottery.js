@@ -4,7 +4,7 @@ import { estateRequest } from "./protocol.js";
 import { estateStore } from "./state.js";
 
 const LABELS = ["谢谢惠顾", "250金币", "1000金币", "2000金币", "神秘种子",
-  "纪念品", "化肥×2", "神秘大奖"];
+  "纪念品", "化肥×1", "神秘大奖"];
 
 function rewardLabel(result) {
   const award = result.award;
@@ -13,6 +13,7 @@ function rewardLabel(result) {
     ? "恭喜获得显卡果种子 ×1！种植 5 小时后收获，届时揭晓显卡型号。"
     : "恭喜获得传说花种子 ×1！基础成熟时间 72 小时，售价 36,888 金币。";
   if (award === "legendary_seed") return "获得传说花种子 ×1。";
+  if (award === "fertilizer_1") return "恭喜获得化肥 ×1！";
   if (award === "fertilizer_2") return "恭喜获得化肥 ×2！";
   if (award === "land_ticket") return "恭喜获得 4级农田升级券 ×1！可用于一块空置的 3级农田。";
   if (award === "missing_collectible") {
@@ -27,9 +28,10 @@ function wait(ms) { return new Promise((resolve) => window.setTimeout(resolve, m
 
 export function renderLotteryGame(target, snapshot, onBusyChange) {
   const price = snapshot.catalog.lottery.price;
+  let freeRemaining = Number(snapshot.lottery_daily?.remaining || 0);
   const wrap = document.createElement("div"); wrap.className = "estate-lottery";
   const note = document.createElement("p"); note.className = "estate-sheet-note";
-  note.textContent = `8 个奖项等概率。每次 ${price.toLocaleString("zh-CN")} 金币；神秘大奖另按公布概率结算，其中“再抽一次”免费。抽奖前须留出 2 格仓位。`;
+  note.textContent = `8 个奖项等概率。每天前 ${snapshot.catalog.lottery.daily_free_draws} 次免费，今日剩余 ${freeRemaining} 次；之后每次 ${price.toLocaleString("zh-CN")} 金币。神秘大奖中的“再抽一次”免费。抽奖前须留出 1 格仓位。`;
   const stage = document.createElement("div"); stage.className = "estate-lottery-stage";
   const wheel = document.createElement("div"); wheel.className = "estate-lottery-wheel";
   for (let index = 0; index < LABELS.length; index += 1) {
@@ -46,13 +48,15 @@ export function renderLotteryGame(target, snapshot, onBusyChange) {
   status.setAttribute("role", "status"); status.textContent = "指针所指的奖项，就是本次抽奖结果。";
   const button = document.createElement("button"); button.type = "button";
   button.className = "estate-button estate-button-gold";
-  button.textContent = `${price.toLocaleString("zh-CN")} 金币 · 开始抽奖`;
-  const canDraw = (current) => Number(current.coins) >= price
-    && Number(current.profile.warehouse_capacity) - Number(current.profile.warehouse_used) >= 2;
+  const updateButton = () => { button.textContent = freeRemaining > 0
+    ? `免费抽奖 · 剩余 ${freeRemaining} 次` : `${price.toLocaleString("zh-CN")} 金币 · 开始抽奖`; };
+  updateButton();
+  const canDraw = (current) => (freeRemaining > 0 || Number(current.coins) >= price)
+    && Number(current.profile.warehouse_capacity) - Number(current.profile.warehouse_used) >= 1;
   button.disabled = !canDraw(snapshot);
   if (!button.disabled) status.textContent = "指针所指的奖项，就是本次抽奖结果。";
-  else status.textContent = Number(snapshot.coins) < price
-    ? "金币不足，暂时不能抽奖。" : "请先腾出至少 2 格仓位。";
+  else status.textContent = freeRemaining === 0 && Number(snapshot.coins) < price
+    ? "金币不足，暂时不能抽奖。" : "请先腾出至少 1 格仓位。";
   const rules = document.createElement("p"); rules.className = "estate-sheet-note";
   rules.textContent = "神秘种子：传说花与显卡果各 50%。显卡果收获时才揭晓型号，10 款型号等概率。神秘大奖：10% 得 100,000 金币、40% 免费再抽一次、10% 得农田升级券、20% 得 5,000 金币、20% 得 10,000 金币。纪念品集齐后抽中该奖项可获得 1 个皮肤碎片。";
   const historyButton = document.createElement("button"); historyButton.type = "button";
@@ -86,6 +90,9 @@ export function renderLotteryGame(target, snapshot, onBusyChange) {
     status.textContent = "正在确认抽奖结果…";
     try {
       const result = await estateRequest("estate_lottery_draw", {}, { timeoutMs: 15000 });
+      freeRemaining = Number(result.free_draws_remaining ?? freeRemaining);
+      note.textContent = `8 个奖项等概率。每天前 ${snapshot.catalog.lottery.daily_free_draws} 次免费，今日剩余 ${freeRemaining} 次；之后每次 ${price.toLocaleString("zh-CN")} 金币。神秘大奖中的“再抽一次”免费。抽奖前须留出 1 格仓位。`;
+      updateButton();
       for (const [index, spin] of result.spins.entries()) {
         const slot = snapshot.catalog.lottery.prizes.indexOf(spin.prize);
         if (slot < 0) throw new Error("抽奖落点无效");
