@@ -492,6 +492,8 @@ def estate_state(conn, username, now, adjust_coins=None):
     sweep_expired_fishing(conn, username, now)
     refresh_daily_pickaxe(conn, username, now)
     fishing_daily = fishing_daily_state(conn, username, now)
+    from estate.lottery import lottery_daily_state
+    lottery_daily = lottery_daily_state(conn, username, now)
 
     skins = skin_state(conn, username)
     profile = load_profile(conn, username)
@@ -523,6 +525,7 @@ def estate_state(conn, username, now, adjust_coins=None):
         "tools": _tool_views(conn, username, now),
         "fishing_session": _fishing_view(conn, username),
         "fishing_daily": {key: fishing_daily[key] for key in ("retained", "remaining", "limit")},
+        "lottery_daily": lottery_daily,
         "mining_run": _mining_view(conn, username),
         "catalog": public_catalog(),
         "skins": skins,
