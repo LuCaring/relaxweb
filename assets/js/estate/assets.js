@@ -19,6 +19,12 @@ export const PET_ASSETS = Object.freeze({
     sleepRow: 4,
     trimRightFrame: false,
   }),
+  maodie: Object.freeze({
+    walk: "assets/estate/pets/maodie-sheet.png",
+    sleep: "assets/estate/pets/maodie-sheet.png",
+    walkRows: 6,
+    sleepRow: 5,
+  }),
 });
 export const PET_SPRITE = PET_ASSETS.doudou.walk;
 export const PET_SLEEP_SPRITE = PET_ASSETS.doudou.sleep;
@@ -53,7 +59,8 @@ export const PLAYER_SPRITE = {
 
 export function cropAsset(cropId, stage = 4) {
   const safeStage = Math.max(1, Math.min(4, Number(stage) || 1));
-  return `${ROOT}/crops/${cropId}/${CROP_STAGES[safeStage - 1]}.png`;
+  const version = cropId === "legendary_flower" ? "?v=2" : "";
+  return `${ROOT}/crops/${cropId}/${CROP_STAGES[safeStage - 1]}.png${version}`;
 }
 
 export function catchAsset(kind, id) {
@@ -74,6 +81,7 @@ export function toolAsset(type, level, held = false) {
 export function inventoryAsset(item) {
   if (item.kind === "seed") return cropAsset(item.crop_id, 1);
   if (item.kind === "crop") return cropAsset(item.crop_id, 4);
+  if (item.kind === "gpu") return cropAsset("gpu_fruit", 4);
   if (item.kind === "fish") return catchAsset("fish", item.fish_id);
   if (item.kind === "collectible") return catchAsset("collectible", item.collectible_id);
   if (item.kind === "mineral") return mineralAsset(item.mineral_id);

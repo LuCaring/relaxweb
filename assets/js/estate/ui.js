@@ -97,10 +97,12 @@ export function createEstateUI(root, activities = {}) {
       icon: crop.icon || "🌱",
       iconUrl: cropAsset(crop.id, 4),
       title: crop.name,
-      meta: `成熟 ${formatDuration(Math.ceil(crop.grow_seconds * multiplier))}`
-        + ` · 售价 ${formatCoinsWhole(crop.sell_price)}`
-        + ` · 净赚 ${formatCoins(crop.sell_price * crop.yield - crop.seed_price)}金币`
-        + ` · ${crop.xp}经验`,
+      meta: crop.id === "gpu_fruit"
+        ? `成熟 ${formatDuration(Math.ceil(crop.grow_seconds * multiplier))} · 收获时随机揭晓显卡型号与售价 · ${crop.xp}经验`
+        : `成熟 ${formatDuration(Math.ceil(crop.grow_seconds * multiplier))}`
+          + ` · 售价 ${formatCoinsWhole(crop.sell_price)}`
+          + ` · 净赚 ${formatCoins(crop.sell_price * crop.yield - crop.seed_price)}金币`
+          + ` · ${crop.xp}经验`,
       controls: [button(actionLabel, action)],
     });
   }
@@ -168,8 +170,24 @@ export function createEstateUI(root, activities = {}) {
     if (penguinLevel) {
       sheetBody.append(note(activePet === "stinky_penguin"
         ? "臭企鹅出场时，豆豆的偷菜防守暂不生效。" : "臭企鹅未出场时不会自动收获。"));
-      if (penguinLevel === 4) sheetBody.append(note("自动播种沿用该田上种作物，并直接扣除对应种子费用；金币不足或种子仅限抽奖时，田地会保持空置。"));
+      if (penguinLevel === 4) sheetBody.append(note("自动播种沿用该田上种作物，先消耗仓库中的同种种子；没有库存时购买普通种子，金币不足则保持空田。"));
     }
+    const maodieLevel = Number(snapshot.profile.maodie_level || 0);
+    const maodie = catalogEntry(snapshot.catalog.maodie_levels, maodieLevel);
+    const nextMaodie = catalogEntry(snapshot.catalog.maodie_levels, maodieLevel + 1);
+    const maodieButton = maodieLevel === 0
+      ? button(fragments >= fragmentCost ? `${fragmentCost} 个碎片 · 兑换` : `碎片 ${fragments}/${fragmentCost}`,
+        () => estateCommand("estate_maodie"),
+        { disabled: fragments < fragmentCost, className: "estate-button estate-button-gold" })
+      : nextMaodie
+        ? button(`${formatCoinsWhole(maodie.upgrade_price)} 金币 · 升到 Lv.${maodieLevel + 1}`,
+          () => estateCommand("estate_maodie"),
+          { disabled: snapshot.coins < maodie.upgrade_price, className: "estate-button estate-button-gold" })
+        : button("已经达到最高等级", () => {}, { disabled: true });
+    sheetBody.append(itemCard({ icon: "🐈", title: maodieLevel ? `耄耋 Lv.${maodieLevel}` : "耄耋",
+      meta: maodieLevel ? `出场期间每 90 分钟随机为至多 ${maodieLevel} 块未成熟农田施肥，不消耗仓库化肥`
+        : `28 个皮肤碎片兑换；出场期间每 90 分钟随机为 1 块未成熟农田施肥`,
+      controls: maodieLevel ? [maodieButton, selectPetButton("maodie")] : [maodieButton] }));
     const level = Number(snapshot.profile.pet_level || 0);
     const rules = snapshot.catalog.pet_levels;
     if (!level) {
@@ -460,7 +478,14 @@ export function createEstateUI(root, activities = {}) {
       text.append(name, hint); hero.append(badge, text);
       sheetBody.append(hero);
       sheetBody.append(button(ready ? "收获" : "还在生长",
-        () => estateCommand("estate_harvest", { plot_id: plot.index }),
+        async () => {
+          try {
+            const result = await estateRequest("estate_harvest", { plot_id: plot.index });
+            if (result?.crop_id === "gpu_fruit" && !result.replayed) {
+              void alertDialog(`显卡果收获成功，获得 ${result.item_name}！`, { title: "显卡型号揭晓" });
+            }
+          } catch (error) { void alertDialog(error.message || "收获失败，请重试"); }
+        },
         { className: "estate-button estate-button-gold", disabled: !ready }));
       if (!ready) sheetBody.append(button(`施肥 · 缩短1小时（库存${fertilizerCount}）`,
         () => estateCommand("estate_fertilize", { plot_id: plot.index }),

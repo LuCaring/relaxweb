@@ -3,10 +3,10 @@ import sqlite3
 import unittest
 from unittest.mock import patch
 
-from estate.catalog import CROPS, FISHING_TREASURES, SKIN_FRAGMENT_ITEM, collectible_item, crop_item, grow_seconds
-from estate.farming import auto_harvest_penguin
+from estate.catalog import CROPS, FISHING_TREASURES, GPU_MODELS, SKIN_FRAGMENT_ITEM, collectible_item, crop_item, grow_seconds
+from estate.farming import auto_harvest_penguin, harvest, sell
 from estate.lottery import draw_lottery, lottery_history
-from estate.pets import buy_or_upgrade_penguin, set_active_pet
+from estate.pets import auto_fertilize_maodie, buy_or_upgrade_maodie, buy_or_upgrade_penguin, set_active_pet
 from estate.schema import init_estate
 from estate.store import EstateError, ensure_estate, estate_state
 from estate.visits import public_estate_state, steal_crop
@@ -60,6 +60,83 @@ class PenguinTests(unittest.TestCase):
             result = buy_or_upgrade_penguin(self.conn, "alice", f"penguin-upgrade-{level}", NOW, adjust_coins)
             self.assertEqual((result["penguin_level"], result["cost"]), (level, price))
         self.assertEqual(self.conn.execute("SELECT coins FROM users WHERE username='alice'").fetchone()[0], 80000)
+
+    def test_mystery_seed_is_even_and_gpu_model_is_revealed_on_harvest(self):
+        with patch("estate.lottery.secrets.randbelow", side_effect=[4, 0]):
+            flower = draw_lottery(self.conn, "alice", "mystery-flower-1", NOW, adjust_coins)
+        with patch("estate.lottery.secrets.randbelow", side_effect=[4, 1]):
+            gpu = draw_lottery(self.conn, "alice", "mystery-gpu-0001", NOW, adjust_coins)
+        self.assertEqual(flower["item_id"], "seed:legendary_flower")
+        self.assertEqual(gpu["item_id"], "seed:gpu_fruit")
+        self.assertNotIn("gpu", str(gpu.get("model", "")))
+        self.conn.execute("UPDATE estate_plots SET crop_id='gpu_fruit',planted_at=?,ready_at=? "
+                          "WHERE username='alice' AND plot_index=0", (NOW - 18001, NOW - 1))
+        with patch("estate.farming.secrets.randbelow", return_value=9):
+            result = harvest(self.conn, "alice", "gpu-harvest-0001", 0, NOW)
+        self.assertEqual(result["item_id"], "gpu:rtx_5090")
+        self.assertEqual(sell(self.conn, "alice", "gpu-sell-00001", result["item_id"], 1,
+                              NOW, adjust_coins)["earned"], 30000)
+        self.assertEqual(sum(value[1] for value in GPU_MODELS.values()) / 10, 5690)
+
+    def test_maodie_fertilizes_distinct_unripe_plots_without_inventory(self):
+        self.conn.execute("INSERT INTO estate_inventory VALUES ('alice',?,28)",
+                          (SKIN_FRAGMENT_ITEM,))
+        redeemed = buy_or_upgrade_maodie(self.conn, "alice", "maodie-redeem-1", NOW,
+                                          adjust_coins)
+        self.assertEqual((redeemed["maodie_level"], redeemed["cost"]), (1, 0))
+        for level, cost in ((2, 20000), (3, 40000), (4, 60000)):
+            result = buy_or_upgrade_maodie(self.conn, "alice", f"maodie-upgrade-{level}",
+                                            NOW, adjust_coins)
+            self.assertEqual((result["maodie_level"], result["cost"]), (level, cost))
+        for index in range(4):
+            self.conn.execute("UPDATE estate_plots SET crop_id='wheat',planted_at=?,ready_at=? "
+                              "WHERE username='alice' AND plot_index=?",
+                              (NOW, NOW + 7200, index))
+        with patch("estate.pets.secrets.randbelow", return_value=0):
+            self.assertEqual(auto_fertilize_maodie(self.conn, "alice", NOW + 5400), 4)
+        times = [row[0] for row in self.conn.execute("SELECT ready_at FROM estate_plots "
+                 "WHERE username='alice' AND plot_index<4 ORDER BY plot_index")]
+        self.assertEqual(times, [NOW + 5400] * 4)
+        self.assertEqual(auto_fertilize_maodie(self.conn, "alice", NOW + 5401), 0)
+        self.assertIsNone(self.conn.execute("SELECT 1 FROM estate_inventory WHERE "
+                                            "item_id='supply:fertilizer'").fetchone())
+
+    def test_penguin_replants_from_stock_before_buying(self):
+        self.conn.execute("UPDATE estate_profiles SET penguin_level=4,active_pet='stinky_penguin' "
+                          "WHERE username='alice'")
+        self.conn.execute("INSERT INTO estate_inventory VALUES ('alice','seed:wheat',1)")
+        self.conn.execute("UPDATE estate_plots SET crop_id='wheat',planted_at=?,ready_at=? "
+                          "WHERE username='alice' AND plot_index=0",
+                          (NOW - 3000, NOW - 1800))
+        before = self.conn.execute("SELECT coins FROM users WHERE username='alice'").fetchone()[0]
+        self.assertEqual(auto_harvest_penguin(self.conn, "alice", NOW, adjust_coins), 1)
+        self.assertIsNone(self.conn.execute("SELECT 1 FROM estate_inventory WHERE "
+                                            "item_id='seed:wheat'").fetchone())
+        self.assertEqual(self.conn.execute("SELECT coins FROM users WHERE username='alice'").fetchone()[0], before)
+
+    def test_existing_profile_migrates_to_maodie_and_keeps_progress(self):
+        old = sqlite3.connect(":memory:")
+        try:
+            old.execute("CREATE TABLE estate_profiles (username TEXT PRIMARY KEY COLLATE NOCASE,"
+                        "skin_id TEXT NOT NULL DEFAULT 'berry', level INTEGER NOT NULL DEFAULT 1,"
+                        "xp INTEGER NOT NULL DEFAULT 0, warehouse_level INTEGER NOT NULL DEFAULT 1,"
+                        "plot_count INTEGER NOT NULL DEFAULT 0,"
+                        "reserved_capacity INTEGER NOT NULL DEFAULT 0, pet_level INTEGER NOT NULL DEFAULT 0,"
+                        "penguin_level INTEGER NOT NULL DEFAULT 0, penguin_active_at INTEGER NOT NULL DEFAULT 0,"
+                        "active_pet TEXT NOT NULL DEFAULT 'doudou' CHECK(active_pet IN "
+                        "('doudou','stinky_penguin')), version INTEGER NOT NULL DEFAULT 1,"
+                        "created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL)")
+            old.execute("INSERT INTO estate_profiles(username,level,xp,plot_count,penguin_level,"
+                        "active_pet,created_at,updated_at) VALUES ('alice',20,150,12,2,"
+                        "'stinky_penguin',?,?)", (NOW, NOW))
+            init_estate(old)
+            init_estate(old)
+            row = old.execute("SELECT level,xp,plot_count,penguin_level,active_pet,maodie_level "
+                              "FROM estate_profiles WHERE username='alice'").fetchone()
+            self.assertEqual(row, (20, 150, 12, 2, "stinky_penguin", 0))
+            old.execute("UPDATE estate_profiles SET active_pet='maodie' WHERE username='alice'")
+        finally:
+            old.close()
 
     def test_delayed_harvest_full_warehouse_and_auto_replant(self):
         self.conn.execute("UPDATE estate_profiles SET penguin_level=1,active_pet='stinky_penguin' WHERE username='alice'")

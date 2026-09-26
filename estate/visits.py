@@ -4,7 +4,8 @@ import secrets
 from zoneinfo import ZoneInfo
 
 from estate.catalog import (CROPS, PET_LEVELS, FERTILIZER_ITEM,
-                            FERTILIZER_SECONDS, crop_item, public_catalog)
+                            FERTILIZER_SECONDS, public_catalog)
+from estate.farming import harvest_item
 from estate.store import (
     CROP_DATA_BROKEN, bump_version, change_inventory,
     estate_error, load_profile, plot_index, require_capacity,
@@ -203,7 +204,7 @@ def steal_crop(conn, visitor, request_id, owner, plot_id, now,
         ).rowcount
         if changed != 1:
             raise estate_error(("plot_changed", "庄园状态已变化，请刷新后重试"))
-        change_inventory(conn, visitor, crop_item(row[0]), quantity)
+        change_inventory(conn, visitor, harvest_item(row[0]), quantity)
         conn.execute(
             "INSERT INTO estate_thefts(owner_username,visitor_username,plot_index,crop_id,"
             "quantity,steal_day,created_at,request_id,outcome,coins_dropped) "

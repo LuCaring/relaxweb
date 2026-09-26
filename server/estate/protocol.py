@@ -13,6 +13,7 @@ from estate.market import (
     quote_refresh_due,
     refresh_market_quote,
 )
+from estate.pets import auto_fertilize_maodie
 from server.estate.presence import ESTATE_PLOT_POSITIONS
 from estate import (
     EstateError,
@@ -20,6 +21,7 @@ from estate import (
     buy_tool as estate_buy_tool,
     buy_or_upgrade_pet as estate_buy_or_upgrade_pet,
     buy_or_upgrade_penguin as estate_buy_or_upgrade_penguin,
+    buy_or_upgrade_maodie as estate_buy_or_upgrade_maodie,
     set_active_pet as estate_set_active_pet,
     estate_state,
     draw_lottery as estate_draw_lottery,
@@ -74,6 +76,17 @@ class EstateProtocol:
                 await self.refresh_market_quote(int(time.time()))
             except Exception:
                 logger.exception("estate market background quote refresh failed")
+            try:
+                with self.database() as conn, conn:
+                    now = int(time.time())
+                    owners = conn.execute(
+                        "SELECT username FROM estate_profiles WHERE active_pet='maodie' "
+                        "AND maodie_level>0 AND maodie_last_at<=?",
+                        (now - 90 * 60,)).fetchall()
+                    for (owner,) in owners:
+                        auto_fertilize_maodie(conn, owner, now)
+            except Exception:
+                logger.exception("estate maodie background fertilization failed")
             await asyncio.sleep(max(0.1, 60 - time.time() % 60 + 0.05))
 
     async def refresh_market_quote(self, now):
@@ -107,6 +120,7 @@ class EstateProtocol:
             "estate_repair_tool": self.handle_estate_repair_tool,
             "estate_pet": self.handle_estate_pet,
             "estate_penguin": self.handle_estate_penguin,
+            "estate_maodie": self.handle_estate_maodie,
             "estate_select_pet": self.handle_estate_select_pet,
             "estate_start_fishing": self.handle_estate_start_fishing,
             "estate_finish_fishing": self.handle_estate_finish_fishing,
@@ -347,6 +361,8 @@ class EstateProtocol:
                     result = estate_buy_or_upgrade_pet(conn, username, request_id, now, adjust_coins)
                 elif action == "penguin":
                     result = estate_buy_or_upgrade_penguin(conn, username, request_id, now, adjust_coins)
+                elif action == "maodie":
+                    result = estate_buy_or_upgrade_maodie(conn, username, request_id, now, adjust_coins)
                 elif action == "select_pet":
                     result = estate_set_active_pet(conn, username, request_id, data.get("pet"), now)
                 elif action == "start_fishing":
@@ -502,6 +518,9 @@ class EstateProtocol:
 
     async def handle_estate_penguin(self, websocket, state, data):
         await self.handle_estate_action(websocket, state, data, "penguin")
+
+    async def handle_estate_maodie(self, websocket, state, data):
+        await self.handle_estate_action(websocket, state, data, "maodie")
 
     async def handle_estate_select_pet(self, websocket, state, data):
         await self.handle_estate_action(websocket, state, data, "select_pet")

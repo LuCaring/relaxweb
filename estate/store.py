@@ -147,7 +147,8 @@ def plot_index(value):
 
 PROFILE_COLUMNS = (
     "skin_id", "level", "xp", "warehouse_level", "plot_count",
-    "reserved_capacity", "pet_level", "penguin_level", "penguin_active_at", "active_pet",
+    "reserved_capacity", "pet_level", "penguin_level", "penguin_active_at",
+    "maodie_level", "maodie_last_at", "active_pet",
     "version", "created_at", "updated_at",
 )
 
@@ -485,6 +486,8 @@ def estate_state(conn, username, now, adjust_coins=None):
     ensure_estate(conn, username, now)
     from estate.farming import auto_harvest_penguin
     auto_harvest_penguin(conn, username, now, adjust_coins)
+    from estate.pets import auto_fertilize_maodie
+    auto_fertilize_maodie(conn, username, now)
     normalize_collectibles(conn, username)
     sweep_expired_fishing(conn, username, now)
     refresh_daily_pickaxe(conn, username, now)
