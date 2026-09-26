@@ -8,14 +8,15 @@
 
 <title>地下城 Beta · 动作原型</title>
 
-<link rel="stylesheet" href="assets/css/dungeon-beta.css?v=1">
+<link rel="stylesheet" href="assets/css/dungeon-beta.css?v=2">
 </head>
 
 <body>
 <div id="dgn-beta-root">
 
   <header class="dgn-dev-banner">
-    前端开发原型 · 本地模拟数据 · 未接入正式 dungeon_beta_* 协议
+    <span class="dgn-dev-note">前端开发原型 · 本地模拟数据 · 未接入正式 dungeon_beta_* 协议</span>
+    <button id="dungeonAudioSettingsButton" class="dgn-audio-open" type="button" aria-label="音效设置" title="音效设置">🔊</button>
   </header>
 
   <!-- 标题屏 -->
@@ -116,7 +117,26 @@
 
 </div>
 
-<script type="module" src="assets/js/dungeon/dgn-beta-main.js?v=1"></script>
+<!-- 音效设置：与游戏厅、庄园共用同一份设置与弹窗结构（见 assets/js/game-audio.js） -->
+<div class="game-audio-modal" id="gameAudioSettingsModal" hidden>
+  <section class="game-audio-dialog" role="dialog" aria-modal="true" aria-labelledby="gameAudioTitle">
+    <header class="game-audio-dialog-head">
+      <h2 id="gameAudioTitle">游戏音效</h2>
+      <button id="gameAudioCloseButton" type="button" aria-label="关闭音效设置">×</button>
+    </header>
+    <label class="game-audio-enabled-row">
+      <input id="gameAudioEnabled" type="checkbox">
+      <span>音效</span>
+    </label>
+    <label class="game-audio-volume-row" for="gameAudioVolume">
+      <span>音量</span><output id="gameAudioVolumeValue" for="gameAudioVolume">60%</output>
+      <input id="gameAudioVolume" type="range" min="0" max="100" step="1" aria-label="音效音量">
+    </label>
+    <button class="game-audio-preview" id="gameAudioPreviewButton" type="button">试听音效</button>
+  </section>
+</div>
+
+<script type="module" src="assets/js/dungeon/dgn-beta-main.js?v=2"></script>
 </body>
 
 </html>

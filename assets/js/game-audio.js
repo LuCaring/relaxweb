@@ -1,6 +1,6 @@
-/* Shared synthesized game sounds and their local controls. */
-
-import { state } from "./core.js";
+/* Shared synthesized game sounds and their local controls.
+   本模块刻意不 import 大厅/房间状态：回合制提示音需要的“当前用户/是否观战”由宿主页面注入
+   （见 setGameAudioSession），因此游戏厅之外的独立页面（如 dungeon-beta.html）也能直接复用。 */
 
 const SETTINGS_KEY = "gameAudioSettings";
 const LEGACY_TURN_SOUND_KEY = "pokerTurnSound";
@@ -14,6 +14,10 @@ let playbackEpoch = 0;
 let previewRequest = 0;
 let initialized = false;
 let opener = null;
+// 动作玩法（地下城等）复用同一个 context 与 masterGain，因此音量和静音全站一致。
+let actionVoices = new Set();
+let noiseBuffer = null;
+let previewCue = null;
 
 function loadSettings() {
   try {
@@ -62,6 +66,7 @@ function ensureContext() {
     context = new Audio();
     masterGain = context.createGain();
     masterGain.connect(context.destination);
+    noiseBuffer = null;
     setMasterVolume();
     return context;
   } catch {
@@ -71,15 +76,20 @@ function ensureContext() {
   }
 }
 
-function cancelSources() {
+function cancelVoices(voices) {
   const now = context?.currentTime || 0;
-  for (const voice of activeSources) {
+  for (const voice of voices) {
     try { voice.source.stop(now); } catch { /* Already ended or cancelled. */ }
     for (const node of voice.nodes) {
       try { node.disconnect(); } catch { /* A disconnected node is harmless. */ }
     }
   }
-  activeSources.clear();
+  voices.clear();
+}
+
+function cancelSources() {
+  cancelVoices(activeSources);
+  cancelVoices(actionVoices);
 }
 
 export function stopGameAudio() {
@@ -114,46 +124,55 @@ function tone(frequency, start, duration, options = {}) {
     envelope.gain.exponentialRampToValueAtTime(peak, start + Math.min(0.014, duration * 0.18));
     envelope.gain.exponentialRampToValueAtTime(0.0001, end);
     oscillator.connect(envelope).connect(masterGain);
+    const voices = options.voices || activeSources;
     const voice = { source: oscillator, nodes: [oscillator, envelope] };
     oscillator.onended = () => {
-      activeSources.delete(voice);
+      voices.delete(voice);
       for (const node of voice.nodes) {
         try { node.disconnect(); } catch { /* Already disconnected. */ }
       }
     };
-    activeSources.add(voice);
+    voices.add(voice);
     oscillator.start(start);
     oscillator.stop(end + 0.008);
   } catch { /* Audio failures must not interfere with the game. */ }
 }
 
+/** One shared white-noise buffer: long enough for every burst, stopped early per use. */
+function sharedNoiseBuffer(sampleRate) {
+  if (noiseBuffer && noiseBuffer.sampleRate === sampleRate) return noiseBuffer;
+  const buffer = context.createBuffer(1, Math.max(1, Math.floor(sampleRate)), sampleRate);
+  const samples = buffer.getChannelData(0);
+  for (let i = 0; i < samples.length; i += 1) samples[i] = Math.random() * 2 - 1;
+  noiseBuffer = buffer;
+  return buffer;
+}
+
 function noiseBurst(start, duration, options = {}) {
   if (!context || !masterGain || context.state !== "running" || settings.volume <= 0) return;
   try {
-    const sampleRate = context.sampleRate || 44100;
-    const buffer = context.createBuffer(1, Math.max(1, Math.floor(sampleRate * duration)), sampleRate);
-    const samples = buffer.getChannelData(0);
-    for (let i = 0; i < samples.length; i += 1) samples[i] = Math.random() * 2 - 1;
     const source = context.createBufferSource();
     const filter = context.createBiquadFilter();
     const envelope = context.createGain();
     const end = start + duration;
-    source.buffer = buffer;
+    source.buffer = sharedNoiseBuffer(context.sampleRate || 44100);
     filter.type = options.filter || "bandpass";
     filter.frequency.setValueAtTime(options.frequency || 1700, start);
+    if (options.to) filter.frequency.exponentialRampToValueAtTime(options.to, end);
     filter.Q.value = options.q || 0.8;
     envelope.gain.setValueAtTime(0.0001, start);
     envelope.gain.exponentialRampToValueAtTime(options.peak || 0.12, start + 0.008);
     envelope.gain.exponentialRampToValueAtTime(0.0001, end);
     source.connect(filter).connect(envelope).connect(masterGain);
+    const voices = options.voices || activeSources;
     const voice = { source, nodes: [source, filter, envelope] };
     source.onended = () => {
-      activeSources.delete(voice);
+      voices.delete(voice);
       for (const node of voice.nodes) {
         try { node.disconnect(); } catch { /* Already disconnected. */ }
       }
     };
-    activeSources.add(voice);
+    voices.add(voice);
     source.start(start);
     source.stop(end + 0.008);
   } catch { /* Filtered noise is an optional texture. */ }
@@ -238,10 +257,150 @@ function playCue(name) {
   }
 }
 
+/* =========================================================
+   动作玩法音效（地下城等实时游戏）
+   与回合制 playCue 的区别：不打断正在播放的声音，允许多声部叠加。
+   按事件合并/节流由调用方负责（见 assets/js/dungeon/dgn-beta-audio.js），
+   这里只保留一个安全声部上限，避免高频事件淹没输出。
+========================================================= */
+
+const ACTION_VOICE_LIMIT = 16;
+
+function synthesizeActionCue(name) {
+  const now = context.currentTime + 0.012;
+  const note = (freq, delay, duration, opts) => tone(freq, now + delay, duration, { ...opts, voices: actionVoices });
+  const noise = (delay, duration, opts) => noiseBurst(now + delay, duration, { ...opts, voices: actionVoices });
+  const tap = (freq, delay = 0, wave = "triangle", peak = 0.3) => note(freq, delay, 0.08, { wave, peak });
+  switch (name) {
+    case "swing":
+      noise(0, 0.1, { frequency: 900, to: 2600, q: 0.7, peak: 0.09 });
+      note(300, 0, 0.09, { wave: "triangle", to: 170, peak: 0.2 });
+      break;
+    case "shoot":
+      noise(0, 0.05, { frequency: 2600, q: 1.1, peak: 0.07 });
+      note(900, 0, 0.07, { wave: "square", to: 1500, peak: 0.15 });
+      break;
+    case "hit":
+      note(320, 0, 0.07, { wave: "triangle", to: 120, peak: 0.24 });
+      noise(0, 0.04, { frequency: 1200, q: 0.9, peak: 0.08 });
+      break;
+    case "kill":
+      note(240, 0, 0.16, { wave: "sawtooth", to: 80, peak: 0.22 });
+      noise(0, 0.14, { frequency: 700, to: 260, q: 0.5, peak: 0.1 });
+      break;
+    case "hurt":
+      note(170, 0, 0.2, { wave: "square", to: 74, peak: 0.3 });
+      noise(0, 0.12, { frequency: 420, q: 0.4, peak: 0.11 });
+      break;
+    case "pickup":
+      tap(1180, 0, "sine", 0.24);
+      tap(1620, 0.05, "sine", 0.2);
+      break;
+    case "levelup":
+      tap(659, 0, "triangle", 0.3); tap(880, 0.08, "triangle", 0.32);
+      tap(1109, 0.16, "sine", 0.34); tap(1319, 0.24, "sine", 0.36);
+      break;
+    case "waveStart":
+      note(392, 0, 0.2, { wave: "triangle", peak: 0.3 });
+      note(587, 0.14, 0.28, { wave: "triangle", peak: 0.32 });
+      break;
+    case "waveClear":
+      tap(523, 0, "triangle", 0.3); tap(659, 0.1, "triangle", 0.32); tap(784, 0.2, "sine", 0.36);
+      break;
+    case "boss":
+      note(120, 0, 0.6, { wave: "sawtooth", to: 60, peak: 0.28 });
+      noise(0, 0.5, { filter: "lowpass", frequency: 260, to: 120, q: 0.6, peak: 0.14 });
+      break;
+    case "death":
+      note(880, 0, 0.22, { wave: "triangle", to: 520, peak: 0.3 });
+      note(520, 0.16, 0.4, { wave: "triangle", to: 110, peak: 0.32 });
+      break;
+    case "victory":
+      tap(523, 0, "triangle", 0.32); tap(659, 0.11, "triangle", 0.34);
+      tap(784, 0.22, "sine", 0.36); tap(1047, 0.34, "sine", 0.4);
+      break;
+    case "buy":
+      tap(1047, 0, "sine", 0.28); tap(1568, 0.06, "sine", 0.24);
+      break;
+    case "reroll":
+      noise(0, 0.16, { frequency: 1500, to: 800, q: 0.6, peak: 0.1 });
+      tap(700, 0.02, "triangle", 0.2); tap(560, 0.1, "triangle", 0.2);
+      break;
+    case "craft":
+      tap(880, 0, "sine", 0.24); tap(1320, 0.07, "sine", 0.26); tap(1760, 0.14, "sine", 0.22);
+      break;
+    case "error":
+      note(200, 0, 0.18, { wave: "square", to: 150, peak: 0.22 });
+      break;
+    case "select":
+      tap(660, 0, "sine", 0.2);
+      break;
+    default:
+      break;
+  }
+}
+
+/**
+ * Play one cue from an action game. Returns whether a new voice was scheduled.
+ * Real-time play must not cancel earlier cues, so this never calls cancelSources().
+ */
+export function playActionSound(cue) {
+  if (!settings.enabled || settings.volume <= 0 || document.hidden) return false;
+  if (!context || context.state !== "running") return false;
+  if (actionVoices.size >= ACTION_VOICE_LIMIT) return false;
+  try {
+    synthesizeActionCue(cue);
+  } catch {
+    return false;
+  }
+  return true;
+}
+
+/** Current shared sound preference; the dungeon page reuses it for its own control. */
+export function getGameAudioSettings() {
+  return { enabled: settings.enabled, volume: settings.volume };
+}
+
+/** Persist and apply a new mute state; cancels scheduled voices immediately when muted. */
+export function setGameAudioEnabled(enabled) {
+  settings.enabled = enabled !== false;
+  persistSettings();
+  if (!settings.enabled) stopGameAudio();
+  else resumeFromGesture();
+  syncSettingsUi();
+  return settings.enabled;
+}
+
+/** Persist and apply a new volume; zero volume also cancels scheduled voices. */
+export function setGameAudioVolume(volume) {
+  const value = Number(volume);
+  if (Number.isFinite(value)) settings.volume = Math.max(0, Math.min(100, Math.round(value)));
+  persistSettings();
+  if (settings.volume === 0) stopGameAudio();
+  syncSettingsUi();
+  return settings.volume;
+}
+
+/** Unlock the audio context from a user gesture (browsers require one before playback). */
+export function unlockGameAudio() {
+  resumeFromGesture();
+}
+
+let sessionOf = () => null;
+
+/**
+ * 注入“当前用户/观战”来源，供回合制提示音判断是否轮到自己。
+ * 不注入时视为没有登录用户，只影响“轮到你”这类提示音。
+ */
+export function setGameAudioSession(provider) {
+  sessionOf = typeof provider === "function" ? provider : () => null;
+}
+
 function currentUsername() {
   // 观战时不下场：不触发“轮到你”之类的提示音。
-  if (state.myRoom?.spectator) return null;
-  return state.currentUser?.username || null;
+  const session = sessionOf() || null;
+  if (session?.myRoom?.spectator) return null;
+  return session?.currentUser?.username || null;
 }
 
 function actionable(room) {
@@ -441,28 +600,18 @@ function closeSettings() {
   opener = null;
 }
 
-export function initializeGameAudio() {
+export function initializeGameAudio({ previewCue: configuredPreview } = {}) {
   if (initialized) return;
   initialized = true;
+  if (typeof configuredPreview === "string") previewCue = configuredPreview;
   document.addEventListener("click", (event) => {
-    const button = event.target.closest?.("#hallAudioSettingsButton, #roomAudioSettingsButton, #estateAudioSettingsButton");
+    const button = event.target.closest?.("#hallAudioSettingsButton, #roomAudioSettingsButton, #estateAudioSettingsButton, #dungeonAudioSettingsButton");
     if (button) openSettings(button);
   });
 
   const { enabled, volume, preview } = getSettingsNodes();
-  enabled?.addEventListener("change", () => {
-    settings.enabled = enabled.checked;
-    persistSettings();
-    if (!settings.enabled) stopGameAudio();
-    else resumeFromGesture();
-    syncSettingsUi();
-  });
-  volume?.addEventListener("input", () => {
-    settings.volume = Math.max(0, Math.min(100, Number(volume.value) || 0));
-    persistSettings();
-    if (settings.volume === 0) stopGameAudio();
-    syncSettingsUi();
-  });
+  enabled?.addEventListener("change", () => setGameAudioEnabled(enabled.checked));
+  volume?.addEventListener("input", () => setGameAudioVolume(volume.value));
   preview?.addEventListener("click", async () => {
     if (!settings.enabled || settings.volume <= 0) return;
     const request = ++previewRequest;
@@ -472,7 +621,9 @@ export function initializeGameAudio() {
     try { await audio.resume(); } catch { return; }
     if (request !== previewRequest || epoch !== playbackEpoch || !settings.enabled
         || settings.volume <= 0 || document.hidden) return;
-    playCue("settlement");
+    // 动作页面试听自己的音效；其余页面沿用原来的结算音。
+    if (previewCue) playActionSound(previewCue);
+    else playCue("settlement");
   });
   document.getElementById("gameAudioCloseButton")?.addEventListener("click", closeSettings);
   document.getElementById("gameAudioSettingsModal")?.addEventListener("click", (event) => {

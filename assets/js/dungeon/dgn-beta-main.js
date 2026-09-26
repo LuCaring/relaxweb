@@ -7,6 +7,10 @@ import { Arena } from "./dgn-beta-arena.js";
 import { Shop } from "./dgn-beta-shop.js";
 import { createState } from "./dgn-beta-state.js";
 import { CURRENCIES, rollCurrencyDrops } from "./dgn-beta-crafting.js";
+import { initDungeonAudio, sfx, unlockDungeonAudio } from "./dgn-beta-audio.js";
+
+// 音效复用全站共享设置；加载失败或没有 WebAudio 时静默降级，不影响玩法。
+initDungeonAudio();
 
 function showScreen(id) {
   for (const screen of document.querySelectorAll(".dgn-screen")) {
@@ -30,13 +34,19 @@ class BetaApp {
       },
       onWaveEnd: (result) => this.onWaveEnd(result),
       onDeath: () => this.onDeath(),
+      onSound: (cue) => sfx(cue),
     });
     this.shop = new Shop({
       onMaterialsChanged: () => this.updateMaterialViews(),
       onBuy: () => {},
       onError: (message) => this.toast(message),
+      onSound: (cue) => sfx(cue),
     });
-    el("dgn-btn-start").addEventListener("click", () => this.startWave());
+    el("dgn-btn-start").addEventListener("click", () => {
+      // 浏览器要求用户手势后才能出声：进入遗迹这一下同时解锁音频。
+      unlockDungeonAudio();
+      this.startWave();
+    });
     el("dgn-btn-shop").addEventListener("click", () => this.openShop());
     el("dgn-btn-nextwave").addEventListener("click", () => {
       this.state.wave += 1;
@@ -66,13 +76,15 @@ class BetaApp {
 
   onWaveEnd(result) {
     if (!result.victory) return;
+    const finished = this.state.wave >= MAX_WAVE;
+    sfx(finished ? "victory" : "waveClear");
     const drops = rollCurrencyDrops(Math.random);
     for (const currencyId of drops) {
       this.state.currencies[currencyId] = (this.state.currencies[currencyId] || 0) + 1;
     }
     el("dgn-result-currency").textContent = drops.length
       ? drops.map((id) => CURRENCIES.find((currency) => currency.id === id).name).join("、") : "无";
-    if (this.state.wave >= MAX_WAVE) {
+    if (finished) {
       this.onVictory();
       return;
     }
@@ -163,6 +175,7 @@ class BetaApp {
       desc.textContent = upgrade.desc;
       card.append(name, desc);
       card.addEventListener("click", () => {
+        sfx("select");
         this.chooseUpgrade(upgrade);
         this.pendingLevels -= 1;
         if (this.pendingLevels > 0) {

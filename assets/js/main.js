@@ -11,7 +11,7 @@ import {
 } from "./auth.js";
 import { closeChatOverlay } from "./room-chat.js";
 import { confirmDialog } from "./dialog.js";
-import { initializeGameAudio } from "./game-audio.js";
+import { initializeGameAudio, setGameAudioSession } from "./game-audio.js";
 // 以下模块靠导入时的副作用完成注册（大厅视图、房间视图、各游戏牌桌）
 import "./hall.js";
 import "./room.js";
@@ -23,6 +23,8 @@ import "./games/ludo.js?v=2";
 import "./games/liarsbar.js?v=2";
 import "./estate/view.js";
 
+// 音频引擎不依赖大厅状态，由入口把当前会话注入，用于“轮到你”之类的提示音。
+setGameAudioSession(() => state);
 initializeGameAudio();
 
 elements.loginButton.addEventListener("click", openLogin);

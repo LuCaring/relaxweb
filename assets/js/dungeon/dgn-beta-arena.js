@@ -31,10 +31,10 @@ function dist(ax, ay, bx, by) {
 }
 
 export class Arena {
-  constructor(canvas, { onHud, onLevelUp, onWaveEnd, onDeath }) {
+  constructor(canvas, { onHud, onLevelUp, onWaveEnd, onDeath, onSound }) {
     this.canvas = canvas;
     this.ctx = canvas.getContext("2d");
-    this.hooks = { onHud, onLevelUp, onWaveEnd, onDeath };
+    this.hooks = { onHud, onLevelUp, onWaveEnd, onDeath, onSound };
     this.dataDeps = { WEAPONS, ITEMS };
     this.running = false;
     this.paused = false;
@@ -109,6 +109,12 @@ export class Arena {
       requestAnimationFrame(this.onFrame);
     }
     this.pushHud();
+    this.sound("waveStart");
+  }
+
+  /** 音效出口：由入口装配注入，原型页接共享音频引擎，测试可注入记录器。 */
+  sound(cue) {
+    this.hooks.onSound?.(cue);
   }
 
   pause() { this.paused = true; }
@@ -164,6 +170,7 @@ export class Arena {
     }
     this.floatTexts = this.floatTexts.filter((text) => text.life > 0);
     if (this.state.hp <= 0) {
+      this.sound("death");
       this.hooks.onDeath?.();
       this.running = false;
       return;
@@ -188,6 +195,7 @@ export class Arena {
       const boss = this.spawnEnemy("brute", 2.2, 1.3);
       boss.isBoss = true;
       boss.radius *= 1.5;
+      this.sound("boss");
     }
   }
 
@@ -265,8 +273,10 @@ export class Arena {
         if (target) {
           this.player.attackTimers[index] = weapon.cooldown;
           if (weapon.kind === "melee") {
+            this.sound("swing");
             this.meleeAttack(weapon, target, stats);
           } else {
+            this.sound("shoot");
             this.rangedAttack(weapon, target, stats);
           }
         } else {
@@ -372,6 +382,7 @@ export class Arena {
   hitEnemy(enemy, damage, knockback) {
     enemy.hp -= damage;
     enemy.hitFlash = 0.1;
+    this.sound("hit");
     const angle = Math.atan2(enemy.y - this.player.y, enemy.x - this.player.x);
     enemy.x += Math.cos(angle) * knockback * 0.06;
     enemy.y += Math.sin(angle) * knockback * 0.06;
@@ -388,6 +399,7 @@ export class Arena {
   killEnemy(enemy) {
     const index = this.enemies.indexOf(enemy);
     if (index >= 0) this.enemies.splice(index, 1);
+    this.sound("kill");
     for (let i = 0; i < enemy.materials; i++) {
       this.pickups.push({
         x: enemy.x + (this.rand() - 0.5) * 24,
@@ -397,6 +409,7 @@ export class Arena {
     }
     const levels = grantXp(this.state, enemy.isBoss ? 6 : 1);
     if (levels.length > 0) {
+      this.sound("levelup");
       this.paused = true;
       this.hooks.onLevelUp?.(levels);
     }
@@ -414,6 +427,7 @@ export class Arena {
         if (enemy.attackCd <= 0) {
           enemy.attackCd = 0.8;
           const final = applyDamage(this.state, enemy.damage, stats);
+          this.sound("hurt");
           this.floatTexts.push({
             x: this.player.x,
             y: this.player.y - 22,
@@ -444,6 +458,7 @@ export class Arena {
         this.state.materials += 1;
         this.state.totalMaterialsEarned += 1;
         this.materialsEarned += 1;
+        this.sound("pickup");
       }
     }
     this.pickups = this.pickups.filter((pickup) => !pickup.collected);
@@ -451,6 +466,7 @@ export class Arena {
 
   endWave(victory) {
     this.running = false;
+    // 波次结束的收尾音由入口装配决定（区分“本波结束”和“通关”），竞技场只上报结果。
     this.hooks.onWaveEnd?.({ victory, materialsEarned: this.materialsEarned });
   }
 

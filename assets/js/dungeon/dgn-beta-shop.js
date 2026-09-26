@@ -28,8 +28,8 @@ function rollOffer(rand, wave) {
 }
 
 export class Shop {
-  constructor({ onMaterialsChanged, onBuy, onError }) {
-    this.hooks = { onMaterialsChanged, onBuy, onError };
+  constructor({ onMaterialsChanged, onBuy, onError, onSound }) {
+    this.hooks = { onMaterialsChanged, onBuy, onError, onSound };
     this.el = {
       materials: document.getElementById("dgn-shop-materials"),
       wave: document.getElementById("dgn-shop-wave"),
@@ -48,6 +48,11 @@ export class Shop {
       affixOddsDetail: document.getElementById("dgn-affix-odds-detail"),
     };
     this.el.reroll.addEventListener("click", () => this.reroll());
+  }
+
+  /** 音效出口：由入口装配注入，原型页接共享音频引擎，测试可注入记录器。 */
+  sound(cue) {
+    this.hooks.onSound?.(cue);
   }
 
   findById(kind, id) {
@@ -81,10 +86,12 @@ export class Shop {
     if (!free) {
       if (run.materials < cost) {
         this.hooks.onError?.("材料不足，无法重抽");
+        this.sound("error");
         return;
       }
       run.materials -= cost;
       run.rerollCount += 1;
+      this.sound("reroll");
     }
     const rand = this.makeRand();
     const kept = run.shopOffers.filter((offer) => offer?.locked);
@@ -97,6 +104,7 @@ export class Shop {
   toggleLock(index) {
     const offer = this.state.shopOffers[index];
     offer.locked = !offer.locked;
+    this.sound("select");
     this.render();
   }
 
@@ -107,10 +115,12 @@ export class Shop {
     const price = offerPrice(entry, run.wave);
     if (run.materials < price) {
       this.hooks.onError?.("材料不足");
+      this.sound("error");
       return;
     }
     if (offer.kind === "weapon" && !hasFreeWeaponSlot(run)) {
       this.hooks.onError?.("武器栏已满（6），先卖掉一把");
+      this.sound("error");
       return;
     }
     const beforeHp = statsOf(run, { ITEMS, WEAPONS }).maxHp;
@@ -121,6 +131,7 @@ export class Shop {
     const afterHp = statsOf(run, { ITEMS, WEAPONS }).maxHp;
     run.hp = Math.min(afterHp, run.hp + Math.max(0, afterHp - beforeHp));
     run.shopOffers[index] = null;
+    this.sound("buy");
     this.hooks.onBuy?.(offer);
     this.render();
     this.hooks.onMaterialsChanged?.(run.materials);
@@ -134,6 +145,7 @@ export class Shop {
     run.hp = Math.min(run.hp, statsOf(run, { ITEMS, WEAPONS }).maxHp);
     if (this.selected?.kind === "weapon") this.selected = null;
     run.materials += refund;
+    this.sound("buy");
     this.render();
     this.hooks.onMaterialsChanged?.(run.materials);
   }
@@ -149,13 +161,22 @@ export class Shop {
 
   selectGear(kind, index) {
     this.selected = { kind, index };
+    this.sound("select");
     this.render();
   }
 
   useCurrency(currencyId) {
     const gear = this.selectedGear();
-    if (!gear) return this.hooks.onError?.("先选择一件装备");
-    if (!this.state.currencies[currencyId]) return this.hooks.onError?.("通货数量不足");
+    if (!gear) {
+      this.hooks.onError?.("先选择一件装备");
+      this.sound("error");
+      return;
+    }
+    if (!this.state.currencies[currencyId]) {
+      this.hooks.onError?.("通货数量不足");
+      this.sound("error");
+      return;
+    }
     try {
       const crafted = craftGear(gear, currencyId, Math.random);
       const before = statsOf(this.state, { ITEMS, WEAPONS }).maxHp;
@@ -164,9 +185,11 @@ export class Shop {
       this.state.currencies[currencyId] -= 1;
       const after = statsOf(this.state, { ITEMS, WEAPONS }).maxHp;
       this.state.hp = Math.min(after, this.state.hp + Math.max(0, after - before));
+      this.sound("craft");
       this.render();
     } catch (error) {
       this.hooks.onError?.(error.message);
+      this.sound("error");
     }
   }
 

@@ -16,6 +16,8 @@ B 线可从本地归档标签 `archive/dungeon-ui-before-beta` 参考 `dungeon.h
 
 装备词条 T 级、通货改造及两套入口的概率口径见 [装备与通货规则](../docs/dungeon-equipment-currency.md)。
 
+原型音效全部由 WebAudio 实时合成，复用游戏厅的音量/静音设置，见 [地下城 Beta 音效](../docs/dungeon-beta-audio.md)。
+
 ## 旧功能维护
 
 旧协议的实际消息注册见 `server/dungeon/legacy_protocol.py`，装备动作见 `dungeon/legacy/actions.py`，旧局/奖励事务见 `dungeon/legacy/runs.py`。旧回执与Beta成功回执使用不同表和格式，不互相转换。旧局按原规则完成，新动作流程通过独立Beta协议接入。
