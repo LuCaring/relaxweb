@@ -32,5 +32,8 @@
       "required_skins": "all",
       "required_collectibles": "all"
     }
+  },
+  "dungeon": {
+    "beta_enabled": false
   }
 }

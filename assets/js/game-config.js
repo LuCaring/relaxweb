@@ -10,6 +10,17 @@ export const GAME_TYPES = [
     desc: "经营你的像素庄园：种田、钓鱼、挖矿，让每一枚金币慢慢生长。",
   },
   {
+    // 独立页面（不占用牌桌），且只在 config.json 打开 dungeon.beta_enabled 时出现。
+    id: "dungeon",
+    mode: "link",
+    href: "/dungeon-beta.html",
+    flag: "dungeonBeta",
+    action: "进入遗迹 →",
+    name: "遗迹深探 · 地下城 Beta",
+    icon: "🗝️",
+    desc: "俯视动作波次玩法：走位、武器自动攻击、波次之间进商店改造装备。当前是本地原型，不读写正式账号与金币。",
+  },
+  {
     id: "holdem",
     name: "德州扑克 · 无限注",
     icon: "♠",
@@ -59,8 +70,17 @@ export const GAME_TYPES = [
   },
 ];
 
-export const ROOM_GAME_TYPES = GAME_TYPES.filter((game) => game.mode !== "solo");
+/** 牌桌游戏：排除单人玩法和跳转到独立页面的入口。 */
+export const ROOM_GAME_TYPES = GAME_TYPES.filter((game) => game.mode !== "solo" && game.mode !== "link");
 export const DEFAULT_GAME = ROOM_GAME_TYPES[0];
+
+/**
+ * 游戏厅实际展示的入口。带 flag 的条目只有在对应开关为 true 时才出现，
+ * 用于把未接正式协议的地下城原型挡在正式入口之外（见 config.json 的 dungeon.beta_enabled）。
+ */
+export function hallGameTypes(flags = {}) {
+  return GAME_TYPES.filter((game) => !game.flag || flags[game.flag] === true);
+}
 
 export function gameMetaById(id) {
   return GAME_TYPES.find((game) => game.id === id) || DEFAULT_GAME;

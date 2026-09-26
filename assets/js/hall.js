@@ -2,16 +2,22 @@
 
 import { openLogin } from "./auth.js";
 import { confirmDialog } from "./dialog.js";
-import { elements, formatCoins, renderGameView, send, state } from "./core.js";
+import { DUNGEON_BETA_ENABLED, elements, formatCoins, renderGameView, send, state } from "./core.js";
 import { onMessage, registerView } from "./registry.js";
 import { ratingCard } from "./rating.js";
 import { assetCard } from "./asset-ranking.js";
-import { DEFAULT_GAME, GAME_TYPES, ROOM_GAME_TYPES, gameMetaById } from "./game-config.js";
+import { DEFAULT_GAME, ROOM_GAME_TYPES, gameMetaById, hallGameTypes } from "./game-config.js";
 import "./create-room.js";
 
 export { fillBlindOptions, gameMetaById } from "./game-config.js";
 
-const GAME_SHORT_NAMES = GAME_TYPES.map((game) => game.name.split(" · ")[0]).join("、");
+/** 游戏厅当前展示的入口；地下城原型由站点配置开关控制是否出现。 */
+const HALL_GAME_TYPES = hallGameTypes({ dungeonBeta: DUNGEON_BETA_ENABLED });
+// 欢迎语只列共用金币的玩法，跳转到独立页面的原型不算在内。
+const GAME_SHORT_NAMES = HALL_GAME_TYPES
+  .filter((game) => game.mode !== "link")
+  .map((game) => game.name.split(" · ")[0])
+  .join("、");
 let roomSearch = "";
 let roomStatusFilter = "all";
 function button(label, className, onClick) {
@@ -56,6 +62,11 @@ function renderEntry() {
 
 function selectGame(gameId) {
   const game = gameMetaById(gameId);
+  // 独立页面的入口（地下城原型）不在大厅内切换视图，直接跳转。
+  if (game.mode === "link") {
+    location.assign(game.href);
+    return;
+  }
   state.currentGameId = game.id;
   state.hallPage = game.mode === "solo" ? game.view : "rooms";
   renderGameView();
@@ -70,7 +81,7 @@ function renderHall() {
   body.append(heading);
   const grid = document.createElement("div");
   grid.className = "hall-grid";
-  for (const game of GAME_TYPES) {
+  for (const game of HALL_GAME_TYPES) {
     const card = button("", "hall-game-card", () => selectGame(game.id));
     const icon = document.createElement("div");
     icon.className = "hall-game-icon";
@@ -85,7 +96,7 @@ function renderHall() {
     info.append(name, desc);
     const go = document.createElement("div");
     go.className = "hall-game-go";
-    go.textContent = game.mode === "solo" ? "进入庄园 →" : "查看房间 →";
+    go.textContent = game.action || (game.mode === "solo" ? "进入庄园 →" : "查看房间 →");
     card.append(icon, info, go);
     grid.append(card);
   }

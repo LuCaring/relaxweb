@@ -46,6 +46,10 @@ DEFAULTS = {
             "required_collectibles": "all",
         },
     },
+    # 未接正式协议的地下城原型：默认不在游戏厅放入口，避免把半成品暴露给真实玩家。
+    "dungeon": {
+        "beta_enabled": False,
+    },
 }
 
 
@@ -98,7 +102,7 @@ def get_int(dotted, env=None, default=0):
 
 
 def client_config():
-    """下发给浏览器的子集：只有展示文案与端口，不含任何口令。"""
+    """下发给浏览器的子集：只有展示文案、端口与公开开关，不含任何口令。"""
     return {
         "site": CONFIG.get("site", {}),
         "stream": {
@@ -106,4 +110,6 @@ def client_config():
             "path": get("stream.path", env="STREAM_PATH", default="live"),
         },
         "chat_port": get_int("servers.chat_port", env="LIVE_CHAT_PORT", default=8765),
+        # 前端据此决定游戏厅是否显示地下城原型入口；默认关闭。
+        "dungeon": {"beta_enabled": bool(get("dungeon.beta_enabled", default=False))},
     }

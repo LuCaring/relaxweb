@@ -84,6 +84,9 @@ $EDITOR config.json
   },
   "economy": {
     "new_user_coins": 1000
+  },
+  "dungeon": {
+    "beta_enabled": false
   }
 }
 ```
@@ -339,6 +342,8 @@ uv run --locked python scripts/preview_ui.py
 ```
 
 再次启动会自动停止同一项目的旧预览进程。需要同时运行多个预览时加 `--no-replace`。本地服务在上述终端按 Ctrl+C 停止后重新启动；`uv run --locked python admin.py status` 可查看本地服务状态，`admin.py restart` 仅用于 systemd 部署。
+
+地下城 Beta 动作原型是独立页面 `/dungeon-beta.html`，**默认不在游戏厅显示入口**：它还没有接入正式账号、金币与存档，直接放进大厅会让玩家进入一个与账号无关的半成品。要在本地试玩，把 `config.json` 的 `dungeon.beta_enabled` 设为 `true` 并重启 `deploy/serve.py`，游戏厅就会出现与庄园平级的「遗迹深探」入口（未登录时游戏厅只显示登录提示，看不到任何入口卡片）。只想单独调这个原型时，用 `uv run --locked python scripts/preview_game.py` 更省事，它带自动刷新。
 
 运行全部 Python 测试（包括独立游戏测试脚本）：
 

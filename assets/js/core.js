@@ -43,6 +43,8 @@ export const AUTH_TOKEN_KEY = "liveAuthToken";
 const LIVE_CONFIG = window.LIVE_CONFIG || {};
 export const CHAT_PORT = LIVE_CONFIG.chat_port || 8765;
 export const SITE = LIVE_CONFIG.site || {};
+/** 地下城原型入口开关（config.json 的 dungeon.beta_enabled）。未接正式协议，默认关闭。 */
+export const DUNGEON_BETA_ENABLED = (LIVE_CONFIG.dungeon || {}).beta_enabled === true;
 
 const profiles = new Map();
 const pendingProfiles = new Set();
