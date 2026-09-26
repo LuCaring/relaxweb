@@ -91,7 +91,7 @@ SKIN_FRAGMENT_ITEM = "supply:skin_fragment"
 PENGUIN_FRAGMENT_COST = 28
 LOTTERY_PRICE = 3000.0
 LOTTERY_PRIZES = ("thanks", "coins_250", "coins_1000", "coins_2000",
-                  "legendary_seed", "missing_collectible", "fertilizer_2", "grand")
+                  "mystery_seed", "missing_collectible", "fertilizer_2", "grand")
 LOTTERY_GRAND_PRIZES = (
     ("coins_100000", 10), ("reroll", 40), ("land_ticket", 10),
     ("coins_5000", 20), ("coins_10000", 20),
@@ -109,6 +109,7 @@ def _crop(name, seed_price, sell_price, grow_minutes, xp, unlock_level, icon, co
 
 CROPS = {
     "legendary_flower": _crop("传说花", 0, 36888, 72 * 60, 1440, 1, "🌟", "#f4cc5b"),
+    "gpu_fruit": _crop("显卡果", 0, 0, 5 * 60, 100, 1, "🖥️", "#65b866"),
     "wheat": _crop("小麦", 20, 30, 5, 5, 1, "🌾", "#e6cb63"),
     "carrot": _crop("胡萝卜", 40, 65, 15, 8, 1, "🥕", "#f28b36"),
     "rice": _crop("水稻", 28, 44, 9, 6, 1, "🌾", "#ddd477"),
@@ -135,6 +136,14 @@ CROPS = {
     "starlight_berry": _crop("星露果", 3200, 13280, 2880, 1440, 8, "✨", "#8dd9df"),
 }
 CROPS["legendary_flower"]["lottery_only"] = True
+CROPS["gpu_fruit"]["lottery_only"] = True
+GPU_MODELS = {
+    "gtx_960": ("GTX 960", 300), "gtx_1060": ("GTX 1060", 500),
+    "gtx_1660": ("GTX 1660", 800), "rtx_2060": ("RTX 2060", 1200),
+    "rtx_3060": ("RTX 3060", 1800), "rtx_4060": ("RTX 4060", 2500),
+    "rtx_4070": ("RTX 4070", 3800), "rtx_4080": ("RTX 4080", 6000),
+    "rtx_4090": ("RTX 4090", 10000), "rtx_5090": ("RTX 5090", 30000),
+}
 
 LAND_LEVELS = {
     1: {"multiplier": 1.0, "upgrade_price": 500.0, "unlock_level": 2},
@@ -280,6 +289,12 @@ PENGUIN_LEVELS = {
     4: {"name": "臭企鹅", "harvest_delay_minutes": 30, "upgrade_price": None,
         "auto_replant": True},
 }
+MAODIE_LEVELS = {
+    1: {"name": "耄耋", "plots_fertilized": 1, "upgrade_price": 20000.0},
+    2: {"name": "耄耋", "plots_fertilized": 2, "upgrade_price": 40000.0},
+    3: {"name": "耄耋", "plots_fertilized": 3, "upgrade_price": 60000.0},
+    4: {"name": "耄耋", "plots_fertilized": 4, "upgrade_price": None},
+}
 
 
 def item_id(kind, key):
@@ -336,11 +351,15 @@ def item_info(item_id):
     if not isinstance(item_id, str) or ":" not in item_id:
         return None
     kind, crop_id = item_id.split(":", 1)
+    if kind == "gpu" and crop_id in GPU_MODELS:
+        name, price = GPU_MODELS[crop_id]
+        return {"id": item_id, "kind": "gpu", "name": name,
+                "sellable": True, "sell_price": price}
     if kind in ("seed", "crop") and crop_id in CROPS:
         crop = CROPS[crop_id]
         return {"id": item_id, "kind": kind, "crop_id": crop_id,
                 "name": f"{crop['name']}种子" if kind == "seed" else crop["name"],
-                "sellable": kind == "crop",
+                "sellable": kind == "crop" and crop_id != "gpu_fruit",
                 "sell_price": crop["sell_price"] if kind == "crop" else None}
     groups = {"bait": BAITS, "fish": FISH, "mineral": MINERALS,
               "collectible": FISHING_TREASURES}
@@ -392,6 +411,7 @@ def public_catalog():
         "mining_levels": MINING_LEVELS,
         "pet_levels": PET_LEVELS,
         "penguin_levels": PENGUIN_LEVELS,
+        "maodie_levels": MAODIE_LEVELS,
         "penguin_fragment_item": SKIN_FRAGMENT_ITEM,
         "penguin_fragment_cost": PENGUIN_FRAGMENT_COST,
         # 客户端要用它推进钓鱼进度条并预判结局；不下发就会各自硬编码一份。

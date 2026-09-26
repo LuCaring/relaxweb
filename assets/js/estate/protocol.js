@@ -30,6 +30,7 @@ const SOUND_CUES = {
   estate_repair_tool: "shop",
   estate_pet: "shop",
   estate_penguin: "shop",
+  estate_maodie: "shop",
   estate_select_pet: "shop",
 };
 

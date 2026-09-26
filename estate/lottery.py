@@ -51,9 +51,11 @@ def draw_lottery(conn, username, request_id, now, adjust_coins):
             credit(adjust_coins, conn, username, amount,
                    "休闲庄园抽奖奖励", request_id)
             result.update({"coins_awarded": amount, "quantity": amount})
-        elif award == "legendary_seed":
-            change_inventory(conn, username, seed_item("legendary_flower"), 1)
-            result.update({"item_id": seed_item("legendary_flower"), "quantity": 1})
+        elif award == "mystery_seed":
+            crop_id = "legendary_flower" if secrets.randbelow(2) == 0 else "gpu_fruit"
+            change_inventory(conn, username, seed_item(crop_id), 1)
+            result.update({"item_id": seed_item(crop_id), "crop_id": crop_id,
+                           "quantity": 1})
         elif award == "fertilizer_2":
             change_inventory(conn, username, FERTILIZER_ITEM, 2)
             result.update({"item_id": FERTILIZER_ITEM, "quantity": 2})

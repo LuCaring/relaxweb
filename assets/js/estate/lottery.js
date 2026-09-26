@@ -3,13 +3,16 @@
 import { estateRequest } from "./protocol.js";
 import { estateStore } from "./state.js";
 
-const LABELS = ["谢谢惠顾", "250金币", "1000金币", "2000金币", "传说花",
+const LABELS = ["谢谢惠顾", "250金币", "1000金币", "2000金币", "神秘种子",
   "纪念品", "化肥×2", "神秘大奖"];
 
 function rewardLabel(result) {
   const award = result.award;
   if (award.startsWith("coins_")) return `恭喜获得 ${result.coins_awarded} 金币！`;
-  if (award === "legendary_seed") return "恭喜获得传说花种子 ×1！基础成熟时间 72 小时，售价 36,888 金币。";
+  if (award === "mystery_seed") return result.crop_id === "gpu_fruit"
+    ? "恭喜获得显卡果种子 ×1！种植 5 小时后收获，届时揭晓显卡型号。"
+    : "恭喜获得传说花种子 ×1！基础成熟时间 72 小时，售价 36,888 金币。";
+  if (award === "legendary_seed") return "获得传说花种子 ×1。";
   if (award === "fertilizer_2") return "恭喜获得化肥 ×2！";
   if (award === "land_ticket") return "恭喜获得 4级农田升级券 ×1！可用于一块空置的 3级农田。";
   if (award === "missing_collectible") {
@@ -51,7 +54,7 @@ export function renderLotteryGame(target, snapshot, onBusyChange) {
   else status.textContent = Number(snapshot.coins) < price
     ? "金币不足，暂时不能抽奖。" : "请先腾出至少 2 格仓位。";
   const rules = document.createElement("p"); rules.className = "estate-sheet-note";
-  rules.textContent = "神秘大奖：10% 得 100,000 金币、40% 免费再抽一次、10% 得农田升级券、20% 得 5,000 金币、20% 得 10,000 金币。传说花需种植成熟后出售；纪念品集齐后抽中该奖项可获得 1 个皮肤碎片。";
+  rules.textContent = "神秘种子：传说花与显卡果各 50%。显卡果收获时才揭晓型号，10 款型号等概率。神秘大奖：10% 得 100,000 金币、40% 免费再抽一次、10% 得农田升级券、20% 得 5,000 金币、20% 得 10,000 金币。纪念品集齐后抽中该奖项可获得 1 个皮肤碎片。";
   const historyButton = document.createElement("button"); historyButton.type = "button";
   historyButton.className = "estate-button"; historyButton.textContent = "查看抽奖记录";
   const historyList = document.createElement("div"); historyList.className = "estate-lottery-history";

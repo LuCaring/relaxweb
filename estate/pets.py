@@ -1,7 +1,66 @@
 """休闲庄园宠物购买、升级与出场切换。"""
+import secrets
 
-from estate.catalog import PET_LEVELS, PENGUIN_FRAGMENT_COST, PENGUIN_LEVELS, SKIN_FRAGMENT_ITEM
-from estate.store import change_inventory, debit, estate_error, load_profile, run_action
+from estate.catalog import (FERTILIZER_SECONDS, MAODIE_LEVELS, PET_LEVELS,
+                            PENGUIN_FRAGMENT_COST, PENGUIN_LEVELS, SKIN_FRAGMENT_ITEM)
+from estate.store import bump_version, change_inventory, debit, estate_error, load_profile, run_action
+
+
+MAODIE_INTERVAL = 90 * 60
+
+
+def auto_fertilize_maodie(conn, username, now):
+    """出场期间每轮随机施肥，空田或已成熟田不会消耗次数或库存。"""
+    profile = load_profile(conn, username)
+    level = int(profile["maodie_level"])
+    if profile["active_pet"] != "maodie" or not level:
+        return 0
+    last = int(profile["maodie_last_at"])
+    if last and int(now) - last < MAODIE_INTERVAL:
+        return 0
+    candidates = [index for (index,) in conn.execute(
+        "SELECT plot_index FROM estate_plots WHERE username=? AND plot_index<? "
+        "AND crop_id IS NOT NULL AND ready_at>?",
+        (username, profile["plot_count"], int(now)))]
+    selected = []
+    for _ in range(min(level, len(candidates))):
+        selected.append(candidates.pop(secrets.randbelow(len(candidates))))
+    for index in selected:
+        conn.execute("UPDATE estate_plots SET ready_at=MAX(?,ready_at-?) "
+                     "WHERE username=? AND plot_index=? AND ready_at>?",
+                     (int(now), FERTILIZER_SECONDS, username, index, int(now)))
+    conn.execute("UPDATE estate_profiles SET maodie_last_at=? WHERE username=?",
+                 (int(now), username))
+    if selected:
+        bump_version(conn, username, now)
+    return len(selected)
+
+
+def buy_or_upgrade_maodie(conn, username, request_id, now, adjust_coins):
+    def mutate():
+        profile = load_profile(conn, username)
+        level = int(profile["maodie_level"])
+        if level >= 4:
+            raise estate_error(("pet_max_level", "耄耋已经达到最高等级"))
+        if level == 0:
+            change_inventory(conn, username, SKIN_FRAGMENT_ITEM, -PENGUIN_FRAGMENT_COST)
+            cost = 0
+            balance = conn.execute("SELECT coins FROM users WHERE username=?",
+                                   (username,)).fetchone()[0]
+        else:
+            cost = MAODIE_LEVELS[level]["upgrade_price"]
+            balance = debit(adjust_coins, conn, username, cost,
+                            f"休闲庄园：耄耋升级至 Lv.{level + 1}", request_id)
+        conn.execute("UPDATE estate_profiles SET maodie_level=?,maodie_last_at=?,"
+                     "active_pet=CASE WHEN ?=0 THEN 'maodie' ELSE active_pet END "
+                     "WHERE username=?", (level + 1, int(now), level, username))
+        return {"action": "maodie_upgrade" if level else "maodie_redeem",
+                "pet": "maodie", "maodie_level": level + 1,
+                "fragments_spent": PENGUIN_FRAGMENT_COST if level == 0 else 0,
+                "cost": cost, "coins": balance}
+
+    return run_action(conn, username, request_id, "maodie_buy_or_upgrade",
+                      {"pet": "maodie"}, now, mutate)
 
 
 def buy_or_upgrade_pet(conn, username, request_id, now, adjust_coins):
@@ -59,17 +118,22 @@ def buy_or_upgrade_penguin(conn, username, request_id, now, adjust_coins):
 
 
 def set_active_pet(conn, username, request_id, pet, now):
-    if pet not in ("doudou", "stinky_penguin"):
+    if pet not in ("doudou", "stinky_penguin", "maodie"):
         raise estate_error(("pet_invalid", "无效的宠物"))
 
     def mutate():
         profile = load_profile(conn, username)
-        level = profile["pet_level"] if pet == "doudou" else profile["penguin_level"]
+        level = {"doudou": profile["pet_level"],
+                 "stinky_penguin": profile["penguin_level"],
+                 "maodie": profile["maodie_level"]}[pet]
         if not level:
             raise estate_error(("pet_unowned", "尚未拥有该宠物"))
         if profile["active_pet"] != pet:
             if pet == "stinky_penguin":
                 conn.execute("UPDATE estate_profiles SET active_pet=?,penguin_active_at=? "
+                             "WHERE username=?", (pet, int(now), username))
+            elif pet == "maodie":
+                conn.execute("UPDATE estate_profiles SET active_pet=?,maodie_last_at=? "
                              "WHERE username=?", (pet, int(now), username))
             else:
                 conn.execute("UPDATE estate_profiles SET active_pet=? WHERE username=?",

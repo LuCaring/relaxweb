@@ -14,7 +14,9 @@ def init_estate(conn):
             pet_level INTEGER NOT NULL DEFAULT 0 CHECK(pet_level BETWEEN 0 AND 4),
             penguin_level INTEGER NOT NULL DEFAULT 0 CHECK(penguin_level BETWEEN 0 AND 4),
             penguin_active_at INTEGER NOT NULL DEFAULT 0,
-            active_pet TEXT NOT NULL DEFAULT 'doudou' CHECK(active_pet IN ('doudou','stinky_penguin')),
+            maodie_level INTEGER NOT NULL DEFAULT 0 CHECK(maodie_level BETWEEN 0 AND 4),
+            maodie_last_at INTEGER NOT NULL DEFAULT 0,
+            active_pet TEXT NOT NULL DEFAULT 'doudou' CHECK(active_pet IN ('doudou','stinky_penguin','maodie')),
             version INTEGER NOT NULL DEFAULT 1 CHECK(version >= 1),
             created_at INTEGER NOT NULL,
             updated_at INTEGER NOT NULL
@@ -40,6 +42,35 @@ def init_estate(conn):
     if "active_pet" not in profile_columns:
         conn.execute("ALTER TABLE estate_profiles ADD COLUMN active_pet TEXT NOT NULL DEFAULT 'doudou'")
         conn.execute("UPDATE estate_profiles SET active_pet='stinky_penguin' WHERE penguin_level>0")
+    if "maodie_level" not in profile_columns:
+        conn.execute("ALTER TABLE estate_profiles ADD COLUMN maodie_level INTEGER NOT NULL DEFAULT 0")
+    if "maodie_last_at" not in profile_columns:
+        conn.execute("ALTER TABLE estate_profiles ADD COLUMN maodie_last_at INTEGER NOT NULL DEFAULT 0")
+    profile_sql = conn.execute("SELECT sql FROM sqlite_master WHERE name='estate_profiles'").fetchone()[0]
+    if "'maodie'" not in profile_sql:
+        # 旧表的 active_pet CHECK 不接受新宠物；SQLite 需重建该表。
+        conn.execute("CREATE TABLE estate_profiles_new ("
+                     "username TEXT PRIMARY KEY COLLATE NOCASE, skin_id TEXT NOT NULL DEFAULT 'berry',"
+                     "level INTEGER NOT NULL DEFAULT 1 CHECK(level >= 1),"
+                     "xp INTEGER NOT NULL DEFAULT 0 CHECK(xp >= 0),"
+                     "warehouse_level INTEGER NOT NULL DEFAULT 1 CHECK(warehouse_level >= 1),"
+                     "plot_count INTEGER NOT NULL DEFAULT 0 CHECK(plot_count >= 0),"
+                     "reserved_capacity INTEGER NOT NULL DEFAULT 0 CHECK(reserved_capacity >= 0),"
+                     "pet_level INTEGER NOT NULL DEFAULT 0 CHECK(pet_level BETWEEN 0 AND 4),"
+                     "penguin_level INTEGER NOT NULL DEFAULT 0 CHECK(penguin_level BETWEEN 0 AND 4),"
+                     "penguin_active_at INTEGER NOT NULL DEFAULT 0,"
+                     "maodie_level INTEGER NOT NULL DEFAULT 0 CHECK(maodie_level BETWEEN 0 AND 4),"
+                     "maodie_last_at INTEGER NOT NULL DEFAULT 0,"
+                     "active_pet TEXT NOT NULL DEFAULT 'doudou' CHECK(active_pet IN "
+                     "('doudou','stinky_penguin','maodie')),"
+                     "version INTEGER NOT NULL DEFAULT 1 CHECK(version >= 1),"
+                     "created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL)")
+        columns = ("username,skin_id,level,xp,warehouse_level,plot_count,reserved_capacity,"
+                   "pet_level,penguin_level,penguin_active_at,maodie_level,maodie_last_at,"
+                   "active_pet,version,created_at,updated_at")
+        conn.execute(f"INSERT INTO estate_profiles_new({columns}) SELECT {columns} FROM estate_profiles")
+        conn.execute("DROP TABLE estate_profiles")
+        conn.execute("ALTER TABLE estate_profiles_new RENAME TO estate_profiles")
     conn.execute("""
         CREATE TABLE IF NOT EXISTS estate_plots (
             username TEXT NOT NULL COLLATE NOCASE,
