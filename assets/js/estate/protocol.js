@@ -104,6 +104,11 @@ onMessage("estate_visit_list", (data) => {
 });
 
 onMessage("estate_market_state", (data) => {
+  // 挂单可能在上一次打开面板之后成交，金币余额要跟着快照一起刷新。
+  if (data.market && state.currentUser && typeof data.market.coins === "number") {
+    state.currentUser.coins = data.market.coins;
+    updateCoinChip();
+  }
   settleRequest(data.request_id, { result: data.market });
 });
 

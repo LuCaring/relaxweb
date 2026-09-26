@@ -37,6 +37,11 @@ body.estate-active .game-container { width: 100%; max-width: none; height: 100dv
 .estate-visit-open, .estate-visit-return { padding: 9px 11px; white-space: nowrap; }
 .estate-search { flex: 1; min-width: 160px; padding: 10px 12px; border: 2px solid #8a633d; border-radius: 7px; background: #fff8df; color: #4d3527; font: inherit; }
 .estate-audio-open { flex: none; width: 38px; height: 38px; padding: 0; font-size: 16px; }
+.estate-market-open { flex: none; display: inline-flex; align-items: center; gap: 5px; padding: 9px 13px; border: 2px solid #7a4a2c; border-radius: 7px; background: #d99136; box-shadow: inset 0 -3px #a85828, 0 2px #473428; color: #fff8db; font: inherit; font-weight: 800; cursor: pointer; }
+.estate-market-open:hover { background: #e6a24a; }
+.estate-market-symbols { display: flex; gap: 7px; flex-wrap: wrap; }
+.estate-market-symbols .estate-button { padding: 7px 11px; font-size: 12px; }
+.estate-symbol-tab[aria-selected="true"] { background: #a45e3d; box-shadow: inset 0 -3px #76402e, 0 2px #473428; color: #fff8db; }
 .estate-back:hover, .estate-button:hover, .estate-visit-open:hover, .estate-visit-return:hover { filter: brightness(1.08); transform: translateY(-1px); }
 .estate-button:disabled { cursor: not-allowed; filter: grayscale(.65); opacity: .55; transform: none; }
 .estate-brand { margin-right: auto; display: grid; line-height: 1; }
@@ -141,11 +146,26 @@ body.estate-active .game-container { width: 100%; max-width: none; height: 100dv
 .estate-market-chart svg { display: block; width: 100%; height: auto; background: linear-gradient(#fffaf0, #f4e5c2); border: 2px solid #bc9a66; border-radius: 7px; }
 .estate-market-holdings { display: grid; grid-template-columns: 1fr 1fr; gap: 7px; color: #68503a; font-size: 12px; }
 .estate-market-holdings span { padding: 8px; background: #f4e5bf; border-radius: 5px; }
-.estate-market-order { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 7px; }
+.estate-market-order { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto auto; gap: 7px; }
 .estate-market-order input { min-width: 0; padding: 9px; border: 2px solid #9d7448; border-radius: 6px; background: #fffaf0; color: #4b352b; font: inherit; }
 .estate-market-order .estate-button { padding: 8px 11px; }
 .estate-market-message { min-height: 18px; margin: 0; color: #8d4a31; font-size: 12px; }
 .estate-market-disclosure { margin: 0; color: #89745c; font-size: 11px; line-height: 1.5; }
+.estate-market-book { display: grid; gap: 3px; font-size: 12px; }
+.estate-book-row { display: flex; justify-content: space-between; gap: 8px; padding: 5px 9px; border: 0; border-radius: 5px; background: #f4e5bf; color: #5d3d2b; font: inherit; cursor: pointer; }
+.estate-book-row:hover { background: #ecd8a4; }
+.estate-book-ask { color: #358266; }
+.estate-book-bid { color: #b95245; }
+.estate-market-orders { display: grid; gap: 5px; font-size: 12px; }
+.estate-order-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 6px 9px; background: #f4e5bf; border-radius: 5px; color: #68503a; }
+.estate-order-row .estate-button { padding: 5px 10px; font-size: 12px; }
+.estate-market-fills { display: grid; gap: 5px; font-size: 12px; color: #68503a; }
+.estate-market-fills .estate-button { justify-self: start; padding: 5px 10px; font-size: 12px; }
+.estate-fill-row { padding: 5px 9px; background: #f7ecd2; border-radius: 5px; }
+.estate-market-positions { display: grid; gap: 4px; font-size: 12px; color: #68503a; }
+.estate-position-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 4px 8px; padding: 6px 9px; background: #f4e5bf; border-radius: 5px; }
+.estate-position-who { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.estate-position-pnl { grid-column: 1 / -1; color: #89745c; }
 @media (max-width: 520px) {
   .estate-circus-layout { grid-template-columns: 1fr; gap: 10px; }
   .estate-circus-sidebar { flex-direction: row; }

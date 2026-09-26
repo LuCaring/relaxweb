@@ -51,15 +51,32 @@ print(json.dumps(estate_state(conn,'alice',int(time.time()))))
       core.state.hallPage = 'estate'; core.renderGameView();
       core.handleServerMessage({type: 'estate_state', ...data});
       window.marketUi = (await import('/assets/js/estate/ui.js')).createEstateUI(document.querySelector('.estate-root'));
-      marketUi.interact({kind: 'lottery'});
     }, snapshot);
-    assert.equal(await page.locator('.estate-circus-sidebar button').count(), 2);
-    await page.getByRole('button', {name: '模拟交易'}).click();
+    // 入口在顶栏，不再藏在抽奖马戏团里
+    await page.getByRole('button', {name: '📈 股市'}).click();
     await page.waitForFunction(() => sent.some(message => message.type === 'estate_market_get'));
+    assert.match(await page.locator('.estate-sheet-title').innerText(), /股市/);
+    const firstRequest = await page.evaluate(() => sent.find(message => message.type === 'estate_market_get'));
+    assert.equal(firstRequest.symbol, 'XTIDE');
     const request = await page.evaluate(() => sent.find(message => message.type === 'estate_market_get'));
-    const market = {name: '星潮模拟指数', price: 1000, quote_minute: 123,
-      available: true, source: '游戏内模拟', source_kind: 'simulated', fee_rate: 0.005, shares: 0,
+    const market = {symbol: 'XTIDE', name: '星潮模拟指数', blurb: '基准档', price: 1000,
+      anchor: 1000, quote_minute: 123,
+      symbols: [{symbol: 'XTIDE', name: '星潮模拟指数', price: 1000, blurb: '基准档'},
+        {symbol: 'XCROP', name: '庄园农业板', price: 620, blurb: '稳健'},
+        {symbol: 'XORE', name: '深矿资源板', price: 1480, blurb: '刺激'}],
+      available: true, fee_rate: 0.0025, maker_fee_rate: 0.0005, shares: 0, coins: 10000,
+      capacity_left: 2000, tradable_buy: 2000, tradable_sell: 2000, trend_paused: false,
+      split_count: 2, last_split_minute: 33333333,
       cost_basis: 0, market_value: 0, realized_pnl: 0,
+      book: {bids: [{price: 999, quantity: 1}, {price: 998, quantity: 2}],
+        asks: [{price: 1001, quantity: 1}, {price: 1002, quantity: 2}]},
+      flow_left: {buy: 20, sell: 20},
+      positions: [{username: 'bob', shares: 12, market_value: 12000, cost_basis: 9000,
+        unrealized_pnl: 3000, realized_pnl: 50}],
+      orders: [{id: 7, side: 'buy', price: 990, quantity: 5, filled: 0, remaining: 5,
+        expires_minute: 123}],
+      fills: [{time: 120, username: 'bob', side: 'sell', price: 995, quantity: 1, amount: 995}],
+      my_fills: [{time: 60, username: 'alice', side: 'buy', price: 998, quantity: 0.5, amount: 499}],
       history: [{time: 60, price: 995}, {time: 120, price: 1000}],
       candles: {
         minute: [{time: 60, open: 990, high: 995, low: 990, close: 995},
@@ -70,24 +87,82 @@ print(json.dumps(estate_state(conn,'alice',int(time.time()))))
     await page.evaluate(({request, market}) => core.handleServerMessage({
       type: 'estate_market_state', request_id: request.request_id, market,
     }), {request, market});
-    assert.match(await page.locator('.estate-market .estate-sheet-note').innerText(), /当前使用游戏内模拟走势/);
+    assert.match(await page.locator('.estate-market > .estate-sheet-note').first().innerText(), /手续费 吃单 0.25% \/ 挂单 0.05%/);
+    assert.equal(await page.locator('.estate-symbol-tab').count(), 3);
+    assert.equal(await page.locator('.estate-symbol-tab[aria-selected="true"]').innerText(),
+      '星潮模拟指数 1,000.00');
+    // 切标的会带上 symbol 重新拉快照
+    await page.getByRole('tab', {name: /深矿资源板/}).click();
+    await page.waitForFunction(() => sent.filter(m => m.type === 'estate_market_get').length === 2);
+    const secondRequest = await page.evaluate(() => sent.filter(m => m.type === 'estate_market_get')[1]);
+    assert.equal(secondRequest.symbol, 'XORE');
+    const ore = {...market, symbol: 'XORE', name: '深矿资源板', price: 1480, anchor: 1400,
+      shares: 0, cost_basis: 0, market_value: 0, positions: [], orders: [], fills: [],
+      my_fills: []};
+    await page.evaluate(({secondRequest, ore}) => core.handleServerMessage({
+      type: 'estate_market_state', request_id: secondRequest.request_id, market: ore,
+    }), {secondRequest, ore});
+    await page.waitForFunction(() => document.querySelector('.estate-symbol-tab[aria-selected="true"]')
+      ?.textContent.startsWith('深矿资源板'));
+    // 切回基准档继续后面的下单流程
+    await page.getByRole('tab', {name: /星潮模拟指数/}).click();
+    await page.waitForFunction(() => sent.filter(m => m.type === 'estate_market_get').length === 3);
+    const backRequest = await page.evaluate(() => sent.filter(m => m.type === 'estate_market_get')[2]);
+    await page.evaluate(({backRequest, market}) => core.handleServerMessage({
+      type: 'estate_market_state', request_id: backRequest.request_id, market,
+    }), {backRequest, market});
+    await page.waitForFunction(() => document.querySelector('.estate-symbol-tab[aria-selected="true"]')
+      ?.textContent.startsWith('星潮模拟指数'));
+    assert.match(await page.locator('.estate-market-holdings').innerText(), /做市商剩余额度：2,000,000 金币/);
+    assert.match(await page.locator('.estate-market').innerText(), /已拆股 2 次（最近一次/);
+    assert.equal(await page.locator('.estate-book-row').count(), 4);
+    assert.match(await page.locator('.estate-market-orders').innerText(), /#7 买入 990 元 · 剩余 5.000 份/);
+    assert.match(await page.locator('.estate-market-fills').innerText(), /bob 卖出 1.000 份 @ 995/);
+    assert.match(await page.locator('.estate-market-positions').innerText(), /全服持仓（1 人持有）[\s\S]*bob[\s\S]*12\.000 份 · 市值 12,000\.00 金币/);
     assert.equal(await page.getByRole('img', {name: '分钟K线图'}).count(), 1);
     await page.getByRole('button', {name: '小时K线'}).click();
     assert.equal(await page.getByRole('img', {name: '小时K线图'}).count(), 1);
     await page.getByRole('button', {name: '日K线'}).click();
     assert.equal(await page.getByRole('img', {name: '日K线图'}).count(), 1);
+    // 点盘口把价格填进下单框，带价格提交就是限价委托。
+    await page.locator('.estate-book-row').first().click();
+    assert.equal(await page.getByRole('spinbutton', {name: '委托价格'}).inputValue(), '1002');
     await page.getByRole('spinbutton', {name: '交易份额'}).fill('0.125');
     assert.match(await page.locator('.estate-market-estimate').innerText(), /125/);
     await page.getByRole('button', {name: '买入'}).click();
+    const order = await page.evaluate(() => sent.find(message => message.type === 'estate_market_order'));
+    assert.deepEqual([order.side, order.price, order.quantity], ['buy', '1002', '0.125']);
+    await page.evaluate(({snapshot, order, market}) => core.handleServerMessage({
+      type: 'estate_state', ...snapshot, request_id: order.request_id,
+      result: {action: 'market_order', side: 'buy', price: 1002, quantity: 0.125, filled: 0.125,
+        market: {...market, shares: 0.125, cost_basis: 125.63, market_value: 125}},
+    }), {snapshot, order, market});
+    await page.waitForFunction(() => document.querySelector('.estate-market-holdings')?.textContent.includes('0.125'));
+    assert.match(await page.locator('.estate-market-message').innerText(), /已提交委托：买入 0.125 份，立即成交 0.125 份/);
+    // 撤单走 estate_market_cancel，并且流水可以切换成只看自己。
+    await page.getByRole('button', {name: '撤单'}).click();
+    const cancelled = await page.evaluate(() => sent.find(message => message.type === 'estate_market_cancel'));
+    assert.equal(cancelled.order_id, 7);
+    await page.evaluate(({snapshot, cancelled, market}) => core.handleServerMessage({
+      type: 'estate_state', ...snapshot, request_id: cancelled.request_id,
+      result: {action: 'market_cancel', order_id: 7, market: {...market, orders: [], shares: 0.125}},
+    }), {snapshot, cancelled, market});
+    await page.getByRole('button', {name: '只看我的'}).click();
+    assert.match(await page.locator('.estate-market-fills').innerText(), /alice 买入 0.500 份 @ 998/);
+    assert.match(await page.locator('.estate-market-fills').innerText(), /看全服/);
+    // 不带价格提交就是市价单。
+    await page.getByRole('spinbutton', {name: '委托价格'}).fill('');
+    await page.getByRole('button', {name: '卖出'}).click();
     const trade = await page.evaluate(() => sent.find(message => message.type === 'estate_market_trade'));
-    assert.deepEqual([trade.side, trade.quantity], ['buy', '0.125']);
+    assert.deepEqual([trade.side, trade.quantity], ['sell', '0.125']);
     await page.evaluate(({snapshot, trade, market}) => core.handleServerMessage({
       type: 'estate_state', ...snapshot, request_id: trade.request_id,
-      result: {action: 'market_trade', side: 'buy', quantity: 0.125, price: 1000, amount: 125.63,
-        market: {...market, shares: 0.125, cost_basis: 125.63, market_value: 125}},
+      result: {action: 'market_trade', side: 'sell', quantity: 0.125, price: 1000,
+        average_price: 999, amount: 124.38,
+        market: {...market, shares: 0, cost_basis: 0, market_value: 0}},
     }), {snapshot, trade, market});
-    await page.waitForFunction(() => document.querySelector('.estate-market-holdings')?.textContent.includes('0.125'));
-    assert.match(await page.locator('.estate-market-message').innerText(), /买入 0.125 份/);
+    await page.waitForFunction(() => document.querySelector('.estate-market-holdings')?.textContent.includes('持有份额：0.000'));
+    assert.match(await page.locator('.estate-market-message').innerText(), /已按 999.00 点卖出 0.125 份/);
     await page.evaluate(async () => {
       const {estateStore} = await import('/assets/js/estate/state.js');
       estateStore.snapshot.profile.pet_level = 4;
@@ -107,6 +182,6 @@ print(json.dumps(estate_state(conn,'alice',int(time.time()))))
     historyRequest.request_id);
     assert.match(await page.locator('.estate-lottery-history').innerText(), /250 金币/);
     assert.deepEqual(errors, []);
-    console.log('PASS circus sidebar, minute quote, fractional trade request and holdings');
+    console.log('PASS topbar market entry, symbol switch, book, limit order, cancel and tape');
   } finally { await browser.close(); }
 })().catch(error => { console.error(error); process.exitCode = 1; });

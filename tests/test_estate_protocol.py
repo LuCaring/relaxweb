@@ -138,7 +138,70 @@ async def main():
                     assert persisted["profile"]["level"] == 1
                     assert persisted["plots"][0]["crop_id"] is None
 
-    print("PASS estate WebSocket: auth, sync, lifecycle, concurrency, idempotency, ledger and persistence")
+                    # 行情完全由服务端本地模型生成：读快照 → 买入 → 落库。
+                    await send(c, type="estate_market_get", symbol="XORE")
+                    quote = await receive(c, "estate_market_state")
+                    assert quote["market"]["symbol"] == "XORE", quote["market"]["symbol"]
+                    assert len(quote["market"]["symbols"]) == 3
+                    await send(c, type="estate_market_get")
+                    quote = await receive(c, "estate_market_state")
+                    assert quote["market"]["symbol"] == "XTIDE", quote["market"]["symbol"]
+                    assert quote["market"]["available"] is True
+                    assert quote["market"]["anchor"] == 1000, quote["market"]["anchor"]
+                    quoted = quote["market"]["price"]
+                    assert 625 <= quoted <= 1600, quoted
+                    assert len(quote["market"]["candles"]["minute"]) >= 1
+                    await send(c, type="estate_market_trade", request_id="market-buy-proto-1",
+                               side="buy", quantity="0.5")
+
+                    filled = await receive(c, "estate_state")
+                    assert filled["result"]["action"] == "market_trade"
+                    assert filled["result"]["market"]["shares"] == 0.5
+                    assert filled["result"]["average_price"] > quoted, filled["result"]["average_price"]
+                    assert filled["result"]["market"]["book"]["asks"][0]["price"] > 0
+
+                    # 限价委托：低于现价挂单resting，撤单后回到空簿。
+                    await send(c, type="estate_market_order", request_id="market-limit-proto-1",
+                               side="buy", price=str(int(quoted) - 5), quantity="2")
+                    placed = await receive(c, "estate_state")
+                    assert placed["result"]["action"] == "market_order"
+                    assert placed["result"]["filled"] == 0, placed["result"]
+                    order = placed["result"]["market"]["orders"][0]
+                    assert order["remaining"] == 2
+                    await send(c, type="estate_market_cancel", request_id="market-cancel-proto-1",
+                               order_id=order["id"])
+                    cancelled = await receive(c, "estate_state")
+                    assert cancelled["result"]["action"] == "market_cancel"
+                    assert cancelled["result"]["market"]["orders"] == []
+                    assert cancelled["result"]["market"]["fills"], "成交流水应包含刚才那一笔"
+                    assert filled["coins"] < persisted["coins"]
+                    with server.database() as conn, conn:
+                        assert conn.execute("SELECT COUNT(*) FROM estate_market_ticks "
+                                            "WHERE symbol='XTIDE'").fetchone()[0] == 1
+                        assert conn.execute("SELECT COUNT(*) FROM estate_market_symbols"
+                                            ).fetchone()[0] == 3
+                        inventory = conn.execute("SELECT inventory_milli FROM estate_market_symbols "
+                                                 "WHERE symbol='XTIDE'").fetchone()[0]
+                        assert inventory == -500, inventory
+                        # 把锚顶到拆股阈值，下一次行情访问应当触发并播报一次拆股
+                        conn.execute("UPDATE estate_market_symbols SET anchor_cents=200000,"
+                                     "price_cents=200000 WHERE symbol='XTIDE'")
+                    now.return_value = ready_at + 60
+                    await send(c, type="estate_market_get")
+                    # 拆股公告在一次请求里先于行情快照发出
+                    announced = await receive(c, "system")
+                    assert "1:2 拆股" in announced["text"], announced["text"]
+                    quote = await receive(c, "estate_market_state")
+                    assert quote["market"]["split_count"] == 1, quote["market"]["split_count"]
+                    assert quote["market"]["shares"] == 1.0, quote["market"]["shares"]
+                    # 第二次访问不再重复播报
+                    await send(c, type="estate_market_get")
+                    await receive(c, "estate_market_state")
+                    with server.database() as conn, conn:
+                        assert conn.execute("SELECT announced_splits FROM estate_market_symbols "
+                                            "WHERE symbol='XTIDE'").fetchone()[0] == 1
+
+    print("PASS estate WebSocket: auth, sync, lifecycle, market, idempotency, ledger and persistence")
 
 
 if __name__ == "__main__":

@@ -188,45 +188,95 @@ def init_estate(conn):
     if "reserved_slots" not in mining_columns:
         conn.execute("ALTER TABLE estate_mining_runs ADD COLUMN reserved_slots INTEGER NOT NULL DEFAULT 12")
     conn.execute("CREATE INDEX IF NOT EXISTS idx_mining_user ON estate_mining_runs(username,status)")
-    conn.execute("""CREATE TABLE IF NOT EXISTS estate_market_index (
-        id INTEGER PRIMARY KEY CHECK(id=1),
-        attempted_minute INTEGER NOT NULL DEFAULT -1,
-        price_cents INTEGER NOT NULL DEFAULT 100000,
-        source_price TEXT NOT NULL DEFAULT '0',
-        source_minute INTEGER NOT NULL DEFAULT -1,
-        available INTEGER NOT NULL DEFAULT 0 CHECK(available IN (0,1))
+    # 股市：市场纪元变化时整体重建所有行情表，不做旧数据迁移。
+    conn.execute("""CREATE TABLE IF NOT EXISTS estate_market_meta (
+        key TEXT PRIMARY KEY,
+        value TEXT NOT NULL
     )""")
-    market_columns = {row[1] for row in conn.execute("PRAGMA table_info(estate_market_index)")}
-    if "source_kind" not in market_columns:
-        conn.execute("ALTER TABLE estate_market_index ADD COLUMN source_kind TEXT NOT NULL DEFAULT 'live'")
+    from estate.market import (
+        MARKET_EPOCH, market_epoch, market_tables, seed_market, set_market_epoch,
+    )
+    if market_epoch(conn) != MARKET_EPOCH:
+        for table in market_tables():
+            conn.execute(f"DROP TABLE IF EXISTS {table}")
+    conn.execute("""CREATE TABLE IF NOT EXISTS estate_market_symbols (
+        symbol TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        anchor_cents REAL NOT NULL,
+        ou_state REAL NOT NULL DEFAULT 0,
+        ou_slot INTEGER NOT NULL DEFAULT -1,
+        settled_slot INTEGER NOT NULL DEFAULT -1,
+        price_cents INTEGER NOT NULL,
+        inventory_milli INTEGER NOT NULL DEFAULT 0,
+        available INTEGER NOT NULL DEFAULT 1 CHECK(available IN (0,1)),
+        flow_minute INTEGER NOT NULL DEFAULT -1,
+        flow_buy_milli INTEGER NOT NULL DEFAULT 0,
+        flow_sell_milli INTEGER NOT NULL DEFAULT 0,
+        split_count INTEGER NOT NULL DEFAULT 0,
+        last_split_minute INTEGER NOT NULL DEFAULT -1,
+        announced_splits INTEGER NOT NULL DEFAULT 0
+    )""")
+    conn.execute("""CREATE TABLE IF NOT EXISTS estate_market_printed (
+        day INTEGER PRIMARY KEY,
+        amount_cents INTEGER NOT NULL DEFAULT 0
+    )""")
     conn.execute("""CREATE TABLE IF NOT EXISTS estate_market_ticks (
-        minute INTEGER PRIMARY KEY,
-        price_cents INTEGER NOT NULL CHECK(price_cents > 0)
+        symbol TEXT NOT NULL,
+        minute INTEGER NOT NULL,
+        price_cents INTEGER NOT NULL CHECK(price_cents > 0),
+        PRIMARY KEY(symbol,minute)
     )""")
-    candles_exist = conn.execute("SELECT 1 FROM sqlite_master WHERE type='table' "
-                                 "AND name='estate_market_candles'").fetchone()
     conn.execute("""CREATE TABLE IF NOT EXISTS estate_market_candles (
+        symbol TEXT NOT NULL,
         period TEXT NOT NULL CHECK(period IN ('minute','hour','day')),
         start_minute INTEGER NOT NULL,
         open_cents INTEGER NOT NULL,
         high_cents INTEGER NOT NULL,
         low_cents INTEGER NOT NULL,
         close_cents INTEGER NOT NULL,
-        PRIMARY KEY(period,start_minute)
+        PRIMARY KEY(symbol,period,start_minute)
     )""")
-    if not candles_exist:
-        from estate.market import record_market_candles
-        previous = None
-        for minute, close in conn.execute(
-                "SELECT minute,price_cents FROM estate_market_ticks ORDER BY minute"):
-            record_market_candles(conn, minute, previous if previous is not None else close, close)
-            previous = close
+    conn.execute("""CREATE TABLE IF NOT EXISTS estate_market_orders (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        username TEXT NOT NULL COLLATE NOCASE,
+        symbol TEXT NOT NULL,
+        side TEXT NOT NULL CHECK(side IN ('buy','sell')),
+        price_cents INTEGER NOT NULL CHECK(price_cents > 0),
+        qty_milli INTEGER NOT NULL CHECK(qty_milli > 0),
+        filled_milli INTEGER NOT NULL DEFAULT 0 CHECK(filled_milli >= 0),
+        status TEXT NOT NULL DEFAULT 'open'
+            CHECK(status IN ('open','filled','cancelled','expired')),
+        reason TEXT NOT NULL DEFAULT '',
+        created_minute INTEGER NOT NULL,
+        expires_minute INTEGER NOT NULL
+    )""")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_market_orders_open "
+                 "ON estate_market_orders(symbol,status,side,price_cents,id)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_market_orders_user "
+                 "ON estate_market_orders(username,id)")
+    conn.execute("""CREATE TABLE IF NOT EXISTS estate_market_fills (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        symbol TEXT NOT NULL,
+        username TEXT NOT NULL COLLATE NOCASE,
+        side TEXT NOT NULL CHECK(side IN ('buy','sell')),
+        minute INTEGER NOT NULL,
+        price_cents INTEGER NOT NULL,
+        qty_milli INTEGER NOT NULL,
+        amount_cents INTEGER NOT NULL,
+        order_id INTEGER
+    )""")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_market_fills_user "
+                 "ON estate_market_fills(symbol,username,id)")
     conn.execute("""CREATE TABLE IF NOT EXISTS estate_market_positions (
-        username TEXT PRIMARY KEY COLLATE NOCASE,
+        username TEXT NOT NULL COLLATE NOCASE,
+        symbol TEXT NOT NULL,
         shares_milli INTEGER NOT NULL DEFAULT 0 CHECK(shares_milli >= 0),
         cost_basis_cents INTEGER NOT NULL DEFAULT 0 CHECK(cost_basis_cents >= 0),
-        realized_pnl_cents INTEGER NOT NULL DEFAULT 0
+        realized_pnl_cents INTEGER NOT NULL DEFAULT 0,
+        PRIMARY KEY(username,symbol)
     )""")
+    seed_market(conn)
+    set_market_epoch(conn, MARKET_EPOCH)
     conn.execute("""
         CREATE TABLE IF NOT EXISTS estate_thefts (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
