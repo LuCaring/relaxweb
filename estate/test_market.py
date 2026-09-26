@@ -300,6 +300,22 @@ class MarketTests(unittest.TestCase):
         self.assertEqual(after["shares"], 0)
         self.assertNotEqual(after["realized_pnl"], 0)
 
+    def test_book_never_advertises_more_than_this_minutes_flow(self):
+        """盘口显示的必须是真能成交的量：自然流被用掉后盘口要同步缩水。"""
+        self.fund(50_000)
+        with self.randn():
+            market_snapshot(self.conn, "alice", NOW, adjust_coins, SYMBOL)
+            before = market_snapshot(self.conn, "bob", NOW, adjust_coins, SYMBOL)
+            trade_market(self.conn, "alice", "market-book-0001", "buy", "15", NOW + 1,
+                         adjust_coins, SYMBOL)
+            after = market_snapshot(self.conn, "bob", NOW + 2, adjust_coins, SYMBOL)["book"]
+            flow_after = market_snapshot(self.conn, "bob", NOW + 2, adjust_coins, SYMBOL)
+            fresh = market_snapshot(self.conn, "bob", NOW + 61, adjust_coins, SYMBOL)["book"]
+        self.assertEqual(sum(level["quantity"] for level in before["book"]["asks"]), 20)
+        self.assertEqual(flow_after["flow_left"]["buy"], 5)
+        self.assertEqual(sum(level["quantity"] for level in after["asks"]), 5)
+        self.assertEqual(sum(level["quantity"] for level in fresh["asks"]), 20)
+
     def test_book_hides_the_side_with_no_capacity_left(self):
         self.fund(50_000)
         with self.randn():

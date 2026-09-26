@@ -540,7 +540,7 @@ def market_snapshot(conn, username, now, adjust_coins, symbol=DEFAULT_SYMBOL):
     return {"symbol": symbol, "name": detail["name"], "blurb": detail["blurb"],
             "symbols": symbol_list(conn),
             "price": price_cents / 100, "anchor": round(anchor / 100, 2),
-            "book": market_book(conn, price_cents, symbol),
+            "book": market_book(conn, price_cents, symbol, now),
             "flow_left": {"buy": flow_left(conn, "buy", minute, symbol) / 1000,
                           "sell": flow_left(conn, "sell", minute, symbol) / 1000},
             "orders": orders_of(conn, username, symbol),
@@ -584,14 +584,18 @@ def natural_quotes(price_cents):
                      for offset, quantity in NATURAL_LEVELS]}
 
 
-def market_book(conn, price_cents, symbol=DEFAULT_SYMBOL):
-    """盘口：自然盘报价按做市商剩余额度裁剪，额度用尽的一侧不显示。
+def market_book(conn, price_cents, symbol=DEFAULT_SYMBOL, now=None):
+    """盘口：自然盘报价按做市商剩余额度与**本分钟剩余自然流**双重裁剪。
 
-    否则额度吃满后盘口还在挂卖档，玩家点下去只会收到"额度已用尽"。
+    两边都是玩家点下去会真的被拒的硬约束，所以盘口不能显示超出它们的量：
+    额度吃满、或这一分钟的自然流被别人用掉之后，对应的一侧就不再挂档。
     """
+    minute = int(now) // 60 if now is not None else None
     book = natural_quotes(price_cents)
     for side, key in (("buy", "asks"), ("sell", "bids")):
         room = tradable_milli(conn, side, symbol)
+        if minute is not None:
+            room = min(room, flow_left(conn, side, minute, symbol))
         levels = []
         for level in book[key]:
             quantity = min(level["quantity"] * 1000, room)
