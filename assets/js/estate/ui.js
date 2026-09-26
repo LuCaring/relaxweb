@@ -231,9 +231,12 @@ export function createEstateUI(root, activities = {}) {
   function renderMarket() {
     show("股市");
     renderMarketGame(sheetBody, marketData, (result) => {
-      marketData = result.market;
       marketNotice = marketResultNotice(result);
+      // 撤单返回的是那张委托所属标的的快照，可能不是当前正在看的这只。
+      if (result.market?.symbol && result.market.symbol !== marketSymbol) marketData = null;
+      else marketData = result.market;
       renderMarket();
+      if (!marketData) void loadMarket();
     }, marketNotice, selectMarket);
   }
 

@@ -109,6 +109,21 @@ print(json.dumps(estate_state(conn,'alice',int(time.time()))))
     }), {secondRequest, ore});
     await page.waitForFunction(() => document.querySelector('.estate-symbol-tab[aria-selected="true"]')
       ?.textContent.startsWith('深矿资源板'));
+    // 在第二只标的上下单：请求必须带上它自己的 symbol，否则后端会按默认标的下单
+    await page.getByRole('spinbutton', {name: '交易份额'}).fill('2');
+    await page.getByRole('button', {name: '买入'}).click();
+    await page.waitForFunction(() => sent.some(m => m.type === 'estate_market_trade'));
+    const oreTrade = await page.evaluate(() => sent.find(m => m.type === 'estate_market_trade'));
+    assert.equal(oreTrade.symbol, 'XORE');
+    assert.deepEqual([oreTrade.side, oreTrade.quantity], ['buy', '2']);
+    await page.evaluate(({snapshot, oreTrade, ore}) => core.handleServerMessage({
+      type: 'estate_state', ...snapshot, request_id: oreTrade.request_id,
+      result: {action: 'market_trade', symbol: 'XORE', side: 'buy', quantity: 2, price: 1480,
+        average_price: 1479, amount: 2960, market: {...ore, shares: 2}},
+    }), {snapshot, oreTrade, ore});
+    await page.waitForFunction(() => document.querySelector('.estate-symbol-tab[aria-selected="true"]')
+      ?.textContent.startsWith('深矿资源板'));
+
     // 切回基准档继续后面的下单流程
     await page.getByRole('tab', {name: /星潮模拟指数/}).click();
     await page.waitForFunction(() => sent.filter(m => m.type === 'estate_market_get').length === 3);
@@ -158,7 +173,8 @@ print(json.dumps(estate_state(conn,'alice',int(time.time()))))
     // 不带价格提交就是市价单。
     await page.getByRole('spinbutton', {name: '委托价格'}).fill('');
     await page.getByRole('button', {name: '卖出'}).click();
-    const trade = await page.evaluate(() => sent.find(message => message.type === 'estate_market_trade'));
+    const trade = await page.evaluate(() => sent.filter(
+      message => message.type === 'estate_market_trade').pop());
     assert.deepEqual([trade.side, trade.quantity], ['sell', '0.125']);
     await page.evaluate(({snapshot, trade, market}) => core.handleServerMessage({
       type: 'estate_state', ...snapshot, request_id: trade.request_id,

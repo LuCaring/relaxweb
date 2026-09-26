@@ -170,9 +170,12 @@ export function renderMarketGame(target, market, onTrade, notice = "", onSelect 
     buy.disabled = true; sell.disabled = true;
     message.textContent = price ? "正在提交委托…" : "正在提交交易…";
     try {
+      // 标的必须跟着请求走：否则后端会按默认标的下单，切到别的股票就"买不了"。
       const result = price
-        ? await estateRequest("estate_market_order", { side, price, quantity }, { timeoutMs: 15000 })
-        : await estateRequest("estate_market_trade", { side, quantity }, { timeoutMs: 15000 });
+        ? await estateRequest("estate_market_order",
+            { symbol: market.symbol, side, price, quantity }, { timeoutMs: 15000 })
+        : await estateRequest("estate_market_trade",
+            { symbol: market.symbol, side, quantity }, { timeoutMs: 15000 });
       onTrade(result);
     } catch (error) {
       message.textContent = error.message || "交易失败，请稍后重试。";

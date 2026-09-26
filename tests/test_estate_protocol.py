@@ -139,6 +139,13 @@ async def main():
                     assert persisted["plots"][0]["crop_id"] is None
 
                     # 行情完全由服务端本地模型生成：读快照 → 买入 → 落库。
+                    await send(c, type="estate_market_trade", request_id="market-ore-proto-1",
+                               symbol="XORE", side="buy", quantity="2")
+                    ore = await receive(c, "estate_state")
+                    assert ore["result"]["symbol"] == "XORE", ore["result"]
+                    assert ore["result"]["market"]["symbol"] == "XORE"
+                    assert ore["result"]["market"]["shares"] == 2
+                    assert [row["shares"] for row in ore["result"]["market"]["positions"]] == [2]
                     await send(c, type="estate_market_get", symbol="XORE")
                     quote = await receive(c, "estate_market_state")
                     assert quote["market"]["symbol"] == "XORE", quote["market"]["symbol"]
@@ -157,6 +164,8 @@ async def main():
                     filled = await receive(c, "estate_state")
                     assert filled["result"]["action"] == "market_trade"
                     assert filled["result"]["market"]["shares"] == 0.5
+                    # 买的是 XTIDE，XORE 那 2 份不受影响，说明标的确实是分开的
+                    assert filled["result"]["market"]["symbol"] == "XTIDE"
                     assert filled["result"]["average_price"] > quoted, filled["result"]["average_price"]
                     assert filled["result"]["market"]["book"]["asks"][0]["price"] > 0
 
