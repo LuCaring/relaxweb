@@ -27,9 +27,12 @@ ASSETS = os.path.join(ROOT, "assets")
 DEAD_END = os.path.join(ROOT, "__forbidden__")
 PORT = get_int("servers.web_port", env="LIVE_WEB_PORT", default=8000)
 
-# 只放行这几类静态资源：源码（.py）、数据库、备份文件都在白名单之外
+# 只放行这几类静态资源：源码（.py）、数据库、备份文件都在白名单之外。
+# 音频后缀用于 assets/dungeon/beta/bgm/ 下的背景音乐曲库（见 docs/dungeon-beta-audio.md）；
+# scripts/preview_game.py 与 scripts/preview_ui.py 放行的是同一组。
 ALLOWED_EXT = {".js", ".css", ".png", ".jpg", ".jpeg", ".svg", ".ico", ".webp",
-               ".woff", ".woff2", ".json"}
+               ".woff", ".woff2", ".json",
+               ".mp3", ".ogg", ".oga", ".wav", ".m4a", ".aac", ".flac", ".opus", ".webm"}
 
 INJECT_MARK = "<!--LIVE_CONFIG-->"
 
