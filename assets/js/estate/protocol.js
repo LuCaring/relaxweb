@@ -20,6 +20,8 @@ const SOUND_CUES = {
   estate_finish_mining: "mine",
   estate_buy: "shop",
   estate_lottery_draw: "shop",
+  estate_flappy_start: "shop",
+  estate_flappy_finish: "shop",
   estate_market_trade: "shop",
   estate_use_land_upgrade_ticket: "shop",
   estate_buy_skin: "shop",
@@ -114,6 +116,10 @@ onMessage("estate_market_state", (data) => {
 
 onMessage("estate_lottery_history", (data) => {
   settleRequest(data.request_id, { result: data.history || [] });
+});
+
+onMessage("estate_flappy_leaderboard", (data) => {
+  settleRequest(data.request_id, { result: data.leaderboard });
 });
 
 onMessage("online_users", (data) => {

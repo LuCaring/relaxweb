@@ -290,6 +290,29 @@ def harvest(conn, username, request_id, plot_id, now):
     return run_action(conn, username, request_id, "harvest", payload, now, mutate)
 
 
+def clear_plot(conn, username, request_id, plot_id, now):
+    """铲除自己的作物，不返还种子、作物、经验或金币。"""
+    index = plot_index(plot_id)
+
+    def mutate():
+        profile = load_profile(conn, username)
+        if index >= profile["plot_count"]:
+            raise estate_error(PLOT_LOCKED)
+        row = conn.execute(
+            "SELECT crop_id FROM estate_plots WHERE username=? AND plot_index=?",
+            (username, index),
+        ).fetchone()
+        if not row or row[0] is None:
+            raise estate_error(("plot_empty", "土地上没有作物"))
+        conn.execute(
+            "UPDATE estate_plots SET crop_id=NULL,planted_at=NULL,ready_at=NULL "
+            "WHERE username=? AND plot_index=?", (username, index),
+        )
+        return {"action": "clear_plot", "plot_id": index, "crop_id": row[0]}
+
+    return run_action(conn, username, request_id, "clear_plot", {"plot_id": index}, now, mutate)
+
+
 def sell(conn, username, request_id, item_id, quantity, now, adjust_coins):
     item_id = str(item_id or "")
     count = positive_int(quantity, maximum=9999)
