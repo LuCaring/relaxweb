@@ -44,7 +44,7 @@ DEFAULT_SYMBOL = SYMBOLS[0]
 
 # 市场纪元：改动它就等于重开整个股市——旧持仓、K 线、委托、流水与印钞预算
 # 全部重置，不做任何旧数据迁移（见 docs/stock-market-design.md §9）。
-MARKET_EPOCH = 4
+MARKET_EPOCH = 5
 QUANTITY_PATTERN = re.compile(r"^[0-9]+(?:\.[0-9]{1,3})?$")
 CANDLE_LIMITS = {"minute": 60, "hour": 72, "day": 90}
 
