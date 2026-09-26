@@ -335,17 +335,17 @@ function dcardNode(card, opts = {}) {
     const icon = document.createElement("img");
     icon.className = "dc-joker-icon";
     icon.src = "assets/cards/joker-flat.png";
-    icon.alt = "";
+    icon.alt = big ? "大王" : "小王";
     icon.draggable = false;
     rank.append(icon);
     node.title = big ? "大王" : "小王";
-  } else {
-    rank.textContent = RANK_CHARS[card.r] || String(card.r);
+    node.append(rank);
+    return node;
   }
+  rank.textContent = RANK_CHARS[card.r] || String(card.r);
   const suit = document.createElement("span");
   suit.className = "dc-suit";
-  if (card.s === 4) suit.classList.add("dc-joker-label");
-  suit.textContent = card.s === 4 ? (card.r === 17 ? "大王" : "小王") : SUIT_CHARS[card.s];
+  suit.textContent = SUIT_CHARS[card.s];
   node.append(rank, suit);
   return node;
 }
@@ -447,7 +447,8 @@ function multiplierBarNode() {
   bar.append(bid);
   const bombs = document.createElement("span");
   bombs.className = "dd-mult-chip";
-  bombs.textContent = room.bombs ? `💣×${room.bombs}` : "暂无炸弹";
+  bombs.textContent = room.bombs ? `💣 ×${room.bombs}` : "暂无炸弹";
+  if (room.bombs) bombs.classList.add("hot");
   bar.append(bombs);
   const mult = document.createElement("span");
   mult.className = "dd-mult-chip total";
@@ -641,6 +642,20 @@ function ddActionBarNode(resolved) {
   if (myTurn) {
     const standing = standingCombo();
     const legal = Boolean(resolved) && (!standing || beats(resolved, standing));
+    /* 不出固定最左、出牌固定最右，避免两端按钮误触。 */
+    if (options.pass) {
+      const pass = document.createElement("button");
+      pass.type = "button";
+      pass.className = "action-btn danger dd-pass";
+      pass.textContent = "不出";
+      pass.disabled = ddActionLock;
+      pass.addEventListener("click", () => {
+        selectedIndices = new Set();
+        ddAct({ action: "pass" });
+      });
+      bar.append(pass);
+    }
+
     const hint = document.createElement("button");
     hint.type = "button";
     hint.className = "action-btn";
@@ -672,7 +687,7 @@ function ddActionBarNode(resolved) {
 
     const play = document.createElement("button");
     play.type = "button";
-    play.className = "action-btn primary";
+    play.className = "action-btn primary dd-play";
     play.textContent = legal ? `出牌 · ${selectedIndices.size} 张` : "出牌";
     play.disabled = ddActionLock || !legal;
     play.addEventListener("click", () => {
@@ -680,19 +695,6 @@ function ddActionBarNode(resolved) {
       ddAct({ action: "play", cards: [...selectedIndices].sort((a, b) => a - b) });
     });
     bar.append(play);
-
-    if (options.pass) {
-      const pass = document.createElement("button");
-      pass.type = "button";
-      pass.className = "action-btn danger";
-      pass.textContent = "不出";
-      pass.disabled = ddActionLock;
-      pass.addEventListener("click", () => {
-        selectedIndices = new Set();
-        ddAct({ action: "pass" });
-      });
-      bar.append(pass);
-    }
   }
   return bar;
 }
