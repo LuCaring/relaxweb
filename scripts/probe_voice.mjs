@@ -6,8 +6,12 @@
 //   LK_SECRET API secret,默认 livekit-server --dev 的默认密钥 devkey:secret
 import { execFileSync } from 'node:child_process';
 import { createServer } from 'node:http';
+import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { chromium } from 'playwright';
 
+const ROOT = fileURLToPath(new URL('..', import.meta.url));
+const PYTHON = process.env.PYTHON || join(ROOT, '.venv/bin/python');
 const LK_URL = process.env.LK_URL || 'ws://127.0.0.1:7880';
 const KEY = process.env.LK_KEY || 'devkey';
 const SECRET = process.env.LK_SECRET || 'secret';
@@ -16,7 +20,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 setTimeout(() => { console.error('GLOBAL TIMEOUT after 70s'); process.exit(2); }, 70000).unref();
 
-const mint = (id) => execFileSync('.venv/bin/python', ['-c', `
+const mint = (id) => execFileSync(PYTHON, ['-c', `
 from livekit import api
 t = api.AccessToken("${KEY}", "${SECRET}")
 t = t.with_identity("${id}").with_grants(api.VideoGrants(room_join=True, room="${ROOM}"))
@@ -43,7 +47,7 @@ async function peer(id, token) {
     window.RTCPeerConnection.prototype = Orig.prototype;
   });
   await page.goto(ORIGIN);
-  await page.addScriptTag({ path: '/Users/lhy/proj/relaxweb/assets/vendor/livekit-client.umd.min.js' });
+  await page.addScriptTag({ path: join(ROOT, 'assets/vendor/livekit-client.umd.min.js') });
   return page.evaluate(async ({ url, token, id }) => {
     const room = new LivekitClient.Room();
     window.__room = room;
