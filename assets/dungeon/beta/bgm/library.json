@@ -1,0 +1,67 @@
+{
+  "version": 1,
+  "note": "自由许可 BGM 清单。音频文件本身不入库（见同目录 README.md 的安装说明）；放入本目录后即可在游戏内的背景音乐面板选中。新增曲目时追加一条记录即可，字段说明见 README。",
+  "licenseSummary": "全部曲目为 Kevin MacLeod 创作，CC BY 4.0，允许商用与再分发，必须署名。",
+  "tracks": [
+    {
+      "id": "ossuary-1-a-beginning",
+      "file": "assets/dungeon/beta/bgm/ossuary-1-a-beginning.mp3",
+      "title": "Ossuary 1 - A Beginning",
+      "scene": "explore",
+      "gain": 0.95,
+      "length": "00:03:08",
+      "bpm": 54,
+      "isrc": "USUAN1500043",
+      "desc": "缓慢阴森的持续低音加空灵旋律，适合遗迹探索",
+      "author": "Kevin MacLeod",
+      "license": "CC BY 4.0",
+      "licenseUrl": "https://creativecommons.org/licenses/by/4.0/",
+      "source": "https://incompetech.com/music/royalty-free/music.html"
+    },
+    {
+      "id": "chee-zee-caves-v2",
+      "file": "assets/dungeon/beta/bgm/chee-zee-caves-v2.mp3",
+      "title": "Chee Zee Caves V2",
+      "scene": "exploreAlt",
+      "gain": 0.85,
+      "length": "00:03:52",
+      "bpm": 116,
+      "isrc": "USUAN1100853",
+      "desc": "不协和的洞穴氛围（无铜管版），适合遗迹后半段",
+      "author": "Kevin MacLeod",
+      "license": "CC BY 4.0",
+      "licenseUrl": "https://creativecommons.org/licenses/by/4.0/",
+      "source": "https://incompetech.com/music/royalty-free/music.html"
+    },
+    {
+      "id": "8bit-dungeon-boss",
+      "file": "assets/dungeon/beta/bgm/8bit-dungeon-boss.mp3",
+      "title": "8bit Dungeon Boss",
+      "scene": "boss",
+      "gain": 1.1,
+      "length": "00:02:52",
+      "bpm": 134,
+      "isrc": "USUAN1200067",
+      "desc": "8bit 方波摇摆节奏，首领波专用",
+      "author": "Kevin MacLeod",
+      "license": "CC BY 4.0",
+      "licenseUrl": "https://creativecommons.org/licenses/by/4.0/",
+      "source": "https://incompetech.com/music/royalty-free/music.html"
+    },
+    {
+      "id": "mystery-bazaar",
+      "file": "assets/dungeon/beta/bgm/mystery-bazaar.mp3",
+      "title": "Mystery Bazaar",
+      "scene": "shop",
+      "gain": 1.0,
+      "length": "00:02:38",
+      "bpm": 75,
+      "isrc": "USUAN1700005",
+      "desc": "异域市集风，适合商店与整备",
+      "author": "Kevin MacLeod",
+      "license": "CC BY 4.0",
+      "licenseUrl": "https://creativecommons.org/licenses/by/4.0/",
+      "source": "https://incompetech.com/music/royalty-free/music.html"
+    }
+  ]
+}

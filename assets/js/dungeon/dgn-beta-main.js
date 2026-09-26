@@ -8,9 +8,16 @@ import { Shop } from "./dgn-beta-shop.js";
 import { createState } from "./dgn-beta-state.js";
 import { CURRENCIES, rollCurrencyDrops } from "./dgn-beta-crafting.js";
 import { initDungeonAudio, sfx, unlockDungeonAudio } from "./dgn-beta-audio.js";
+import { initBgm, setBgmScene } from "./dgn-beta-bgm.js";
+import { createBgmPanel } from "./dgn-beta-bgm-ui.js";
 
 // 音效复用全站共享设置；加载失败或没有 WebAudio 时静默降级，不影响玩法。
 initDungeonAudio();
+
+/** 首领波与 waveConfig 保持一致（每 3 波一次）。 */
+function sceneForWave(wave) {
+  return wave % 3 === 0 ? "boss" : "explore";
+}
 
 function showScreen(id) {
   for (const screen of document.querySelectorAll(".dgn-screen")) {
@@ -53,6 +60,14 @@ class BetaApp {
       this.startWave();
     });
     el("dgn-btn-restart").addEventListener("click", () => this.restart());
+    this.bgm = createBgmPanel({ getWave: () => this.state.wave });
+    // BGM 需要共享引擎就绪后才能恢复上次的选择与曲库清单。
+    initBgm()
+      .then(() => {
+        setBgmScene("menu", this.state.wave);
+        return this.bgm.refreshLibrary();
+      })
+      .catch(() => {});
     this.updateMaterialViews();
     showScreen("dgn-screen-title");
   }
@@ -60,6 +75,7 @@ class BetaApp {
   startWave() {
     showScreen("dgn-screen-game");
     this.renderWeaponStrip();
+    setBgmScene(sceneForWave(this.state.wave), this.state.wave);
     this.arena.start(this.state, this.state.wave);
   }
 
@@ -70,6 +86,7 @@ class BetaApp {
     }
     this.state.rerollCount = 0;
     showScreen("dgn-screen-shop");
+    setBgmScene("shop", this.state.wave);
     this.shop.open(this.state);
     this.updateMaterialViews();
   }
@@ -99,6 +116,7 @@ class BetaApp {
     el("dgn-over-level").textContent = this.state.level;
     el("dgn-screen-over").querySelector("h2").textContent = "你倒在了遗迹里";
     showScreen("dgn-screen-over");
+    setBgmScene("menu", this.state.wave);
   }
 
   onVictory() {
@@ -106,6 +124,7 @@ class BetaApp {
     el("dgn-over-level").textContent = this.state.level;
     el("dgn-screen-over").querySelector("h2").textContent = "通关！打穿了全部波次";
     showScreen("dgn-screen-over");
+    setBgmScene("menu", this.state.wave);
   }
 
   restart() {
@@ -113,6 +132,7 @@ class BetaApp {
     this.pendingLevels = 0;
     el("dgn-screen-over").querySelector("h2").textContent = "你倒在了遗迹里";
     showScreen("dgn-screen-title");
+    setBgmScene("menu", 1);
     this.updateMaterialViews();
   }
 

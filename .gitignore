@@ -33,6 +33,21 @@ uploads/
 exports/
 
 # =========================================================
+# 地下城 Beta 背景音乐
+# =========================================================
+# 只入库 library.json 与 README.md；音频文件留在本地，避免把第三方音乐带进仓库。
+# 用户自己加的曲目存在浏览器 IndexedDB 里，本来就不会落到这个目录。
+assets/dungeon/beta/bgm/*.mp3
+assets/dungeon/beta/bgm/*.ogg
+assets/dungeon/beta/bgm/*.oga
+assets/dungeon/beta/bgm/*.wav
+assets/dungeon/beta/bgm/*.m4a
+assets/dungeon/beta/bgm/*.aac
+assets/dungeon/beta/bgm/*.flac
+assets/dungeon/beta/bgm/*.opus
+assets/dungeon/beta/bgm/*.webm
+
+# =========================================================
 # 运行时缓存与编辑器产物
 # =========================================================
 __pycache__/

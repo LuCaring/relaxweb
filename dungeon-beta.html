@@ -8,7 +8,7 @@
 
 <title>地下城 Beta · 动作原型</title>
 
-<link rel="stylesheet" href="assets/css/dungeon-beta.css?v=2">
+<link rel="stylesheet" href="assets/css/dungeon-beta.css?v=3">
 </head>
 
 <body>
@@ -16,6 +16,7 @@
 
   <header class="dgn-dev-banner">
     <span class="dgn-dev-note">前端开发原型 · 本地模拟数据 · 未接入正式 dungeon_beta_* 协议</span>
+    <button id="dungeonBgmSettingsButton" class="dgn-audio-open" type="button" aria-label="背景音乐设置" title="背景音乐设置">🎵</button>
     <button id="dungeonAudioSettingsButton" class="dgn-audio-open" type="button" aria-label="音效设置" title="音效设置">🔊</button>
   </header>
 
@@ -136,7 +137,40 @@
   </section>
 </div>
 
-<script type="module" src="assets/js/dungeon/dgn-beta-main.js?v=2"></script>
+<!-- 背景音乐：曲库来源见 assets/dungeon/beta/bgm/README.md -->
+<div class="dgn-bgm-modal" id="dgnBgmPanel" hidden>
+  <section class="dgn-bgm-dialog" role="dialog" aria-modal="true" aria-labelledby="dgnBgmTitle">
+    <header class="dgn-bgm-head">
+      <h2 id="dgnBgmTitle">背景音乐</h2>
+      <button id="dgnBgmCloseButton" type="button" aria-label="关闭背景音乐设置">×</button>
+    </header>
+    <div class="dgn-bgm-controls">
+      <label class="dgn-bgm-volume" for="dgnBgmVolume">
+        <span>音乐音量</span><output id="dgnBgmVolumeValue" for="dgnBgmVolume">55%</output>
+        <input id="dgnBgmVolume" type="range" min="0" max="100" step="1" aria-label="音乐音量">
+      </label>
+      <label class="dgn-bgm-toggle">
+        <input id="dgnBgmAuto" type="checkbox">
+        <span>跟随场景自动切换</span>
+      </label>
+      <label class="dgn-bgm-source" for="dgnBgmSceneSource">
+        <span>自动切换曲源</span>
+        <select id="dgnBgmSceneSource">
+          <option value="synth">内置合成曲</option>
+          <option value="library">免费曲库</option>
+        </select>
+      </label>
+    </div>
+    <div id="dgnBgmTracks" class="dgn-bgm-tracks"></div>
+    <footer class="dgn-bgm-foot">
+      <button id="dgnBgmAddButton" class="dgn-btn" type="button">从本地添加曲目</button>
+      <input id="dgnBgmFileInput" type="file" accept="audio/*" multiple hidden>
+      <span id="dgnBgmStatus" class="dgn-bgm-status" role="status"></span>
+    </footer>
+  </section>
+</div>
+
+<script type="module" src="assets/js/dungeon/dgn-beta-main.js?v=3"></script>
 </body>
 
 </html>

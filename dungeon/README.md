@@ -16,7 +16,7 @@ B 线可从本地归档标签 `archive/dungeon-ui-before-beta` 参考 `dungeon.h
 
 装备词条 T 级、通货改造及两套入口的概率口径见 [装备与通货规则](../docs/dungeon-equipment-currency.md)。
 
-原型音效全部由 WebAudio 实时合成，复用游戏厅的音量/静音设置，见 [地下城 Beta 音效](../docs/dungeon-beta-audio.md)。
+原型音效全部由 WebAudio 实时合成，复用游戏厅的音量/静音设置；背景音乐另有内置合成曲与可扩展的曲库，见 [地下城 Beta 音效与背景音乐](../docs/dungeon-beta-audio.md)。曲库清单与安装说明在 `assets/dungeon/beta/bgm/`。
 
 ## 旧功能维护
 

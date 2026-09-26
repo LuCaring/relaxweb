@@ -361,6 +361,22 @@ export function getGameAudioSettings() {
   return { enabled: settings.enabled, volume: settings.volume };
 }
 
+/** 当前是否允许出声：未静音、音量非零且页面在前台。 */
+export function isGameAudioAudible() {
+  return settings.enabled && settings.volume > 0 && !document.hidden;
+}
+
+/**
+ * 同页其它音频层（如 BGM）复用的底层节点。
+ * 对方自建增益再接到 masterGain：全站静音与音效音量照样生效，而它自己的音量可以独立。
+ * 返回 null 表示浏览器没有可用的 WebAudio。
+ */
+export function getSharedAudioGraph() {
+  const audio = ensureContext();
+  if (!audio || !masterGain) return null;
+  return { context: audio, masterGain };
+}
+
 /** Persist and apply a new mute state; cancels scheduled voices immediately when muted. */
 export function setGameAudioEnabled(enabled) {
   settings.enabled = enabled !== false;
