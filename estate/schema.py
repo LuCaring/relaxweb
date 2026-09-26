@@ -198,6 +198,26 @@ def init_estate(conn):
             DELETE FROM estate_lottery_daily WHERE username=OLD.username;
         END
     """)
+    conn.execute("""CREATE TABLE IF NOT EXISTS estate_flappy_runs (
+        session_id TEXT PRIMARY KEY,
+        username TEXT NOT NULL COLLATE NOCASE,
+        seed INTEGER NOT NULL,
+        started_at INTEGER NOT NULL,
+        status TEXT NOT NULL DEFAULT 'active',
+        result_json TEXT NOT NULL DEFAULT ''
+    )""")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_estate_flappy_runs_user "
+                 "ON estate_flappy_runs(username,status)")
+    conn.execute("""CREATE TABLE IF NOT EXISTS estate_flappy_scores (
+        username TEXT PRIMARY KEY COLLATE NOCASE,
+        best_score INTEGER NOT NULL DEFAULT 0,
+        achieved_at INTEGER NOT NULL
+    )""")
+    conn.execute("""CREATE TRIGGER IF NOT EXISTS delete_estate_flappy_data
+        AFTER DELETE ON estate_profiles BEGIN
+            DELETE FROM estate_flappy_runs WHERE username=OLD.username;
+            DELETE FROM estate_flappy_scores WHERE username=OLD.username;
+        END""")
     mining_columns = {row[1] for row in conn.execute("PRAGMA table_info(estate_mining_runs)")}
     if "reserved_slots" not in mining_columns:
         conn.execute("ALTER TABLE estate_mining_runs ADD COLUMN reserved_slots INTEGER NOT NULL DEFAULT 12")

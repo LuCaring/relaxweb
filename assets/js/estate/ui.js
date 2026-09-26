@@ -8,6 +8,7 @@ import { catalogEntry, formatDuration, repairCost, reservedSlots } from "./rules
 import { estateCommand, estateRequest, pendingEstateAction, requestEstateOnlineUsers } from "./protocol.js";
 import { estateNow, estateStore } from "./state.js";
 import { renderLotteryGame } from "./lottery.js";
+import { renderFlappyGame } from "./flappy.js";
 import { renderMarketGame } from "./market.js";
 
 /**
@@ -75,6 +76,7 @@ export function createEstateUI(root, activities = {}) {
   const close = root.querySelector(".estate-sheet-close");
   let active = null;
   let lotterySpinning = false;
+  let stopFlappy = null;
   let marketData = null;
   let marketSymbol = "XTIDE";
   let marketNotice = "";
@@ -84,12 +86,14 @@ export function createEstateUI(root, activities = {}) {
 
   function closeSheet() {
     if (lotterySpinning) return;
+    stopFlappy?.(); stopFlappy = null;
     active = null; sheet.hidden = true; sheetBody.replaceChildren();
   }
   close.addEventListener("click", closeSheet);
   sheet.addEventListener("click", (event) => { if (event.target === sheet) closeSheet(); });
 
   function show(title) {
+    stopFlappy?.(); stopFlappy = null;
     sheetTitle.textContent = title; sheetBody.replaceChildren(); sheet.hidden = false;
   }
 
@@ -215,7 +219,7 @@ export function createEstateUI(root, activities = {}) {
     const sidebar = document.createElement("nav"); sidebar.className = "estate-circus-sidebar";
     sidebar.setAttribute("aria-label", "马戏团项目");
     const content = document.createElement("div"); content.className = "estate-circus-content";
-    for (const [tab, label] of [["draw", "抽奖转盘"]]) {
+    for (const [tab, label] of [["draw", "抽奖转盘"], ["flappy", "飞鸟游戏"]]) {
       const tabButton = button(label, () => {
         if (lotterySpinning || active?.tab === tab) return;
         active.tab = tab; renderLottery();
@@ -224,7 +228,8 @@ export function createEstateUI(root, activities = {}) {
       sidebar.append(tabButton);
     }
     layout.append(sidebar, content); sheetBody.append(layout);
-    renderLotteryGame(content, snapshot, (busy) => { lotterySpinning = busy; });
+    if (active?.tab === "flappy") stopFlappy = renderFlappyGame(content);
+    else renderLotteryGame(content, snapshot, (busy) => { lotterySpinning = busy; });
   }
 
   /** 股市面板：独立入口，不再挂在马戏团下面。 */
@@ -514,6 +519,13 @@ export function createEstateUI(root, activities = {}) {
       if (!ready) sheetBody.append(button(`施肥 · 缩短1小时（库存${fertilizerCount}）`,
         () => estateCommand("estate_fertilize", { plot_id: plot.index }),
         { disabled: !fertilizerCount }));
+      sheetBody.append(button("铲除当前植物", async () => {
+        if (!await confirmDialog(`确定铲除${crop.name}吗？土地会恢复为空地，种子、作物和金币均不返还。`,
+          { title: "确认铲除植物？" })) return;
+        try {
+          await estateRequest("estate_clear_plot", { plot_id: plot.index });
+        } catch { /* 协议层统一提示 */ }
+      }));
       return;
     }
     const seeds = new Map(snapshot.inventory
@@ -625,7 +637,8 @@ export function createEstateUI(root, activities = {}) {
       : `${home.profile.warehouse_used}/${home.profile.warehouse_capacity}`;
     xpFill.style.width = snapshot.profile.xp_next
       ? `${Math.min(100, snapshot.profile.xp / snapshot.profile.xp_next * 100)}%` : "0%";
-    if (!sheet.hidden && active && !(active.kind === "lottery" && lotterySpinning)) {
+    if (!sheet.hidden && active && !(active.kind === "lottery"
+        && (lotterySpinning || active.tab === "flappy"))) {
       PANELS[active.kind]?.(active.kind === "plot" ? activePlot() : undefined);
     }
   }
@@ -650,6 +663,9 @@ export function createEstateUI(root, activities = {}) {
     openStore() { openPanel("general_store"); },
     openMarket() { openPanel("market"); },
     openFishing() { openPanel("fishing"); },
-    destroy() { window.clearInterval(timer); close.removeEventListener("click", closeSheet); },
+    destroy() {
+      stopFlappy?.(); stopFlappy = null;
+      window.clearInterval(timer); close.removeEventListener("click", closeSheet);
+    },
   };
 }

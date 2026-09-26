@@ -23,6 +23,9 @@ from estate import (
     estate_state,
     draw_lottery as estate_draw_lottery,
     lottery_history as estate_lottery_history,
+    start_flappy as estate_start_flappy,
+    finish_flappy as estate_finish_flappy,
+    flappy_leaderboard as estate_flappy_leaderboard,
     market_snapshot as estate_market_snapshot,
     trade_market as estate_trade_market,
     place_order as estate_place_order,
@@ -31,6 +34,7 @@ from estate import (
     finish_fishing as estate_finish_fishing,
     finish_mining as estate_finish_mining,
     harvest as estate_harvest,
+    clear_plot as estate_clear_plot,
     plant as estate_plant,
     mine_cell as estate_mine_cell,
     repair_tool as estate_repair_tool,
@@ -115,6 +119,9 @@ class EstateProtocol:
             "estate_buy": self.handle_estate_buy,
             "estate_lottery_draw": self.handle_estate_lottery_draw,
             "estate_lottery_history": self.handle_estate_lottery_history,
+            "estate_flappy_start": self.handle_estate_flappy_start,
+            "estate_flappy_finish": self.handle_estate_flappy_finish,
+            "estate_flappy_leaderboard": self.handle_estate_flappy_leaderboard,
             "estate_market_get": self.handle_estate_market_get,
             "estate_market_trade": self.handle_estate_market_trade,
             "estate_market_order": self.handle_estate_market_order,
@@ -122,6 +129,7 @@ class EstateProtocol:
             "estate_use_land_upgrade_ticket": self.handle_estate_use_land_upgrade_ticket,
             "estate_plant": self.handle_estate_plant,
             "estate_harvest": self.handle_estate_harvest,
+            "estate_clear_plot": self.handle_estate_clear_plot,
             "estate_fertilize": self.handle_estate_fertilize,
             "estate_sell": self.handle_estate_sell,
             "estate_sell_all": self.handle_estate_sell_all,
@@ -329,6 +337,12 @@ class EstateProtocol:
                     )
                 elif action == "lottery_draw":
                     result = estate_draw_lottery(conn, username, request_id, now, adjust_coins)
+                elif action == "flappy_start":
+                    result = estate_start_flappy(conn, username, request_id, now, adjust_coins)
+                elif action == "flappy_finish":
+                    result = estate_finish_flappy(conn, username, request_id,
+                                                  data.get("session_id"), data.get("flaps"),
+                                                  data.get("frames"), now, adjust_coins)
                 elif action == "market_trade":
                     result = estate_trade_market(conn, username, request_id,
                                                  data.get("side"), data.get("quantity"), now,
@@ -352,6 +366,9 @@ class EstateProtocol:
                     result = estate_harvest(
                         conn, username, request_id, data.get("plot_id"), now,
                     )
+                elif action == "clear_plot":
+                    result = estate_clear_plot(conn, username, request_id,
+                                               data.get("plot_id"), now)
                 elif action == "fertilize":
                     result = estate_fertilize(conn, username, request_id, username,
                                               data.get("plot_id"), now)
@@ -452,6 +469,23 @@ class EstateProtocol:
     async def handle_estate_lottery_draw(self, websocket, state, data):
         await self.handle_estate_action(websocket, state, data, "lottery_draw")
 
+    async def handle_estate_flappy_start(self, websocket, state, data):
+        await self.handle_estate_action(websocket, state, data, "flappy_start")
+
+    async def handle_estate_flappy_finish(self, websocket, state, data):
+        await self.handle_estate_action(websocket, state, data, "flappy_finish")
+
+    async def handle_estate_flappy_leaderboard(self, websocket, state, data):
+        user = state.get("user")
+        if not user:
+            await self.send_json(websocket, {"type": "estate_error", "code": "auth_required",
+                                           "message": "请先登录", "request_id": data.get("request_id")})
+            return
+        with self.database() as conn:
+            board = estate_flappy_leaderboard(conn, user["username"], int(time.time()))
+        await self.send_json(websocket, {"type": "estate_flappy_leaderboard",
+                                       "leaderboard": board, "request_id": data.get("request_id")})
+
     async def handle_estate_lottery_history(self, websocket, state, data):
         user = state.get("user")
         if not user:
@@ -500,6 +534,9 @@ class EstateProtocol:
 
     async def handle_estate_harvest(self, websocket, state, data):
         await self.handle_estate_action(websocket, state, data, "harvest")
+
+    async def handle_estate_clear_plot(self, websocket, state, data):
+        await self.handle_estate_action(websocket, state, data, "clear_plot")
 
     async def handle_estate_fertilize(self, websocket, state, data):
         await self.handle_estate_action(websocket, state, data, "fertilize")

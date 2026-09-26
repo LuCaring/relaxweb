@@ -8,8 +8,9 @@
 from estate.schema import init_estate
 from estate.store import EstateError, ensure_estate, estate_state
 from estate.skins import buy_skin, set_skin
-from estate.farming import buy, harvest, plant, sell, sell_all, use_land_upgrade_ticket
+from estate.farming import buy, clear_plot, harvest, plant, sell, sell_all, use_land_upgrade_ticket
 from estate.lottery import draw_lottery, lottery_history
+from estate.flappy import finish_flappy, flappy_leaderboard, start_flappy
 from estate.market import cancel_order, market_snapshot, place_order, trade_market
 from estate.activities import (
     buy_tool, finish_fishing, finish_mining, mine_cell, repair_tool,
@@ -27,8 +28,9 @@ __all__ = [
     # 角色皮肤
     "set_skin", "buy_skin",
     # 农场
-    "buy", "plant", "harvest", "sell", "sell_all", "use_land_upgrade_ticket",
+    "buy", "plant", "harvest", "clear_plot", "sell", "sell_all", "use_land_upgrade_ticket",
     "draw_lottery", "lottery_history", "market_snapshot", "trade_market",
+    "start_flappy", "finish_flappy", "flappy_leaderboard",
     "place_order", "cancel_order",
     # 工具
     "buy_tool", "upgrade_tool", "repair_tool",

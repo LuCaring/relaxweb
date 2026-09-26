@@ -1,0 +1,10 @@
+<!doctype html><html lang="zh-CN"><meta charset="utf-8"><title>庄园飞鸟本地预览</title>
+<link rel="stylesheet" href="../assets/css/estate.css"><main id="game"></main>
+<script type="module">
+import { renderFlappyGame } from "../assets/js/estate/flappy.js";
+renderFlappyGame(document.getElementById("game"), {
+  start: async () => ({ session_id: "local-preview", seed: 123456789, cost: 0 }),
+  finish: async ({ preview_score }) => ({ score: preview_score, reward: preview_score * 10 }),
+  leaderboard: async () => ({ entries: [], my_rank: null, my_best: 0 }),
+});
+</script></html>
