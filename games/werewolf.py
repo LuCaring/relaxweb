@@ -13,11 +13,12 @@
     首夜/始终/不可），预言家验一人得知是否狼人；
   - 白天：公布死讯（不翻身份牌）→ 按座次依次发言（每人限时
     speak_seconds，可在建房时设置；仅当前发言人可用文字/语音发言，
-    从昨晚首位死者的下一位开始，平安夜从座次首位开始）→ 投票放逐；
-    平票可配重投一轮或无人出局；遗言规则可选；
+    从昨晚首位死者的下一位开始，平安夜从座次首位开始；语音启用时
+    发言人连上语音频道倒计时才开表，等不到则超时自动开表兜底）→
+    投票放逐；平票可配重投一轮或无人出局；遗言规则可选；
   - 猎人被刀或被放逐可开枪带走一人（默认被毒不能开枪）；
-  - 出局玩家进入上帝视角观战：全场身份对其公开，但只能在死者频道
-    交流、白天只听不说，直至终局翻牌；
+  - 出局玩家不翻牌：身份对所有人保密直至终局结算翻牌；死者只能在
+    死者频道交流、白天只听不说；
   - 胜负：狼人全灭好人胜；默认屠边局（神职或平民全灭即狼胜，可配屠城），
     狼人存活数不少于好人作为兜底立即判狼胜；
   - 金币结算：输方每人付一份 blind 底注，按人头均分给胜方全体（含阵亡
@@ -44,6 +45,8 @@ VOTE_TIMEOUT = float(os.environ.get("WEREWOLF_VOTE_TIMEOUT", "30"))
 SHOT_TIMEOUT = float(os.environ.get("WEREWOLF_SHOT_TIMEOUT", "15"))
 LAST_WORDS_TIMEOUT = float(os.environ.get("WEREWOLF_LAST_WORDS_TIMEOUT", "20"))
 SETTLE_TIMEOUT = float(os.environ.get("WEREWOLF_SETTLE_TIMEOUT", "90"))
+# 语音启用时发言人连上语音频道倒计时才开表；等不到这么久就自动开表兜底
+VOICE_WAIT_TIMEOUT = float(os.environ.get("WEREWOLF_VOICE_WAIT_TIMEOUT", "20"))
 
 FACTIONS = {"wolf": "狼人阵营", "god": "神职阵营", "civilian": "平民阵营"}
 ROLES = {
@@ -113,6 +116,9 @@ class WerewolfRoom(BaseRoom):
         self.hand_seq = 0
         self.pause_remaining = 0.0
         self.votes = {}
+        # 宿主注入（server/rooms/host.attach_host）：语音服务启用后，
+        # 发言人连接语音频道才开始发言/遗言倒计时
+        self.voice_wait = False
 
     @staticmethod
     def sanitize_rules(rules):
@@ -205,6 +211,7 @@ class WerewolfRoom(BaseRoom):
                 "last_words_current": g["last_words"]["current"],
                 "speech_current": g["speech"].get("current")
                 if isinstance(g.get("speech"), dict) else None,
+                "awaiting_voice": self._speech_awaiting(),
                 "turn_left": round(max(0.0, g["deadline"] - time.time()), 1)
                 if g["deadline"] else 0,
                 "vote": dict(g["vote"]) if g["phase"] == "vote" else {},
@@ -228,15 +235,9 @@ class WerewolfRoom(BaseRoom):
             view["voice"] = self.voice_view(username)
             return view
         me_role = g["roles"].get(username)
-        # 上帝视角：出局玩家保留成员身份观战，全场身份对其公开
-        me_dead = bool(me_role) and username not in g["alive"]
-        if me_dead:
-            view["god_view"] = True
         for row in view["players"]:
             if row["username"] == username and me_role:
                 row["role"] = role_name(me_role)
-            elif me_dead and g["roles"].get(row["username"]):
-                row["role"] = role_name(g["roles"][row["username"]])
             elif (me_role and row["username"] != username
                   and is_wolf_role(me_role)
                   and is_wolf_role(g["roles"][row["username"]])):
@@ -458,15 +459,22 @@ class WerewolfRoom(BaseRoom):
     # ---- 暂停/恢复 ----
     def on_paused(self):
         g = self.game
-        if g and g.get("deadline"):
+        if not g:
+            return
+        if g.get("deadline"):
             self.pause_remaining = max(1.0, g["deadline"] - time.time())
+        elif self._speech_awaiting():
+            self.pause_remaining = 0.0   # 等语音的发言段：恢复后继续等
 
     def on_resumed(self):
         g = self.game
         if g and g.get("deadline"):
             g["deadline"] = time.time() + (self.pause_remaining or 1.0)
             self._arm_phase_timer()
-        self.pause_remaining = 0.0
+            self.pause_remaining = 0.0
+        elif g and self._speech_awaiting():
+            self.schedule("voice_wait", VOICE_WAIT_TIMEOUT,
+                          self._voice_wait_timeout)
 
     def _arm_phase_timer(self):
         g = self.game
@@ -525,8 +533,9 @@ class WerewolfRoom(BaseRoom):
             "last_protect": {},
             "shot_pending": None,
             "shot_after": None,
-            "last_words": {"queue": [], "current": None, "deadline": 0},
-            "speech": {"queue": [], "current": None},
+            "last_words": {"queue": [], "current": None, "deadline": 0,
+                           "awaiting_voice": False},
+            "speech": {"queue": [], "current": None, "awaiting_voice": False},
             "vote": {},
             "vote_round": 1,
             "candidates": None,
@@ -623,7 +632,7 @@ class WerewolfRoom(BaseRoom):
 
     # ---- 行动 ----
     async def perform_action(self, username, action, data=None, auto=False):
-        """宿主协议入口：夜晚目标 / 女巫决策 / 投票 / 猎人开枪。"""
+        """宿主协议入口：夜晚目标 / 女巫决策 / 投票 / 猎人开枪 / 发言控制。"""
         g = self.game
         if not g or self.paused or g["phase"] == "showdown":
             return
@@ -635,6 +644,10 @@ class WerewolfRoom(BaseRoom):
             await self.act_vote(username, data)
         elif action == "shoot":
             await self.act_shot(username, data)
+        elif action == "speech_ready":
+            await self.act_speech_ready(username)
+        elif action == "speech_end":
+            await self.act_speech_end(username)
 
     async def act_night(self, username, data):
         g = self.game
@@ -800,14 +813,23 @@ class WerewolfRoom(BaseRoom):
     async def _advance_speech(self):
         """交出下一位发言者的限时话筒；全员说完进入投票。"""
         g = self.game
+        self.cancel_timer("voice_wait")
         queue = g["speech"].get("queue", [])
         if queue:
             current = queue.pop(0)
             g["speech"]["current"] = current
+            g["speech"]["awaiting_voice"] = False
             g["turn_seq"] += 1
-            g["deadline"] = time.time() + self.rules["speak_seconds"]
-            self._arm_phase_timer()
             self._log_event(f"请 {self.display_name(current)} 发言", "day")
+            if self.voice_wait:
+                # 等发言人连上语音频道再开表，超时自动开表兜底
+                g["speech"]["awaiting_voice"] = True
+                g["deadline"] = 0
+                self.schedule("voice_wait", VOICE_WAIT_TIMEOUT,
+                              self._voice_wait_timeout)
+            else:
+                g["deadline"] = time.time() + self.rules["speak_seconds"]
+                self._arm_phase_timer()
             await self.broadcast_views()
             return
         g["speech"]["current"] = None
@@ -911,21 +933,32 @@ class WerewolfRoom(BaseRoom):
     async def _advance_last_words(self):
         g = self.game
         self.cancel_timer("phase")
+        self.cancel_timer("voice_wait")
         queue = g["last_words"]["queue"]
         if queue:
             current = queue.pop(0)
             g["voice_epoch"] += 1
             g["last_words"]["current"] = current
+            g["last_words"]["awaiting_voice"] = False
             g["turn_seq"] += 1
-            g["deadline"] = time.time() + LAST_WORDS_TIMEOUT
-            g["last_words"]["deadline"] = g["deadline"]
-            self._arm_phase_timer()
             self._log_event(f"请 {self.display_name(current)} 发表遗言",
                             "last_words")
+            if self.voice_wait:
+                # 遗言同样等发言人连上语音再开表
+                g["last_words"]["awaiting_voice"] = True
+                g["deadline"] = 0
+                g["last_words"]["deadline"] = 0
+                self.schedule("voice_wait", VOICE_WAIT_TIMEOUT,
+                              self._voice_wait_timeout)
+            else:
+                g["deadline"] = time.time() + LAST_WORDS_TIMEOUT
+                g["last_words"]["deadline"] = g["deadline"]
+                self._arm_phase_timer()
             await self.broadcast_views()
             return
         g["last_words"]["current"] = None
         g["last_words"]["deadline"] = 0
+        g["last_words"]["awaiting_voice"] = False
         if g["shot_pending"]:
             await self._enter_shot()
         elif g["shot_after"] == "day":
@@ -934,6 +967,72 @@ class WerewolfRoom(BaseRoom):
         else:
             g["shot_after"] = None
             await self._enter_night()
+
+    # ---- 发言语音门控：连上语音才开始倒计时 ----
+    def _speech_awaiting(self):
+        """当前发言/遗言段是否还在等发言人连接语音（倒计时未开表）。"""
+        g = self.game
+        if not g:
+            return False
+        if g["phase"] == "day":
+            return bool(g.get("speech", {}).get("awaiting_voice"))
+        if g["phase"] == "last_words":
+            return bool(g["last_words"].get("awaiting_voice"))
+        return False
+
+    def _speech_turn_owner(self):
+        """当前发言/遗言段的发言人；不在发言类阶段时为 None。"""
+        g = self.game
+        if not g:
+            return None
+        if g["phase"] == "day":
+            return g["speech"].get("current")
+        if g["phase"] == "last_words":
+            return g["last_words"].get("current")
+        return None
+
+    def _resume_speech_clock(self):
+        """把等待语音的发言段切入正式倒计时（turn_seq +1 让前端重置进度条）。"""
+        g = self.game
+        seconds = self.rules["speak_seconds"] if g["phase"] == "day" \
+            else LAST_WORDS_TIMEOUT
+        if g["phase"] == "day":
+            g["speech"]["awaiting_voice"] = False
+        else:
+            g["last_words"]["awaiting_voice"] = False
+            g["last_words"]["deadline"] = 0
+        g["turn_seq"] += 1
+        g["deadline"] = time.time() + seconds
+        if g["phase"] == "last_words":
+            g["last_words"]["deadline"] = g["deadline"]
+        self._arm_phase_timer()
+
+    async def act_speech_ready(self, username):
+        """发言人客户端报告语音频道已连接：此刻才开始发言/遗言倒计时。"""
+        if not self._speech_awaiting() or self._speech_turn_owner() != username:
+            return
+        self.cancel_timer("voice_wait")
+        self._resume_speech_clock()
+        await self.broadcast_views()
+
+    async def act_speech_end(self, username):
+        """发言人提前交麦：立即把话筒交给下一位（发言/遗言通用）。"""
+        if self._speech_turn_owner() != username:
+            return
+        if self.game["phase"] == "day":
+            await self._advance_speech()
+        else:
+            await self._advance_last_words()
+
+    async def _voice_wait_timeout(self):
+        """发言人一直没连上语音：超时自动开表，避免对局卡死。"""
+        g = self.game
+        if self.paused or not g or not self._speech_awaiting():
+            return
+        if not self._speech_turn_owner():
+            return
+        self._resume_speech_clock()
+        await self.broadcast_views()
 
     async def _enter_shot(self):
         g = self.game

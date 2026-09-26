@@ -326,6 +326,37 @@
 .ww-result-net.flat { color: #9fa3c8; }
 .ww-table .paused-overlay { position: absolute; z-index: 10; inset: 0; display: grid; place-items: center; border-radius: 18px; background: #101227d9; color: #e8e6ff; font-size: 20px; font-weight: 800; }
 
+/* 桌面端（右侧有定宽桌面聊天栏）：牌桌拉伸填满视口剩余高度，
+   座位网格垂直居中并铺一块暗色圆桌衬托，对局记录随之长高，
+   不再顶在左上角留出大片页脚空白。放在窄屏覆盖之前，
+   1024–1170px 的压缩规则仍生效。 */
+@media (min-width: 1024px) {
+    .ww-page { min-height: calc(100dvh - 104px); }
+    .ww-table { display: flex; flex-direction: column; flex: 1; }
+    .ww-arena { flex: 1; }
+    .ww-seats { display: flex; flex-direction: column; }
+    .ww-seat-grid {
+        position: relative;
+        flex: 1;
+        align-content: center;
+        grid-template-columns: repeat(auto-fill, minmax(185px, 1fr));
+        gap: 12px 10px;
+    }
+    .ww-seat-grid::before {
+        content: "";
+        position: absolute;
+        z-index: 0;
+        inset: 6% 3%;
+        border: 2px solid #ffffff12;
+        border-radius: 50%;
+        background: radial-gradient(ellipse at 50% 36%, #323759, #232744 55%, #1a1d38 80%);
+        box-shadow: inset 0 0 46px #0b0d18b3;
+    }
+    .ww-seat { z-index: 1; }
+    .ww-history { flex: 1; min-height: 0; }
+    .ww-history-list { flex: 1; min-height: 120px; max-height: none; }
+}
+
 @media (max-width: 1170px) {
     .ww-arena { grid-template-columns: minmax(0, 1fr) 230px; }
     .ww-seat-grid { grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); }

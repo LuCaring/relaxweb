@@ -889,6 +889,8 @@
 /* 成员条目上的按人音量菜单：齿轮悬浮在行尾（筹码留出空间），浮层右对齐展开 */
 .waiting-seat { position:relative; }
 .waiting-seat-volume { position:absolute; top:50%; right:12px; transform:translateY(-50%); display:flex; align-items:center; }
+/* transform 自带层叠上下文，展开时抬高层级，浮层才不会被后面的座位行盖住 */
+.waiting-seat-volume.volume-open { z-index:60; }
 .waiting-seat-stack { padding-right:26px; }
 .waiting-roster-columns span:last-child { padding-right:26px; }
 .seat-volume-gear { display:grid; place-items:center; width:26px; height:26px; padding:0; border:1px solid #91b9a4; border-radius:50%; background:#fff; color:#285841; font:inherit; font-size:13px; line-height:1; cursor:pointer; }

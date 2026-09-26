@@ -218,10 +218,10 @@ def test_night_kill_and_poison():
         view = room.view_for("a")
         hidden = {p["username"]: p["role"] for p in view["players"]}
         hidden_ok = hidden["e"] is None and hidden["c"] is None  # 出局不翻牌
-        god = room.view_for("e")            # 出局者获得上帝视角
-        god_view_ok = god["god_view"] is True \
-            and {p["username"]: p["role"] for p in god["players"]}["c"] == "预言家" \
-            and {p["username"]: p["role"] for p in god["players"]}["e"] == "平民"
+        god = room.view_for("e")            # 出局者只看得到自己的身份
+        god_roles = {p["username"]: p["role"] for p in god["players"]}
+        god_view_ok = "god_view" not in god \
+            and god_roles["e"] == "平民" and god_roles["c"] is None
         history_ok = all("（" not in e["text"] or e["kind"] != "dawn"
                          for e in g["history"])   # 死讯不再公布角色
         last_words_ok = g["phase"] == "last_words" \
@@ -236,7 +236,7 @@ def test_night_kill_and_poison():
         stock = run_identity_shuffle(run)
     check("空刀加毒药生效", deaths_ok, str(deaths_ok))
     check("出局不翻牌而存活者隐藏", hidden_ok, str(hidden_ok))
-    check("出局者进入上帝视角可见全场身份", god_view_ok)
+    check("出局者只见自己身份，他人保密至终局", god_view_ok)
     check("死讯不公布角色", history_ok)
     check("首夜死者进入遗言队列", last_words_ok)
     check("遗言耗尽进入白天", day_ok)
@@ -740,6 +740,67 @@ def test_day_speech_order_and_mute():
     check("自定义发言时限生效", rotated_timer_ok)
 
 
+def test_speech_voice_gate_and_end():
+    async def run():
+        room = six_room()
+        room.voice_wait = True               # 模拟宿主注入：语音服务已启用
+        await room.start()
+        g = room.game
+        await skip_night(room)               # 平安夜直达白天
+        view = room.view_for("c")
+        # 首位发言人进入等待：倒计时不启动，视图带 awaiting_voice
+        await_ok = g["phase"] == "day" and g["speech"]["current"] == "a" \
+            and g["speech"]["awaiting_voice"] is True and g["deadline"] == 0 \
+            and view["awaiting_voice"] is True and view["turn_left"] == 0
+        # 非发言人报告连接无效；发言人在其他阶段报告也无效
+        await room.perform_action("b", "speech_ready")
+        await room.perform_action("a", "vote", {"target": "b"})
+        still_ok = g["deadline"] == 0 and g["speech"]["awaiting_voice"] is True
+        # 发言人连上语音：开表
+        await room.perform_action("a", "speech_ready")
+        armed_ok = g["speech"]["awaiting_voice"] is False \
+            and 28 < g["deadline"] - time.time() <= 30
+        # 提前结束发言：话筒立即交给下一位，并重新等待语音
+        await room.perform_action("a", "speech_end")
+        next_ok = g["speech"]["current"] == "b" \
+            and g["speech"]["awaiting_voice"] is True and g["deadline"] == 0
+        # 等待超时兜底：自动开表
+        await room._voice_wait_timeout()
+        timeout_ok = g["speech"]["awaiting_voice"] is False \
+            and 28 < g["deadline"] - time.time() <= 30
+        # 遗言阶段同样等语音：造一具尸体走完到遗言
+        room2 = six_room()
+        room2.voice_wait = True
+        await room2.start()
+        g2 = room2.game
+        await room2.perform_action("a", "night", {"target": "e"})
+        await room2.perform_action("b", "night", {"target": "e"})
+        await room2.perform_action("d", "witch", {"save": False})
+        await room2.perform_action("c", "night", {})
+        words_ok = g2["phase"] == "last_words" \
+            and g2["last_words"]["current"] == "e" \
+            and g2["last_words"]["awaiting_voice"] is True \
+            and g2["deadline"] == 0
+        await room2.perform_action("e", "speech_ready")
+        words_armed_ok = g2["last_words"]["awaiting_voice"] is False \
+            and 18 < g2["deadline"] - time.time() <= 20
+        await room2.perform_action("e", "speech_end")
+        words_next_ok = g2["phase"] == "day" \
+            and g2["last_words"]["current"] is None
+        return (await_ok, still_ok, armed_ok, next_ok, timeout_ok, words_ok,
+                words_armed_ok, words_next_ok)
+
+    (await_ok, still_ok, armed_ok, next_ok, timeout_ok, words_ok,
+     words_armed_ok, words_next_ok) = run_identity_shuffle(run)
+    check("语音等待期间不启动发言倒计时", await_ok)
+    check("非发言人报告连接无效", still_ok)
+    check("发言人连接语音后开始倒计时", armed_ok)
+    check("结束发言立即交给下一位", next_ok)
+    check("等待超时自动开始倒计时", timeout_ok)
+    check("遗言阶段同样等待语音连接", words_ok)
+    check("遗言连接语音后开表并可提前结束", words_armed_ok and words_next_ok)
+
+
 # ---- 结算投票 ----
 def test_settlement_vote():
     async def run():
@@ -910,6 +971,7 @@ def main():
     test_leave_mid_night()
     test_chat_channels()
     test_day_speech_order_and_mute()
+    test_speech_voice_gate_and_end()
     test_settlement_vote()
     test_full_random_match()
     failed = [name for name, ok in results if not ok]

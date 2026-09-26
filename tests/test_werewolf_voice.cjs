@@ -269,6 +269,17 @@ print(json.dumps({n: accounts.create_session(n) for n in names}))
     await players.va.page.locator('.waiting-seat[data-username="vb"] .seat-volume-gear').click();
     assert.equal(await players.va.page.locator('.waiting-seat[data-username="vb"] .peer-volume-popover').isVisible(), true,
       'gear click opens the volume popover');
+    await players.va.page.locator('.waiting-seat[data-username="vb"] .peer-volume-range').fill('150');
+    assert.equal(await players.va.page.evaluate(() => {
+      const saved = JSON.parse(localStorage.getItem('voicePeerVolumes') || '[]');
+      const pair = saved.find(([name]) => name === 'vb');
+      return pair ? pair[1] : null;
+    }), 150, 'boost above 100 persists');
+    // >100% 的增益走 WebAudio：元素自身音量钳到 1 且不抛错
+    await players.va.page.waitForFunction(() => {
+      const element = document.querySelector('audio[data-voice-peer="vb"]');
+      return element && Math.abs(element.volume - 1) < 0.001;
+    }, null, { timeout: 5000, polling: 100 });
     await players.va.page.locator('.waiting-seat[data-username="vb"] .peer-volume-range').fill('40');
     assert.equal(await players.va.page.evaluate(() => {
       const saved = JSON.parse(localStorage.getItem('voicePeerVolumes') || '[]');
@@ -397,6 +408,13 @@ print(json.dumps({n: accounts.create_session(n) for n in names}))
     const speaker = await players.va.page.evaluate(() => core.state.myRoom.speech_current);
     const speakerRole = roleOf[speaker];
     console.log(`PASS day: all four connected to the day channel, speaker ${speaker}(${speakerRole})`);
+
+    // 语音门控：发言人连上 day 频道后客户端上报 speech_ready，倒计时在
+    // 兜底超时（20s）之前由服务端开表，说明链路走的是客户端上报
+    await players[speaker].page.waitForFunction(
+      () => core.state.myRoom?.turn_left > 0 && core.state.myRoom?.awaiting_voice === false,
+      null, { timeout: 8000, polling: 100 });
+    console.log('PASS speech gate: countdown armed by client speech_ready');
 
     await players[speaker].page.evaluate(() => core.send({ type: 'room_chat', text: '白天发言测试' }));
     for (const name of Object.keys(players)) {

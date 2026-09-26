@@ -10,6 +10,9 @@ const PEER_VOLUMES_KEY = "voicePeerVolumes";
 const MIC_SETTINGS_KEY = "voiceMicSettings";
 const PEER_VOLUME_LIMIT = 200;
 const PEER_VOLUME_DEFAULT = 100;
+/* 上限 150%：≤100% 走 media element 自身音量，>100% 的增益由
+   room-voice.js 的 WebAudio GainNode 补足。 */
+export const PEER_VOLUME_MAX = 150;
 /* 阈值上限 50：电平条按 RMS×200 绘制，50% 恰好是条满格，
    这样阈值滑块（0–50 线性映射到条上）与电平填充共用同一刻度。 */
 const GATE_THRESHOLD_MAX = 50;
@@ -37,7 +40,7 @@ function storageSet(key, value) {
 function clampVolume(value, fallback) {
   const number = Number(value);
   if (!Number.isFinite(number)) return fallback;
-  return Math.max(0, Math.min(100, Math.round(number)));
+  return Math.max(0, Math.min(PEER_VOLUME_MAX, Math.round(number)));
 }
 
 function clampThreshold(value, fallback) {
@@ -73,7 +76,7 @@ function announceEvent(name, detail) {
   } catch { /* UI 联动事件，失败无碍 */ }
 }
 
-/** 某玩家在自己这的收听音量（0–100），默认 100。 */
+/** 某玩家在自己这的收听音量（0–150），默认 100。 */
 export function getPeerVolume(username) {
   if (!username) return PEER_VOLUME_DEFAULT;
   return peerVolumes.get(username) ?? PEER_VOLUME_DEFAULT;

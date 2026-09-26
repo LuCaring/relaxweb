@@ -218,7 +218,7 @@ function renderQuickChannels() {
         const range = el("input");
         range.type = "range";
         range.min = "0";
-        range.max = "100";
+        range.max = "150";
         range.step = "5";
         range.value = String(getPeerVolume(member.username));
         range.setAttribute("aria-label", `${member.nickname || member.username} 音量`);

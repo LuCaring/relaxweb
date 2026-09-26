@@ -8,7 +8,7 @@
 
 import { onMessage } from "./registry.js";
 import { getPeerVolume, micGateOpen, micGateTrack, micLevel, micPipelineActive,
-  startMicPipeline, stopMicPipeline } from "./voice-mic.js";
+  PEER_VOLUME_MAX, startMicPipeline, stopMicPipeline } from "./voice-mic.js";
 
 const mic = { wanted: false, primed: false, processing: false, priming: null };
 let micGeneration = 0;
@@ -228,18 +228,68 @@ function announceState() {
   }));
 }
 
+// 成员音量 ≤100% 时直接用 media element 音量；>100% 的部分 media element
+// 表达不了（volume 上限 1.0），惰性挂一条 WebAudio 增益链补足。挂上
+// MediaElementSource 后声音只能走 WebAudio，所以增益链一旦建立就保留，
+// AudioContext 被系统挂起时靠一次性手势监听唤醒。
+const peerGains = new Map();   // element -> { source, gain }
+let peerContext = null;
+
+function ensurePeerContext() {
+  const AudioCtor = window.AudioContext || window.webkitAudioContext;
+  if (!AudioCtor) return null;
+  if (!peerContext) peerContext = new AudioCtor();
+  if (peerContext.state === "suspended") {
+    const wake = () => { peerContext?.resume()?.catch(() => {}); };
+    document.addEventListener("pointerdown", wake, { once: true });
+    document.addEventListener("keydown", wake, { once: true });
+  }
+  return peerContext;
+}
+
+function applyPeerVolume(element, volume) {
+  const linear = Math.max(0, Math.min(PEER_VOLUME_MAX, volume)) / 100;
+  element.volume = Math.min(1, linear);
+  if (linear <= 1 && !peerGains.has(element)) return;
+  const context = ensurePeerContext();
+  if (!context) return;
+  let chain = peerGains.get(element);
+  if (!chain) {
+    try {
+      const source = context.createMediaElementSource(element);
+      const gain = context.createGain();
+      source.connect(gain).connect(context.destination);
+      chain = { source, gain };
+      peerGains.set(element, chain);
+    } catch (error) {
+      console.warn("voice peer gain unavailable", error);
+      return;
+    }
+  }
+  chain.gain.gain.value = Math.max(1, linear);
+}
+
+function dropPeerGain(element) {
+  const chain = peerGains.get(element);
+  if (!chain) return;
+  peerGains.delete(element);
+  try { chain.gain.disconnect(); } catch { /* 已断开 */ }
+  try { chain.source.disconnect(); } catch { /* 已断开 */ }
+}
+
 // 成员音量滑杆调整时，同步所有已挂载的远端音轨
 document.addEventListener("voicepeerchange", (event) => {
   const { username, volume } = event.detail || {};
   if (!username) return;
   for (const element of remoteAudio.values()) {
-    if (element.dataset.voicePeer === username) element.volume = volume / 100;
+    if (element.dataset.voicePeer === username) applyPeerVolume(element, volume);
   }
 });
 
 function detachAudio(track) {
   const element = remoteAudio.get(track);
   if (!element) return;
+  dropPeerGain(element);
   try { track.detach(element); } catch { /* 音轨可能已经断开 */ }
   element.remove();
   remoteAudio.delete(track);
@@ -293,7 +343,7 @@ async function applyUpdate(update) {
       element.playsInline = true;
       element.dataset.voicePeer = participant.identity;
       document.body.append(element);
-      element.volume = getPeerVolume(participant.identity) / 100;
+      applyPeerVolume(element, getPeerVolume(participant.identity));
       remoteAudio.set(track, element);
       element.play().catch(() => {
         audioBlocked = true;

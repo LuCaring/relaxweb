@@ -151,6 +151,20 @@ LiveKit 与 MediaMTX 同为 SFU，出口带宽同级；混音（F）在大量观
 
 路径 `ww/{room}/{username}`（公开）与 `ww/{room}/wolf/{username}`（狼队）；新增 `voice_acl` 表（room_id, username, channel, can_publish, can_hear）由游戏进程在频道变化时 upsert，`auth_server.decide()` 对 WHIP/WHEP 请求解析路径后查表裁决（publish 用登录 token + can_publish；read 用 can_hear）；前端自写 `WHIPPublisher`（约百行，与 `reader.js` 对称）+ 订阅 diff 管理 + AnalyserNode 说话指示。其余（HTTPS 前提、带宽、降级、负向测试）与 E 相同。已知短板：无服务端禁言，轮次发言只能靠客户端自觉 + 房间规则约束。
 
+### 5.6 发言计时与语音连接门控（2026-09-27 增量）
+
+- **连上语音才开始计时**：语音服务启用时（宿主注入 `room.voice_wait`），白天依次发言与
+  遗言把话筒交给发言人后不开表——视图带 `awaiting_voice: true`、`turn_left: 0`；发言人
+  客户端连上 day 频道后上报 `poker_action speech_ready`，引擎此刻才设 `deadline` 并
+  `turn_seq += 1`（前端进度条基线随之重置）。发言人始终连不上时
+  `WEREWOLF_VOICE_WAIT_TIMEOUT`（默认 20s）兜底自动开表，对局不因个别玩家卡死。
+  隐私与授权模型不变：门控只影响计时，不改变频道/发布授权。
+- **提前交麦**：当前发言人（白天发言或遗言）可上报 `poker_action speech_end`，
+  引擎立即把话筒交给下一位，避免干等倒计时。
+- **按人音量 0–150%**：`voice-mic.js` 的按人音量上限提到 150（仍存 localStorage）；
+  ≤100% 走 media element 自身音量，>100% 的增益由 `room-voice.js` 惰性挂
+  WebAudio GainNode 补足（media element 的 `volume` 上限是 1.0）。
+
 ## 6. 实施顺序与验收
 
 | 阶段 | 交付 | 完成判据 |

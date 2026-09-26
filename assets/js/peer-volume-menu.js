@@ -46,7 +46,7 @@ export function attachPeerVolumeMenu(row) {
   const range = el("input", "peer-volume-range");
   range.type = "range";
   range.min = "0";
-  range.max = "100";
+  range.max = "150";
   range.step = "5";
   const value = el("span", "peer-volume-value");
   const reset = el("button", "peer-volume-reset", "重置");
@@ -65,12 +65,15 @@ export function attachPeerVolumeMenu(row) {
     range.value = String(volume);
     value.textContent = `${volume}%`;
     popover.hidden = false;
+    // 展开时抬高层级：宿主 transform 形成层叠上下文，后续座位行会盖住浮层
+    host.classList.add("volume-open");
     gear.setAttribute("aria-expanded", "true");
     active = menu;
   }
 
   function close() {
     popover.hidden = true;
+    host.classList.remove("volume-open");
     gear.setAttribute("aria-expanded", "false");
     if (active === menu) active = null;
   }

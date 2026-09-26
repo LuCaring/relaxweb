@@ -46,7 +46,10 @@ document.addEventListener("voicespeakers", (event) => {
   });
 });
 document.addEventListener("voicestate", () => {
-  if (state.myRoom?.game_type === "werewolf") renderGameView();
+  if (state.myRoom?.game_type === "werewolf") {
+    maybeAckSpeech();
+    renderGameView();
+  }
 });
 desktopLayout.addEventListener("change", () => {
   if (state.myRoom?.game_type === "werewolf") renderGameView();
@@ -68,6 +71,21 @@ document.addEventListener("gameactionerror", () => {
 
 function isMe(name) {
   return Boolean(name) && name === selfUsername() && !state.myRoom?.spectator;
+}
+
+/** 等待语音连接的发言段：连上当前白天频道后向服务器报告，倒计时才开表。 */
+let speechAckSeq = null;
+function maybeAckSpeech() {
+  const room = state.myRoom;
+  if (room?.game_type !== "werewolf" || !room.awaiting_voice) return;
+  if (room.turn_seq === speechAckSeq) return;
+  const speaking = (room.phase === "day" && isMe(room.speech_current))
+    || (room.phase === "last_words" && isMe(room.last_words_current));
+  const status = voiceStatus();
+  if (!speaking || !status.connected || !status.room?.endsWith("-day")) return;
+  if (send({ type: "poker_action", action: "speech_ready" })) {
+    speechAckSeq = room.turn_seq;
+  }
 }
 
 /** 优先用本房间座位昵称，其次全局 profile 缓存。 */
@@ -108,14 +126,16 @@ function phaseBanner(room) {
   } else if (room.phase === "day") {
     icon.textContent = "☀️";
     label.textContent = room.speech_current
-      ? `第 ${dayNo} 天 · ${nameOf(room.speech_current)} 发言中`
+      ? `第 ${dayNo} 天 · ${nameOf(room.speech_current)} ${room.awaiting_voice ? "连接语音中…" : "发言中"}`
       : `第 ${dayNo} 天 · 依次发言`;
   } else if (room.phase === "vote") {
     icon.textContent = "🗳️";
     label.textContent = `第 ${dayNo} 天 · ${room.vote_round > 1 ? "平票重投" : "投票放逐"}`;
   } else if (room.phase === "last_words") {
     icon.textContent = "🕯️";
-    label.textContent = `遗言 · ${room.last_words_current || ""}`;
+    label.textContent = room.last_words_current
+      ? `遗言 · ${nameOf(room.last_words_current)} ${room.awaiting_voice ? "连接语音中…" : ""}`
+      : "遗言";
   } else if (room.phase === "shot") {
     icon.textContent = "🏹";
     label.textContent = "猎人开枪";
@@ -144,6 +164,11 @@ function phaseHintText(room) {
     return room.night_role ? `${room.night_role}正在行动，请闭眼等待…` : "天黑请闭眼…";
   }
   if (room.phase === "day") {
+    if (room.awaiting_voice && room.speech_current) {
+      return isMe(room.speech_current)
+        ? "连接语音后开始计时 · 也可先用聊天发言"
+        : `等待 ${nameOf(room.speech_current)} 连接语音…`;
+    }
     if (room.speech_current && isMe(room.speech_current)) {
       return "轮到你发言 · 打开聊天或上麦，时间结束自动交给下一位";
     }
@@ -159,6 +184,11 @@ function phaseHintText(room) {
     return "猎人正在决定是否开枪…";
   }
   if (room.phase === "last_words") {
+    if (room.awaiting_voice && room.last_words_current) {
+      return isMe(room.last_words_current)
+        ? "连接语音后开始计时 · 也可先用聊天说出遗言"
+        : `等待 ${nameOf(room.last_words_current)} 连接语音…`;
+    }
     return room.last_words_current && isMe(room.last_words_current)
       ? "轮到你发表遗言 · 打开聊天说出判断"
       : `等待 ${room.last_words_current ? nameOf(room.last_words_current) : ""} 发表遗言…`;
@@ -285,7 +315,7 @@ function roleCardNode(room) {
     card.append(guard);
   }
   if (card.classList.contains("is-out")) {
-    card.append(el("div", "ww-role-out-note", "你已出局 · 上帝视角观战：全场身份公开可见，可在死者频道交流，白天只听不说。"));
+    card.append(el("div", "ww-role-out-note", "你已出局 · 身份保密至终局翻牌；可在死者频道交流，白天只听不说。"));
   }
   return card;
 }
@@ -569,7 +599,7 @@ function dockNode() {
   if (room.phase === "showdown" || room.settlement) {
     info.append(el("div", "ww-dock-note", "结算面板中投票「再来一局」或「解散房间」。"));
   } else if (amOut) {
-    info.append(el("div", "ww-dock-note", "你已出局：上帝视角观战中（所有身份公开），可在死者频道交流，白天只听不说。遗言阶段轮到你时再开口。"));
+    info.append(el("div", "ww-dock-note", "你已出局：身份保密至终局翻牌，可在死者频道交流，白天只听不说。遗言阶段轮到你时再开口。"));
   } else if (!room.your_role) {
     info.append(el("div", "ww-dock-note", "观战中：可阅读公开讨论，语音仅可收听；私密频道不可见。"));
   } else {
@@ -581,6 +611,7 @@ function dockNode() {
   }
   body.append(info);
   const amSpeaking = room.phase === "day" && isMe(room.speech_current);
+  const amLastWords = room.phase === "last_words" && isMe(room.last_words_current);
   if ((acting || amSpeaking) && phaseDeadline > 0) {
     const countdown = el("div", "countdown");
     const fill = el("div", "countdown-fill");
@@ -591,9 +622,17 @@ function dockNode() {
   if (acting) {
     body.append(actionAreaNode(room));
   }
-  if (amSpeaking) {
+  if (amSpeaking || amLastWords) {
     body.append(el("div", "ww-dock-note",
-      "轮到你发言：打开聊天输出推理，或点击右上角「上麦」用语音发言。"));
+      room.phase === "last_words"
+        ? "轮到你发表遗言：打开聊天输出判断，或点击右上角「上麦」用语音发言。"
+        : "轮到你发言：打开聊天输出推理，或点击右上角「上麦」用语音发言。"));
+    const end = el("button", "ww-action secondary",
+      amLastWords ? "结束遗言" : "结束发言");
+    end.type = "button";
+    end.disabled = actionLock;
+    end.addEventListener("click", () => wwAct({ action: "speech_end" }));
+    body.append(end);
   }
   dock.append(body);
   return dock;
@@ -674,7 +713,7 @@ function renderWerewolfTable() {
   const arena = el("div", "ww-arena");
   const seatsPanel = el("section", "ww-seats");
   seatsPanel.append(el("div", "ww-seats-head",
-    `玩家状态 · ${alivePlayers(room).length} 人存活${room.phase === "vote" ? " · 得票见角标" : ""}${room.god_view ? " · 👁 上帝视角" : ""}`));
+    `玩家状态 · ${alivePlayers(room).length} 人存活${room.phase === "vote" ? " · 得票见角标" : ""}`));
   const grid = el("div", "ww-seat-grid");
   (room.players || []).forEach((p, index) => grid.append(seatNode(p, index)));
   seatsPanel.append(grid);
@@ -692,6 +731,7 @@ function renderWerewolfTable() {
   wrap.append(dockNode());
   body.append(wrap);
   reapplySeatBubbles();
+  maybeAckSpeech();
 }
 
 registerGame("werewolf", {

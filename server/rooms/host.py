@@ -112,6 +112,8 @@ class RoomHost:
             return results
 
         room.record_ratings = record_ratings
+        # 语音服务启用时，狼人杀等发言人连接语音频道后再开始发言倒计时
+        room.voice_wait = bool(getattr(self.voice, "enabled", False))
 
     async def rebuy_members(self, room):
         """结清上一轮，再让成员以标准买入额和全新筹码进入下一轮。"""

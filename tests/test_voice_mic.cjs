@@ -48,8 +48,10 @@ const source = fs.readFileSync(path.resolve(__dirname, '../assets/js/voice-mic.j
 
   // —— 按人音量：默认值、归一化与 LRU 上限 ——
   assert.equal(mic.getPeerVolume('alice'), 100);
-  assert.equal(mic.setPeerVolume('alice', 130), 100, 'clamps above 100');
-  assert.equal(mic.getPeerVolume('alice'), 100);
+  assert.equal(mic.PEER_VOLUME_MAX, 150, 'volume cap allows amplification');
+  assert.equal(mic.setPeerVolume('alice', 130), 130, 'boost above 100 persists');
+  assert.equal(mic.setPeerVolume('alice', 999), 150, 'clamps above the 150 cap');
+  assert.equal(mic.getPeerVolume('alice'), 150);
   assert.equal(mic.setPeerVolume('alice', -5), 0, 'clamps below 0');
   assert.equal(mic.getPeerVolume('alice'), 0);
   assert.equal(mic.setPeerVolume('alice', '42'), 42, 'accepts numeric strings');

@@ -103,16 +103,15 @@ function baseView(overrides = {}) {
     assert.equal(await page.locator('.ww-seat.dead').count(), 1);
     assert.match(await page.locator('.ww-seat.dead .ww-seat-unknown').innerText(), /未翻牌/);
     assert.equal(await page.locator('.ww-seat.dead .ww-role-chip').count(), 0);
-    // 上帝视角：出局者可见全场身份
+    // 出局不翻牌：死者只看得到自己的身份，他人保密至终局
     await show(baseView({
-      god_view: true,
       players: baseView().players.map(p => p.username === 'eve'
         ? { ...p, role: '平民' }
-        : p.username === 'carol' ? { ...p, role: '预言家' } : p),
+        : p),
     }));
-    assert.match(await page.locator('.ww-seats-head').innerText(), /上帝视角/);
+    assert.doesNotMatch(await page.locator('.ww-seats-head').innerText(), /上帝视角/);
     assert.match(await page.locator('.ww-seat.dead .ww-role-chip').innerText(), /平民/);
-    assert.equal(await page.locator('.ww-seat[data-username="carol"] .ww-role-chip').count(), 1);
+    assert.equal(await page.locator('.ww-seat[data-username="carol"] .ww-role-chip').count(), 0);
     // 恢复夜晚狼人行动视图
     await show(baseView({
       turn_left: 25,
@@ -217,6 +216,27 @@ function baseView(overrides = {}) {
     assert.equal(await page.locator('#roomChatInput').isDisabled(), false);
     assert.match(await page.locator('#roomChatInput').getAttribute('placeholder'), /轮到你发言/);
     assert.ok(await page.locator('.ww-dock .countdown').isVisible());
+
+    // —— 白天·语音等待：倒计时不出现，连接后由前端上报 speech_ready ——
+    await show(baseView({
+      phase: 'day', night_role: null, your_options: null, vote: {},
+      speech_current: 'alice', awaiting_voice: true, turn_left: 0, turn_seq: 10,
+    }));
+    assert.match(await page.locator('.ww-phase').innerText(), /连接语音中/s);
+    assert.match(await page.locator('.ww-dock-title').innerText(), /连接语音后开始计时/s);
+    assert.equal(await page.locator('.ww-dock .countdown').count(), 0);
+    await page.locator('button:has-text("结束发言")').click();
+    assert.deepEqual(await sent(), { type: 'poker_action', action: 'speech_end' });
+
+    // —— 遗言：轮到死者发言时可提前结束遗言 ——
+    await show(baseView({
+      phase: 'last_words', night_role: null, your_options: null, vote: {},
+      speech_current: null, awaiting_voice: false,
+      last_words_current: 'alice', turn_left: 15, turn_seq: 11,
+    }));
+    assert.match(await page.locator('.ww-phase').innerText(), /遗言 · 爱丽丝/s);
+    await page.locator('button:has-text("结束遗言")').click();
+    assert.deepEqual(await sent(), { type: 'poker_action', action: 'speech_end' });
 
     // —— 猎人开枪：放弃即空枪提交 ——
     await show(baseView({
