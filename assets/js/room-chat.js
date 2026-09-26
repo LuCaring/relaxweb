@@ -93,6 +93,10 @@ function chatComposerState() {
   }
   const alive = room.players?.some((player) => player.username === me && player.alive);
   if (!alive && room.your_role) {
+    // 了结死亡的上帝视角：只旁观（可读含狼队频道的消息），不得再发言
+    if (room.god_view) {
+      return { disabled: true, placeholder: "上帝视角观战 · 仅可阅读，不能发言" };
+    }
     return { disabled: false, placeholder: "死者频道…（仅死者可见）" };
   }
   if (room.phase === "night" && room.your_role?.faction === "wolf") {

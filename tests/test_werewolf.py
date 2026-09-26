@@ -228,18 +228,23 @@ def test_night_kill_and_poison():
             and g["last_words"]["current"] == "e"
         await room._advance_last_words()
         day_ok = g["phase"] == "day" and g["last_words"]["current"] is None
+        god_after = room.view_for("e")      # 遗言说完即转上帝视角
+        god_after_ok = god_after["god_view"] is True \
+            and {p["username"]: p["role"] for p in god_after["players"]}["c"] \
+            == "预言家"
         stock = room.view_for("d")["witch_stock"]
         return deaths_ok, hidden_ok, god_view_ok, history_ok, last_words_ok, \
-            day_ok, stock
+            day_ok, god_after_ok, stock
 
     deaths_ok, hidden_ok, god_view_ok, history_ok, last_words_ok, day_ok, \
-        stock = run_identity_shuffle(run)
+        god_after_ok, stock = run_identity_shuffle(run)
     check("空刀加毒药生效", deaths_ok, str(deaths_ok))
     check("出局不翻牌而存活者隐藏", hidden_ok, str(hidden_ok))
-    check("出局者只见自己身份，他人保密至终局", god_view_ok)
+    check("遗言中只见自己身份，他人保密", god_view_ok)
     check("死讯不公布角色", history_ok)
     check("首夜死者进入遗言队列", last_words_ok)
     check("遗言耗尽进入白天", day_ok)
+    check("遗言了结后进入上帝视角", god_after_ok)
     check("女巫药水库存扣除", stock == {"save": True, "poison": False},
           str(stock))
 
@@ -643,14 +648,27 @@ def test_chat_channels():
         vote_route = room.chat_route("a", {})
         for voter in list(g["alive"]):
             await room.perform_action(voter, "vote", {"target": "f"})
+        # f 刚被放逐、遗言轮次中：仍在局内，身份保密
+        involved_view = room.view_for("f")
+        involved_ok = "god_view" not in involved_view \
+            and {p["username"]: p["role"] for p in involved_view["players"]}["c"] is None
         while g["phase"] == "last_words":
             await room._advance_last_words()
         if g["phase"] == "shot":
             await room._close_shot()
+        # f 遗言了结：转上帝视角旁观——全场公开、狼频道旁听、不得再发言
+        settled_ok = room.view_for("f")["god_view"] is True
         dead_channel = room.chat_route("f", {})
+        queued_route_ok = False
+        g["last_words"]["queue"] = ["f"]      # 模拟遗言还没轮到：仍算局内
+        queued_route_ok = room.chat_route("f", {}) == "dead" \
+            and "god_view" not in room.view_for("f")
+        g["last_words"]["queue"] = []
         night2_wolf = room.chat_route("a", {})
         audience_wolf = room.chat_audience("wolf")
         audience_dead = room.chat_audience("dead")
+        god_voice_ok = room.view_for("f")["voice"] == {"channel": "wolf",
+                                                       "can_speak": False}
         room.chat.append({"channel": "wolf", "text": "刀e", "username": "a"})
         room.chat.append({"channel": "dead", "text": "冤枉", "username": "f"})
         room.chat.append({"text": "大家好", "username": "c"})
@@ -661,13 +679,15 @@ def test_chat_channels():
         good_sees = [m["text"] for m in room.visible_chat("e")]
         dead_sees = [m["text"] for m in room.visible_chat("f")]
         return (night_wolf, night_good, day_speaker_route, day_muted_route,
-                speech_visible, vote_route, dead_channel, night2_wolf,
-                audience_wolf, audience_dead, wolf_sees, good_sees, dead_sees,
+                speech_visible, vote_route, involved_ok, settled_ok,
+                dead_channel, queued_route_ok, night2_wolf, audience_wolf,
+                audience_dead, god_voice_ok, wolf_sees, good_sees, dead_sees,
                 spectator_route, spectator_sees)
 
     (night_wolf, night_good, day_speaker_route, day_muted_route,
-     speech_visible, vote_route, dead_channel, night2_wolf,
-     audience_wolf, audience_dead, wolf_sees, good_sees, dead_sees,
+     speech_visible, vote_route, involved_ok, settled_ok,
+     dead_channel, queued_route_ok, night2_wolf, audience_wolf,
+     audience_dead, god_voice_ok, wolf_sees, good_sees, dead_sees,
      spectator_route, spectator_sees) = \
         run_identity_shuffle(run)
     check("夜晚狼人走 wolf 频道", night_wolf == "wolf" and night2_wolf == "wolf")
@@ -677,19 +697,69 @@ def test_chat_channels():
           f"speaker={day_speaker_route} other={day_muted_route}")
     check("发言顺序对全体可见", speech_visible)
     check("投票阶段存活者公开发言", vote_route is None)
-    check("被放逐者走 dead 频道", dead_channel == "dead")
-    check("wolf 频道听众只有存活狼", set(audience_wolf) == {"a", "b"},
+    check("遗言未了结的死者保密且可走 dead 频道", involved_ok and queued_route_ok)
+    check("遗言了结的死者转上帝视角且被禁言", settled_ok and dead_channel == "")
+    check("wolf 频道听众含了结死亡的旁听者", set(audience_wolf) == {"a", "b", "f"},
           str(audience_wolf))
     check("dead 频道听众只有死者", audience_dead == ["f"], str(audience_dead))
+    check("了结死亡的夜晚可听狼频道语音", god_voice_ok, str(god_voice_ok))
     check("狼人可见狼频道与公开消息", "刀e" in wolf_sees and "大家好" in wolf_sees
           and "冤枉" not in wolf_sees, str(wolf_sees))
     check("好人只见公开消息", "大家好" in good_sees and "刀e" not in good_sees
           and "冤枉" not in good_sees, str(good_sees))
-    check("死者可见 dead 频道与公开消息", "冤枉" in dead_sees
-          and "大家好" in dead_sees and "刀e" not in dead_sees, str(dead_sees))
+    check("旁观死者可见狼频道/dead 频道与公开消息", "刀e" in dead_sees
+          and "冤枉" in dead_sees and "大家好" in dead_sees, str(dead_sees))
     check("观战者看不到死者频道且不能冒充死者发言",
           spectator_route == "" and spectator_sees == ["大家好"],
           str(spectator_sees))
+
+
+def test_dead_spectator_and_shot_options():
+    async def run():
+        board = ["werewolf", "hunter", "seer", "witch", "villager", "villager"]
+
+        # 猎人被刀：遗言+开枪未了结时仍在局内（可开枪、不公开身份），
+        # 收枪后转上帝视角
+        room = make_room({"board": board})
+        await room.start()
+        g = room.game
+        await room.perform_action("a", "night", {"target": "b"})
+        await room.perform_action("d", "witch", {"save": False})
+        await room.perform_action("c", "night", {})
+        words_ok = g["last_words"]["current"] == "b" \
+            and "god_view" not in room.view_for("b")
+        await room._advance_last_words()       # b 的遗言结束 → 开枪阶段
+        shot_view = room.view_for("b")
+        shot_ok = g["phase"] == "shot" \
+            and shot_view["your_options"]["kind"] == "shot" \
+            and [t["username"] for t in shot_view["your_options"]["targets"]] \
+            == ["a", "c", "d", "e", "f"] \
+            and "god_view" not in shot_view \
+            and room.chat_route("b", {}) == "dead"
+        await room.perform_action("b", "shoot", {"target": ""})   # 收枪
+        day_ok = g["phase"] == "day"
+        god_view = room.view_for("b")
+        settled_ok = god_view["god_view"] is True \
+            and room.chat_route("b", "") == "" \
+            and god_view["voice"] == {"channel": "day", "can_speak": False}
+
+        # 死亡无遗言（last_words=none）：出局即旁观
+        room2 = make_room({"board": board, "last_words": "none"})
+        await room2.start()
+        g2 = room2.game
+        await room2.perform_action("a", "night", {"target": "f"})
+        await room2.perform_action("d", "witch", {"save": False})
+        await room2.perform_action("c", "night", {})
+        instant_ok = g2["phase"] == "day" \
+            and room2.view_for("f")["god_view"] is True \
+            and room2.chat_route("f", {}) == ""
+        return words_ok, shot_ok, day_ok, settled_ok, instant_ok
+
+    words_ok, shot_ok, day_ok, settled_ok, instant_ok = run_identity_shuffle(run)
+    check("猎人死亡时仍保密且无上帝视角", words_ok)
+    check("开枪阶段猎人保留行动选项与死者频道", shot_ok)
+    check("收枪后转上帝视角且被禁言", day_ok and settled_ok)
+    check("死亡无遗言立即转旁观视角", instant_ok)
 
 
 # ---- 白天依次发言 ----
@@ -970,6 +1040,7 @@ def main():
     test_win_bian_vs_cheng()
     test_leave_mid_night()
     test_chat_channels()
+    test_dead_spectator_and_shot_options()
     test_day_speech_order_and_mute()
     test_speech_voice_gate_and_end()
     test_settlement_vote()

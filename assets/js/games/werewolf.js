@@ -315,7 +315,9 @@ function roleCardNode(room) {
     card.append(guard);
   }
   if (card.classList.contains("is-out")) {
-    card.append(el("div", "ww-role-out-note", "你已出局 · 身份保密至终局翻牌；可在死者频道交流，白天只听不说。"));
+    card.append(el("div", "ww-role-out-note", room.god_view
+      ? "上帝视角观战：全场身份公开，夜晚可听狼队频道；不能再向对局发言。"
+      : "你已出局 · 遗言/开枪未了结，身份仍在保密中；轮到你时再开口。"));
   }
   return card;
 }
@@ -587,7 +589,7 @@ function dockNode() {
   const chatToggle = el("button", "dock-chat-toggle");
   chatToggle.type = "button";
   chatToggle.textContent = room.phase === "night" && room.your_role?.faction === "wolf"
-    ? "💬 狼队频道" : room.phase !== "showdown" && !amAlive && room.your_role
+    ? "💬 狼队频道" : room.phase !== "showdown" && !amAlive && room.your_role && !room.god_view
     ? "💬 死者频道" : "💬 聊天";
   chatToggle.addEventListener("click", openChatOverlay);
   right.append(chatToggle);
@@ -599,7 +601,9 @@ function dockNode() {
   if (room.phase === "showdown" || room.settlement) {
     info.append(el("div", "ww-dock-note", "结算面板中投票「再来一局」或「解散房间」。"));
   } else if (amOut) {
-    info.append(el("div", "ww-dock-note", "你已出局：身份保密至终局翻牌，可在死者频道交流，白天只听不说。遗言阶段轮到你时再开口。"));
+    info.append(el("div", "ww-dock-note", room.god_view
+      ? "上帝视角观战中：全场身份公开、夜晚可听狼队频道；不能再向对局发言。"
+      : "你已出局：遗言/开枪未了结，身份保密中，可在死者频道交流；轮到你时再开口。"));
   } else if (!room.your_role) {
     info.append(el("div", "ww-dock-note", "观战中：可阅读公开讨论，语音仅可收听；私密频道不可见。"));
   } else {
@@ -713,7 +717,7 @@ function renderWerewolfTable() {
   const arena = el("div", "ww-arena");
   const seatsPanel = el("section", "ww-seats");
   seatsPanel.append(el("div", "ww-seats-head",
-    `玩家状态 · ${alivePlayers(room).length} 人存活${room.phase === "vote" ? " · 得票见角标" : ""}`));
+    `玩家状态 · ${alivePlayers(room).length} 人存活${room.phase === "vote" ? " · 得票见角标" : ""}${room.god_view ? " · 👁 上帝视角" : ""}`));
   const grid = el("div", "ww-seat-grid");
   (room.players || []).forEach((p, index) => grid.append(seatNode(p, index)));
   seatsPanel.append(grid);

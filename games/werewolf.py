@@ -17,8 +17,9 @@
     发言人连上语音频道倒计时才开表，等不到则超时自动开表兜底）→
     投票放逐；平票可配重投一轮或无人出局；遗言规则可选；
   - 猎人被刀或被放逐可开枪带走一人（默认被毒不能开枪）；
-  - 出局玩家不翻牌：身份对所有人保密直至终局结算翻牌；死者只能在
-    死者频道交流、白天只听不说；
+  - 出局分两段：遗言/猎人开枪未了结时仍在局中——身份保密、走死者频道；
+    了结即转上帝视角旁观：全场身份公开、夜晚可进狼频道收听，但不能再
+    向对局发出任何消息，直至终局结算翻牌；
   - 胜负：狼人全灭好人胜；默认屠边局（神职或平民全灭即狼胜，可配屠城），
     狼人存活数不少于好人作为兜底立即判狼胜；
   - 金币结算：输方每人付一份 blind 底注，按人头均分给胜方全体（含阵亡
@@ -235,9 +236,17 @@ class WerewolfRoom(BaseRoom):
             view["voice"] = self.voice_view(username)
             return view
         me_role = g["roles"].get(username)
+        # 上帝视角分两段：死亡但遗言/开枪未了结时仍在局中（身份保密）；
+        # 了结后转纯旁观，全场身份对其公开
+        me_god = (bool(me_role) and username not in g["alive"]
+                  and not self._dead_involved(username))
+        if me_god:
+            view["god_view"] = True
         for row in view["players"]:
             if row["username"] == username and me_role:
                 row["role"] = role_name(me_role)
+            elif me_god and g["roles"].get(row["username"]):
+                row["role"] = role_name(g["roles"][row["username"]])
             elif (me_role and row["username"] != username
                   and is_wolf_role(me_role)
                   and is_wolf_role(g["roles"][row["username"]])):
@@ -284,7 +293,14 @@ class WerewolfRoom(BaseRoom):
 
     def _your_options(self, username):
         g = self.game
-        if g["phase"] == "showdown" or username not in g["alive"]:
+        if g["phase"] == "showdown":
+            return None
+        # 出局但还有开枪待办：猎人仍是行动方（其余出局者无行动）
+        if g["phase"] == "shot" and g["shot_pending"] == username:
+            targets = [name for name in g["alive"] if name != username]
+            return {"kind": "shot",
+                    "targets": self._targets_view(targets)}
+        if username not in g["alive"]:
             return None
         if g["phase"] == "night" and username in g.get("pending", []):
             return self._night_options(username)
@@ -295,10 +311,6 @@ class WerewolfRoom(BaseRoom):
                 "targets": self._targets_view(targets),
                 "voted": g["vote"].get(username),
             }
-        if g["phase"] == "shot" and g["shot_pending"] == username:
-            targets = [name for name in g["alive"] if name != username]
-            return {"kind": "shot",
-                    "targets": self._targets_view(targets)}
         return None
 
     def _night_options(self, username):
@@ -408,6 +420,11 @@ class WerewolfRoom(BaseRoom):
         if phase in ("day", "vote") and (username in g["roles"]
                                          or username in self.spectators):
             return {"channel": "day", "can_speak": False}
+        # 了结死亡的上帝视角：夜晚也可进狼频道收听（token 只授订阅权）
+        if phase == "night" and username in g["roles"] \
+                and username not in g["alive"] \
+                and not self._dead_involved(username):
+            return {"channel": "wolf", "can_speak": False}
         return {"channel": None, "can_speak": False}
 
     # ---- 房间聊天定向（挂点见 server/rooms/protocol.py）----
@@ -427,12 +444,30 @@ class WerewolfRoom(BaseRoom):
             if g["phase"] == "night" and is_wolf_role(g["roles"][username]):
                 return "wolf"
             return ""
-        return "dead"
+        # 遗言/开枪未了结的死者仍可走死者频道；了结后只能旁观不得发言
+        if self._dead_involved(username):
+            return "dead"
+        return ""
+
+    def _dead_involved(self, username):
+        """死亡玩家是否还有影响对局的事未了（遗言队列/猎人开枪）。"""
+        g = self.game
+        if not g or username in g["alive"]:
+            return False
+        return (g["last_words"].get("current") == username
+                or username in (g["last_words"].get("queue") or [])
+                or g["shot_pending"] == username)
 
     def chat_audience(self, channel):
         g = self.game
         if channel == "wolf":
-            return [name for name in g["alive"] if is_wolf_role(g["roles"][name])]
+            audience = [name for name in g["alive"]
+                        if is_wolf_role(g["roles"][name])]
+            # 了结死亡的上帝视角也在狼频道旁听（只读）
+            audience += [name for name in g["roles"]
+                         if name not in g["alive"] and name in self.members
+                         and not self._dead_involved(name)]
+            return audience
         if channel == "dead":
             return [name for name in g["roles"]
                     if name not in g["alive"] and name in self.members]
@@ -445,12 +480,13 @@ class WerewolfRoom(BaseRoom):
         alive = username in g["alive"]
         is_dead_player = username in g["roles"] and not alive
         is_wolf = alive and is_wolf_role(g["roles"].get(username) or "")
+        god_dead = is_dead_player and not self._dead_involved(username)
         visible = []
         for message in self.chat:
             channel = message.get("channel")
             if not channel:
                 visible.append(message)
-            elif channel == "wolf" and is_wolf:
+            elif channel == "wolf" and (is_wolf or god_dead):
                 visible.append(message)
             elif channel == "dead" and is_dead_player:
                 visible.append(message)

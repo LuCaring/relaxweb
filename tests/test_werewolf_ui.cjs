@@ -103,15 +103,31 @@ function baseView(overrides = {}) {
     assert.equal(await page.locator('.ww-seat.dead').count(), 1);
     assert.match(await page.locator('.ww-seat.dead .ww-seat-unknown').innerText(), /未翻牌/);
     assert.equal(await page.locator('.ww-seat.dead .ww-role-chip').count(), 0);
-    // 出局不翻牌：死者只看得到自己的身份，他人保密至终局
+    // 出局但遗言未了结：仍在局内，只看得到自己的身份
     await show(baseView({
-      players: baseView().players.map(p => p.username === 'eve'
-        ? { ...p, role: '平民' }
-        : p),
+      last_words_current: 'eve',
+      players: baseView().players.map(p => p.username === 'alice'
+        ? { ...p, alive: false }
+        : p.username === 'eve' ? { ...p, role: '平民' } : p),
     }));
     assert.doesNotMatch(await page.locator('.ww-seats-head').innerText(), /上帝视角/);
-    assert.match(await page.locator('.ww-seat.dead .ww-role-chip').innerText(), /平民/);
+    assert.match(await page.locator('.ww-role-out-note').innerText(), /身份仍在保密中/);
     assert.equal(await page.locator('.ww-seat[data-username="carol"] .ww-role-chip').count(), 0);
+    assert.equal(await page.locator('#roomChatInput').isDisabled(), false);
+    assert.match(await page.locator('#roomChatInput').getAttribute('placeholder'), /死者频道/);
+    // 遗言了结转上帝视角：全场身份公开，聊天框只读
+    await show(baseView({
+      god_view: true,
+      players: baseView().players.map(p => p.username === 'alice'
+        ? { ...p, alive: false }
+        : p.username === 'eve' ? { ...p, role: '平民', alive: false }
+        : p.username === 'carol' ? { ...p, role: '预言家' } : p),
+    }));
+    assert.match(await page.locator('.ww-seats-head').innerText(), /上帝视角/);
+    assert.match(await page.locator('.ww-role-out-note').innerText(), /上帝视角观战/);
+    assert.equal(await page.locator('.ww-seat[data-username="carol"] .ww-role-chip').count(), 1);
+    assert.equal(await page.locator('#roomChatInput').isDisabled(), true);
+    assert.match(await page.locator('#roomChatInput').getAttribute('placeholder'), /仅可阅读/);
     // 恢复夜晚狼人行动视图
     await show(baseView({
       turn_left: 25,
