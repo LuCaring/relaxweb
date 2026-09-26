@@ -315,6 +315,8 @@ uv run --locked python deploy/serve.py
 
 项目使用 `.python-version` 选择本地 Python 3.11，`pyproject.toml` 声明依赖，`uv.lock` 固定版本。`uv` 会管理 `.venv`，无需手动激活。新增运行依赖使用 `uv add <包名>`；重新同步使用 `uv sync --locked`。
 
+手动联调、真实协议脚本与陪打机器人见 [`tools/live_test/README.md`](tools/live_test/README.md)。
+
 角色素材生成工具额外需要 Pillow，可运行 `uv sync --locked --extra assets` 后执行 `uv run --locked --extra assets python tools/build_estate_characters.py`。
 
 打开 `http://127.0.0.1:8000/`。只预览游戏 UI 时可运行：

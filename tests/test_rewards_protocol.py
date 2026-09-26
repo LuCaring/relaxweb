@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""真实 WebSocket 回归：临时库、随机本地端口，不依赖 live-test 或实际用户数据。"""
+"""真实 WebSocket 回归：临时库、随机本地端口，不依赖手动联调工具或实际用户数据。"""
 import asyncio
 import json
 from pathlib import Path

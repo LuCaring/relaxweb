@@ -164,4 +164,4 @@ ssh <用户>@<服务器> 'cd /path/to/relaxweb && git fetch origin && git reset 
 `git reset --hard` 不会删除未跟踪文件，`users.db` 与 `config.json` 都在未跟踪之列，因此不会丢；
 但**改过 `config.json` 后要重启服务**才会重新读取。
 
-> 注意：`live-test/` 是子模块，服务器上不需要它——不执行 `git submodule update` 就不会拉取。
+本地联调工具位于 `tools/live_test/`；生产部署无需运行其中的脚本。

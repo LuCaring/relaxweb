@@ -1,6 +1,6 @@
 // 竞猜封盘 UI 回归：本地 deploy/serve.py + Playwright（mock WebSocket，不依赖后端）。
 // 覆盖：创建表单的封盘设置、进行中的倒计时与参与表单、封盘后的禁投提示与发起者按钮。
-// 运行：node tests/test_bet_ui.cjs（需先 bash live-test/restart_all.sh）
+// 运行：npm run test:browser -- tests/test_bet_ui.cjs（自动启动本地静态服务）。
 const { chromium } = require('playwright-core');
 const assert = require('node:assert/strict');
 
