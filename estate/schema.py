@@ -337,12 +337,20 @@ def init_estate(conn):
         "ON estate_thefts(visitor_username, owner_username, steal_day)"
     )
     conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_estate_thefts_visitor_time "
+        "ON estate_thefts(visitor_username, created_at)"
+    )
+    conn.execute(
         "CREATE INDEX IF NOT EXISTS idx_estate_thefts_unread "
         "ON estate_thefts(owner_username, read_at, created_at)"
     )
     theft_columns = {row[1] for row in conn.execute("PRAGMA table_info(estate_thefts)")}
     if "outcome" not in theft_columns:
         conn.execute("ALTER TABLE estate_thefts ADD COLUMN outcome TEXT NOT NULL DEFAULT 'stolen'")
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_estate_thefts_visitor_day "
+        "ON estate_thefts(visitor_username, steal_day, outcome)"
+    )
     if "coins_dropped" not in theft_columns:
         conn.execute("ALTER TABLE estate_thefts ADD COLUMN coins_dropped REAL NOT NULL DEFAULT 0")
     if "visitor_read_at" not in theft_columns:

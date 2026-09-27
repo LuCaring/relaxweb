@@ -63,13 +63,14 @@ def draw_lottery(conn, username, request_id, now, adjust_coins):
 
         final = spins[-1]
         award = final.get("grand_prize", final["prize"])
+        reroll_count = sum(spin.get("grand_prize") == "reroll" for spin in spins)
+        reroll_bonus = LOTTERY_PRICE * reroll_count * reroll_count
         result = {"action": "lottery_draw", "cost": cost,
                   "free_draws_remaining": daily["remaining"] - (cost == 0),
-                  "spins": spins, "award": award, "quantity": 0}
+                  "spins": spins, "award": award, "quantity": 0,
+                  "reroll_count": reroll_count, "reroll_bonus": reroll_bonus}
         if award.startswith("coins_"):
             amount = int(award.split("_", 1)[1])
-            credit(adjust_coins, conn, username, amount,
-                   "休闲庄园抽奖奖励", request_id)
             result.update({"coins_awarded": amount, "quantity": amount})
         elif award == "mystery_seed":
             crop_id = "legendary_flower" if secrets.randbelow(2) == 0 else "gpu_fruit"
@@ -100,6 +101,10 @@ def draw_lottery(conn, username, request_id, now, adjust_coins):
                 result["all_collectibles_owned"] = True
                 change_inventory(conn, username, SKIN_FRAGMENT_ITEM, 1)
                 result.update({"item_id": SKIN_FRAGMENT_ITEM, "quantity": 1})
+        total_coins = result.get("coins_awarded", 0) + reroll_bonus
+        if total_coins:
+            credit(adjust_coins, conn, username, total_coins,
+                   f"休闲庄园抽奖奖励（再来一次{reroll_count}次）", request_id)
         result["coins"] = conn.execute(
             "SELECT coins FROM users WHERE username=?", (username,)).fetchone()[0]
         return result

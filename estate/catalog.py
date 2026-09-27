@@ -94,7 +94,7 @@ LOTTERY_DAILY_FREE_DRAWS = 5
 LOTTERY_PRIZES = ("thanks", "coins_250", "coins_1000", "coins_2000",
                   "mystery_seed", "missing_collectible", "fertilizer_1", "grand")
 LOTTERY_GRAND_PRIZES = (
-    ("coins_100000", 10), ("reroll", 40), ("land_ticket", 10),
+    ("coins_100000", 10), ("reroll", 30), ("land_ticket", 20),
     ("coins_5000", 20), ("coins_10000", 20),
 )
 
@@ -109,7 +109,7 @@ def _crop(name, seed_price, sell_price, grow_minutes, xp, unlock_level, icon, co
 
 
 CROPS = {
-    "legendary_flower": _crop("传说花", 0, 36888, 72 * 60, 1440, 1, "🌟", "#f4cc5b"),
+    "legendary_flower": _crop("传说花", 0, 25888, 24 * 60, 1440, 1, "🌟", "#f4cc5b"),
     "gpu_fruit": _crop("显卡果", 0, 0, 5 * 60, 100, 1, "🖥️", "#65b866"),
     "wheat": _crop("小麦", 20, 30, 5, 5, 1, "🌾", "#e6cb63"),
     "carrot": _crop("胡萝卜", 10, 22, 3.75, 8, 1, "🥕", "#f28b36"),

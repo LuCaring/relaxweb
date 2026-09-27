@@ -8,20 +8,24 @@ const LABELS = ["谢谢惠顾", "250金币", "1000金币", "2000金币", "神秘
 
 function rewardLabel(result) {
   const award = result.award;
-  if (award.startsWith("coins_")) return `恭喜获得 ${result.coins_awarded} 金币！`;
+  const rerollNote = result.reroll_count
+    ? `本轮再来一次 ${result.reroll_count} 次，额外获得 ${Number(result.reroll_bonus).toLocaleString("zh-CN")} 金币。` : "";
+  if (award.startsWith("coins_")) return `恭喜获得 ${result.coins_awarded} 金币！${rerollNote}`;
   if (award === "mystery_seed") return result.crop_id === "gpu_fruit"
-    ? "恭喜获得显卡果种子 ×1！种植 5 小时后收获，届时揭晓显卡型号。"
-    : "恭喜获得传说花种子 ×1！基础成熟时间 72 小时，售价 36,888 金币。";
-  if (award === "legendary_seed") return "获得传说花种子 ×1。";
-  if (award === "fertilizer_1") return "恭喜获得化肥 ×1！";
-  if (award === "fertilizer_2") return "恭喜获得化肥 ×2！";
-  if (award === "land_ticket") return "恭喜获得 4级农田升级券 ×1！可用于一块空置的 3级农田。";
+    ? `恭喜获得显卡果种子 ×1！种植 5 小时后收获，届时揭晓显卡型号。${rerollNote}`
+    : `恭喜获得传说花种子 ×1！基础成熟时间 24 小时，售价 25,888 金币。${rerollNote}`;
+  if (award === "legendary_seed") return `获得传说花种子 ×1。${rerollNote}`;
+  if (award === "fertilizer_1") return `恭喜获得化肥 ×1！${rerollNote}`;
+  if (award === "fertilizer_2") return `恭喜获得化肥 ×2！${rerollNote}`;
+  if (award === "land_ticket") return `恭喜获得 4级农田升级券 ×1！可用于一块空置的 3级农田。${rerollNote}`;
   if (award === "missing_collectible") {
-    if (result.all_collectibles_owned) return "已集齐全部纪念品，获得皮肤碎片 ×1！";
+    if (result.all_collectibles_owned) return `已集齐全部纪念品，获得皮肤碎片 ×1！${rerollNote}`;
     const name = estateStore.snapshot?.catalog?.fishing_treasures?.[result.collectible_id]?.name || "纪念品";
-    return `恭喜获得尚未拥有的纪念品：${name}！`;
+    return `恭喜获得尚未拥有的纪念品：${name}！${rerollNote}`;
   }
-  return "谢谢惠顾，欢迎下次再来。";
+  return result.reroll_count
+    ? `本轮最终奖项为谢谢惠顾。${rerollNote}`
+    : "谢谢惠顾，欢迎下次再来。";
 }
 
 function wait(ms) { return new Promise((resolve) => window.setTimeout(resolve, ms)); }
@@ -58,7 +62,7 @@ export function renderLotteryGame(target, snapshot, onBusyChange) {
   else status.textContent = freeRemaining === 0 && Number(snapshot.coins) < price
     ? "金币不足，暂时不能抽奖。" : "请先腾出至少 1 格仓位。";
   const rules = document.createElement("p"); rules.className = "estate-sheet-note";
-  rules.textContent = "神秘种子：传说花与显卡果各 50%。显卡果收获时才揭晓型号，10 款型号等概率。神秘大奖：10% 得 100,000 金币、40% 免费再抽一次、10% 得农田升级券、20% 得 5,000 金币、20% 得 10,000 金币。纪念品集齐后抽中该奖项可获得 1 个皮肤碎片。";
+  rules.textContent = "神秘种子：传说花与显卡果各 50%。显卡果收获时才揭晓型号，10 款型号等概率。神秘大奖：10% 得 100,000 金币、30% 免费再抽一次、20% 得农田升级券、20% 得 5,000 金币、20% 得 10,000 金币。同一轮再来一次 n 次，另奖 3,000 × n² 金币。纪念品集齐后抽中该奖项可获得 1 个皮肤碎片。";
   const historyButton = document.createElement("button"); historyButton.type = "button";
   historyButton.className = "estate-button"; historyButton.textContent = "查看抽奖记录";
   const historyList = document.createElement("div"); historyList.className = "estate-lottery-history";
@@ -102,7 +106,7 @@ export function renderLotteryGame(target, snapshot, onBusyChange) {
         status.textContent = `第 ${index + 1} 次转动中…`;
         wheel.style.transform = `rotate(${rotation}deg)`;
         await wait(3000);
-        if (spin.grand_prize === "reroll") status.textContent = "神秘大奖：免费再抽一次！";
+        if (spin.grand_prize === "reroll") status.textContent = "神秘大奖：免费再抽一次，并累计返金币奖励！";
       }
       status.textContent = rewardLabel(result);
       if (!historyList.hidden) void loadHistory();
