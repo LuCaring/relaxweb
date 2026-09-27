@@ -75,6 +75,50 @@ class EstateVisitTests(unittest.TestCase):
             "SELECT quantity FROM estate_inventory WHERE username='alice' AND item_id=?",
             (FERTILIZER_ITEM,)).fetchone()[0], 1)
 
+    def test_visiting_fertilizer_has_global_thirty_second_cooldown(self):
+        self.conn.execute("INSERT INTO estate_inventory VALUES ('alice',?,3)",
+                          (FERTILIZER_ITEM,))
+        for owner in ("bob", "carol"):
+            self.conn.execute(
+                "UPDATE estate_plots SET crop_id='wheat',planted_at=?,ready_at=? "
+                "WHERE username=? AND plot_index=0",
+                (self.now - 100, self.now + 4000, owner),
+            )
+        fertilize(self.conn, "alice", "visit-fert-bob-1", "bob", 0, self.now)
+        with self.assertRaises(EstateError) as blocked:
+            fertilize(self.conn, "alice", "visit-fert-carol-1", "carol", 0,
+                      self.now + 29)
+        self.assertEqual(blocked.exception.code, "visit_fertilize_cooldown")
+        self.assertEqual(self.conn.execute(
+            "SELECT quantity FROM estate_inventory WHERE username='alice' "
+            "AND item_id=?", (FERTILIZER_ITEM,)).fetchone()[0], 2)
+        fertilize(self.conn, "alice", "visit-fert-carol-2", "carol", 0,
+                  self.now + 30)
+
+    def test_global_steal_limit_and_cooldown_without_protecting_rare_crops(self):
+        for owner, crop in (("bob", "legendary_flower"),
+                            ("carol", "gpu_fruit"), ("dave", "wheat"),
+                            ("erin", "wheat")):
+            self.mature(owner, 0, crop)
+        first = steal_crop(self.conn, "alice", "global-steal-bob", "bob", 0,
+                           self.now)
+        self.assertEqual(first["crop_id"], "legendary_flower")
+        with self.assertRaises(EstateError) as cooling:
+            steal_crop(self.conn, "alice", "global-steal-fast", "carol", 0,
+                       self.now + 29)
+        self.assertEqual(cooling.exception.code, "steal_cooldown")
+        second = steal_crop(self.conn, "alice", "global-steal-carol", "carol", 0,
+                            self.now + 30)
+        self.assertEqual(second["crop_id"], "gpu_fruit")
+        steal_crop(self.conn, "alice", "global-steal-dave", "dave", 0,
+                   self.now + 60)
+        with self.assertRaises(EstateError) as limited:
+            steal_crop(self.conn, "alice", "global-steal-erin", "erin", 0,
+                       self.now + 90)
+        self.assertEqual(limited.exception.code, "visitor_daily_limit")
+        self.assertEqual(public_estate_state(self.conn, "alice", "erin", self.now + 90)
+                         ["steal_limits"]["daily_remaining"], 0)
+
     def test_schema_has_twelve_plots_and_new_unlocks(self):
         from estate.catalog import MAX_PLOTS, PLOT_UNLOCKS
         self.assertEqual(MAX_PLOTS, 12)
@@ -116,20 +160,17 @@ class EstateVisitTests(unittest.TestCase):
         mark_notifications_read(self.conn, "bob", [rows[0]["id"]], self.now)
         self.assertTrue(notifications(self.conn, "bob", self.now)[0]["read"])
 
-    def test_per_visitor_limit_is_two_and_owner_limit_is_six(self):
-        for index in range(7):
+    def test_per_visitor_limit_is_two_and_owner_limit_is_two(self):
+        for index in range(3):
             self.mature("bob", index)
         for index in range(2):
-            steal_crop(self.conn, "alice", f"steal-alice-{index:03}", "bob", index, self.now)
+            steal_crop(self.conn, "alice", f"steal-alice-{index:03}", "bob", index,
+                       self.now + index * 30)
         with self.assertRaises(EstateError) as error:
-            steal_crop(self.conn, "alice", "steal-alice-004", "bob", 2, self.now)
+            steal_crop(self.conn, "alice", "steal-alice-004", "bob", 2, self.now + 60)
         self.assertEqual(error.exception.code, "visitor_limit")
-        for index in range(2, 4):
-            steal_crop(self.conn, "carol", f"steal-carol-{index:03}", "bob", index, self.now)
-        for index in range(4, 6):
-            steal_crop(self.conn, "dave", f"steal-dave-{index:03}", "bob", index, self.now)
         with self.assertRaises(EstateError) as error:
-            steal_crop(self.conn, "erin", "steal-erin-006", "bob", 6, self.now)
+            steal_crop(self.conn, "erin", "steal-erin-006", "bob", 2, self.now)
         self.assertEqual(error.exception.code, "owner_protected")
 
     def test_doudou_defends_crop_and_transfers_dropped_coins(self):
