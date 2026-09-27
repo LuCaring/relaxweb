@@ -101,14 +101,15 @@ async function run() {
       const geometry = await page.locator('.poker-remastered-stage').evaluate(stage => {
         const box = stage.getBoundingClientRect();
         const nodes = [...stage.querySelectorAll('.poker-remastered-card')];
-        const aligned = nodes.slice(0, 5).every((node, i) => {
-          const card = node.getBoundingClientRect();
-          const x = (392 + i * 104) / 1200;
-          const y = .49;
-          return Math.abs(card.x + card.width / 2 - box.x - box.width * x) < 3
-            && Math.abs(card.y + card.height / 2 - box.y - box.height * y) < 3
-            && Math.abs(card.width / box.width - 80 / 1200) < .005;
-        });
+        const publicCards = nodes.slice(0, 5).map(node => node.getBoundingClientRect());
+        const centers = publicCards.map(card => card.x + card.width / 2);
+        const spacing = centers[1] - centers[0];
+        const aligned = publicCards.every((card, i) =>
+          Math.abs(card.y + card.height / 2 - box.y - box.height * .49) < 3
+          && Math.abs(card.width / card.height - 80 / 112) < .02
+          && (i === 0 || Math.abs(centers[i] - centers[i - 1] - spacing) < 3))
+          && spacing > publicCards[0].width
+          && Math.abs((centers[0] + centers[4]) / 2 - box.x - box.width / 2) < 3;
         const root = stage.closest('.poker-remastered');
         const actions = root.querySelector('.poker-remastered-actions').getBoundingClientRect();
         const rootBox = root.getBoundingClientRect();
@@ -155,6 +156,12 @@ async function run() {
     await assertVectorTable();
     assert.equal(await page.locator('.poker-remastered-head, .poker-remastered-title').count(), 0,
       'the redundant top title bar is removed');
+    if (process.env.REMASTER_RESPONSIVE_ONLY) {
+      await require('./holdem_remastered_responsive.cjs')(page, update, playingRoom);
+      assert.deepEqual(errors, []);
+      console.log('PASS remastered responsive desktop height, host resizing, readable controls and scroll stability');
+      return;
+    }
     if (process.env.REMASTER_SEATING_ONLY) {
       await page.setViewportSize({ width: 1280, height: 800 });
       await page.waitForTimeout(200);
@@ -272,6 +279,7 @@ async function run() {
       }
     }
 
+    await require('./holdem_remastered_responsive.cjs')(page, update, playingRoom);
     await page.setViewportSize({ width: 1280, height: 800 });
     await page.emulateMedia({ reducedMotion: 'reduce' });
     for (let count = 2; count <= 9; count++) {

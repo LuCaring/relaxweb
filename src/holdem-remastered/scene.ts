@@ -72,7 +72,7 @@ export class TableScene extends Phaser.Scene {
     this.redraw();
   }
 
-  private get unit(): number { return this.scale.width / 1200; }
+  private get unit(): number { return Math.min(this.scale.width / 1200, this.scale.height / 650 * 1.18); }
 
   private redraw(): void {
     if (!this.ready) return;
@@ -83,7 +83,7 @@ export class TableScene extends Phaser.Scene {
     // stage's CSS box. Convert each DOM object to that box without scaling the
     // entire layer, which would soften SVG artwork at browser zoom.
     this.domFactor = stage ? stage.clientWidth / w : 1;
-    const visualSize = `${stage?.clientWidth ?? w}:${stage?.clientHeight ?? h}`;
+    const visualSize = `${stage?.clientWidth ?? w}:${stage?.clientHeight ?? h}:${Math.round(h * this.domFactor * 100) / 100}`;
     // Phaser 4 can emit resize after page scrolling even when the stage's CSS
     // dimensions did not change. Keep active card flips and payout flights.
     if (this.visualSize === visualSize) return;

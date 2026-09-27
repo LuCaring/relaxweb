@@ -16,6 +16,8 @@ const el = (tag: string, className: string, content?: string): HTMLElement => {
 export class HoldemTable {
   private root: HTMLElement;
   private stage: HTMLElement;
+  private stageWrap: HTMLElement;
+  private dock: HTMLElement;
   private seats: HTMLElement;
   private meta: HTMLElement;
   private status: HTMLElement;
@@ -36,6 +38,9 @@ export class HoldemTable {
   private handKey = '';
   private handNo = -1;
   private disconnected = false;
+  private layoutObserver: ResizeObserver;
+  private layoutFrame = 0;
+  private layoutSize = '';
 
   constructor(root: HTMLElement, callbacks: Callbacks) {
     this.root = root; this.callbacks = callbacks;
@@ -51,8 +56,10 @@ export class HoldemTable {
     this.hand.append(this.handTitle, this.handCards);
     this.turn = el('div', 'poker-remastered-turn');
     const stageWrap = el('div', 'poker-remastered-stage-wrap');
+    this.stageWrap = stageWrap;
     stageWrap.append(this.stage, this.seats);
     const footer = el('section', 'poker-remastered-dock');
+    this.dock = footer;
     const controls = el('div', 'poker-remastered-controls');
     controls.append(this.meta, this.turn, this.status, this.actions);
     footer.append(this.hand, controls);
@@ -67,7 +74,50 @@ export class HoldemTable {
       dom: { createContainer: true, pointerEvents: 'none' },
       scene: this.scene, render: { antialias: true }, audio: { noAudio: true },
     });
+    this.layoutObserver = new ResizeObserver(() => this.scheduleLayout());
+    this.layoutObserver.observe(root.parentElement || root);
+    this.layoutObserver.observe(footer);
+    window.addEventListener('resize', this.scheduleLayout);
+    window.visualViewport?.addEventListener('resize', this.scheduleLayout);
+    this.scheduleLayout();
     this.timer = window.setInterval(() => this.tick(), 250);
+  }
+
+  private scheduleLayout = (): void => {
+    if (this.layoutFrame) return;
+    this.layoutFrame = window.requestAnimationFrame(() => {
+      this.layoutFrame = 0;
+      this.fitDesktopTable();
+    });
+  };
+
+  private fitDesktopTable(): void {
+    if (!this.root.isConnected) return;
+    const style = getComputedStyle(this.root);
+    const horizontalPadding = parseFloat(style.paddingLeft) + parseFloat(style.paddingRight);
+    const verticalPadding = parseFloat(style.paddingTop) + parseFloat(style.paddingBottom);
+    const width = Math.max(1, this.root.clientWidth - horizontalPadding);
+    const rect = this.root.getBoundingClientRect();
+    const zoom = this.root.offsetWidth ? rect.width / this.root.offsetWidth : 1;
+    // Convert the viewport budget into the same unzoomed CSS units as
+    // clientWidth/offsetHeight. Document position stays stable while scrolling.
+    const pageTop = rect.top + window.scrollY;
+    const availableHeight = (window.innerHeight - pageTop - 6) / zoom - verticalPadding
+      - this.dock.offsetHeight - parseFloat(style.borderTopWidth) - parseFloat(style.borderBottomWidth);
+    const naturalHeight = width * 650 / 1200;
+    const stageHeight = Math.floor(Math.min(naturalHeight, Math.max(Math.min(340, naturalHeight), availableHeight)));
+    const stageWidth = Math.floor(Math.min(width, stageHeight * 2.6));
+    const signature = `${stageWidth}:${stageHeight}`;
+    if (signature === this.layoutSize) return;
+    this.layoutSize = signature;
+    this.stageWrap.style.width = `${stageWidth}px`;
+    this.stageWrap.style.height = `${stageHeight}px`;
+    this.root.style.setProperty('--remaster-seat-scale', String(Math.max(.82, Math.min(1, stageWidth / 900))));
+    // RESIZE's plain refresh reads the previous parentSize before sampling the
+    // new parent bounds. Seed the measured bounds so Scene and SVG redraw at
+    // the same size as the CSS stage on this very update.
+    const bounds = this.stage.getBoundingClientRect();
+    this.game.scale.setParentSize(bounds.width, bounds.height);
   }
 
   update(room: Room): void {
@@ -256,6 +306,10 @@ export class HoldemTable {
 
   destroy(): void {
     if (this.timer !== null) window.clearInterval(this.timer);
+    if (this.layoutFrame) window.cancelAnimationFrame(this.layoutFrame);
+    this.layoutObserver.disconnect();
+    window.removeEventListener('resize', this.scheduleLayout);
+    window.visualViewport?.removeEventListener('resize', this.scheduleLayout);
     this.game.destroy(true);
     this.root.remove();
   }
