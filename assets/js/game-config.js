@@ -18,6 +18,15 @@ export const GAME_TYPES = [
     minStartPlayers: 2,
   },
   {
+    id: "holdem-remastered",
+    serverId: "holdem",
+    name: "德扑重制版 · 动态牌桌",
+    icon: "♣",
+    desc: "全新动态牌桌与发牌动画。沿用经典德扑的盲注、边池、买入和结算规则。",
+    seats: 9,
+    minStartPlayers: 2,
+  },
+  {
     id: "uno",
     name: "UNO · 经典牌局",
     icon: "🃏",
@@ -83,11 +92,19 @@ export function gameMetaById(id) {
   return GAME_TYPES.find((game) => game.id === id) || DEFAULT_GAME;
 }
 
+export function serverGameId(id) {
+  return gameMetaById(id).serverId || id;
+}
+
+export function isHoldemGame(id) {
+  return serverGameId(id) === "holdem";
+}
+
 export function fillBlindOptions(select, gameId, selected) {
   for (const blind of [1, 2, 5, 10]) {
     const option = document.createElement("option");
     option.value = String(blind);
-    option.textContent = gameId === "holdem" ? `盲注 ${blind}/${blind * 2}`
+    option.textContent = isHoldemGame(gameId) ? `盲注 ${blind}/${blind * 2}`
       : gameId === "uno" ? `每张赔付 ${blind}` : `底注 ${blind}`;
     if (String(blind) === String(selected)) option.selected = true;
     select.append(option);

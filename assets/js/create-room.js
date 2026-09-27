@@ -2,7 +2,7 @@
 
 import { elements, formatCoins, formatCoinsWhole, renderGameView, send, state } from "./core.js";
 import { registerView } from "./registry.js";
-import { fillBlindOptions, gameMetaById, minimumBuyIn } from "./game-config.js";
+import { fillBlindOptions, gameMetaById, minimumBuyIn, serverGameId, isHoldemGame } from "./game-config.js";
 
 const createDrafts = new Map();
 let createPending = false;
@@ -164,7 +164,7 @@ function createRules(game, draft, details) {
   } else {
     const text = document.createElement("p");
     text.className = "create-rules-note";
-    text.textContent = game.id === "holdem"
+    text.textContent = isHoldemGame(game.id)
       ? "无限注德州扑克：小盲注轮转，支持边池与全下。房主可在牌局中结束本局。"
       : "UNO 经典规则：先出完手牌者获胜，其他玩家按剩余牌数支付底注。";
     rules.append(text);
@@ -190,7 +190,7 @@ function updateCreateSummary() {
   minimum.textContent = `最低买入 ${formatCoins(min)} 金币（底注的 20 倍）`;
   summary.querySelector(".create-summary-game").textContent = game.name;
   summary.querySelector(".create-summary-name").textContent = name.value.trim() || "未命名房间";
-  summary.querySelector(".create-summary-blind").textContent = `${game.id === "holdem" ? "盲注" : game.id === "uno" ? "每张赔付" : "底注"} ${formatCoinsWhole(blind.value)}`;
+  summary.querySelector(".create-summary-blind").textContent = `${isHoldemGame(game.id) ? "盲注" : game.id === "uno" ? "每张赔付" : "底注"} ${formatCoinsWhole(blind.value)}`;
   summary.querySelector(".create-summary-buyin").textContent = `${formatCoins(Number(buyin.value) || 0)} 金币`;
   summary.querySelector(".create-summary-seats").textContent = `${game.seats} 个座位`;
   const ruleSummary = game.id === "guandan"
@@ -205,7 +205,7 @@ function updateCreateSummary() {
           ? `${draft.rules.chambers} 弹巢${draft.rules.respin ? "重转" : "递增"} · ${draft.rules.cards} 张手牌 · 至多出 ${draft.rules.max_play} 张 · ${draft.rules.jokers === "wild" ? "小丑百搭" : "无小丑"} · ${draft.rules.payout === "rank" ? "按出局结算" : "冠军通吃"}`
           : game.id === "werewolf"
             ? `${draft.rules.win_mode === "cheng" ? "屠城局" : "屠边局"} · 女巫${draft.rules.witch_self_save === "always" ? "始终可自救" : draft.rules.witch_self_save === "never" ? "不可自救" : "仅首夜可自救"} · ${draft.rules.last_words === "none" ? "无遗言" : draft.rules.last_words === "all" ? "全遗言" : "首夜遗言"} · ${draft.rules.tie === "no_exile" ? "平票流局" : "平票重投"} · 每人发言 ${draft.rules.speak_seconds} 秒 · 身份隐藏至终局${draft.rules.board_text.trim() ? " · 自定义板子" : " · 自动配板"}`
-            : game.id === "holdem" ? "无限注德州扑克" : "UNO 经典规则";
+            : isHoldemGame(game.id) ? "无限注德州扑克" : "UNO 经典规则";
   summary.querySelector(".create-summary-rules").textContent = ruleSummary;
   buyin.min = String(min);
   const amount = Number(buyin.value);
@@ -287,7 +287,7 @@ function renderCreate() {
   blindWrap.className = "create-field";
   const blindLabel = document.createElement("span");
   blindLabel.className = "create-field-label";
-  blindLabel.textContent = game.id === "holdem" ? "小盲注" : game.id === "uno" ? "每张赔付" : "底注";
+  blindLabel.textContent = isHoldemGame(game.id) ? "小盲注" : game.id === "uno" ? "每张赔付" : "底注";
   const blind = document.createElement("select");
   blind.className = "login-input";
   blindLabel.id = "createBlindLabel";
@@ -336,7 +336,7 @@ function renderCreate() {
       buyin.focus();
       return;
     }
-    const payload = { type: "create_room", game: game.id, name: name.value.trim(), buy_in: amount, blind: Number(blind.value) };
+    const payload = { type: "create_room", game: serverGameId(game.id), name: name.value.trim(), buy_in: amount, blind: Number(blind.value) };
     if (game.id === "guandan") payload.rules = {
       wild: Boolean(Number(draft.rules.wild)),
       bomb_cap: Number(draft.rules.bomb),

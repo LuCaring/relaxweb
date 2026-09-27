@@ -8,10 +8,16 @@
   },
   "scripts": {
     "test:browser": "node scripts/run_browser_tests.cjs",
-    "test:voice-mic": "node tests/test_voice_mic.cjs"
+    "test:voice-mic": "node tests/test_voice_mic.cjs",
+    "build:holdem-remastered": "tsc -p tsconfig.holdem.json && esbuild src/holdem-remastered/table.ts --bundle --format=esm --target=es2022 --minify --outfile=assets/build/holdem-remastered.js"
   },
   "devDependencies": {
+    "esbuild": "^0.28.2",
     "playwright": "^1.63.0",
-    "playwright-core": "^1.63.0"
+    "playwright-core": "^1.63.0",
+    "typescript": "^5.9.3"
+  },
+  "dependencies": {
+    "phaser": "^4.2.1"
   }
 }

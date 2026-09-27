@@ -16,6 +16,7 @@ import { initializeGameAudio } from "./game-audio.js";
 import "./hall.js";
 import "./room.js";
 import "./games/holdem.js";
+import "./games/holdem-remastered.js";
 import "./games/uno.js";
 import "./games/guandan.js?v=2";
 import "./games/doudizhu.js?v=2";

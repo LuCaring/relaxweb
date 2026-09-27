@@ -1,0 +1,41 @@
+.poker-remastered{position:relative;max-width:1500px;margin:0 auto;padding:16px 18px 22px;color:#e9f8f1;font-family:Inter,"PingFang SC","Microsoft YaHei",sans-serif;background:radial-gradient(circle at 50% 5%,#234251 0,#111e2d 54%,#0b1420 100%);border:1px solid #638b8340;border-radius:24px;box-shadow:0 20px 65px #050b17a1;overflow:hidden}
+.poker-remastered-stage-wrap{position:relative;width:100%;aspect-ratio:1200/650;min-height:330px;border-radius:18px;overflow:hidden;box-shadow:inset 0 0 0 1px #d9f9e929,0 18px 45px #020a14a8}
+.poker-remastered-stage{position:absolute;inset:0;z-index:0;isolation:isolate}.poker-remastered-stage canvas{display:block!important;width:100%!important;height:100%!important;margin:0!important}.poker-remastered-stage>div{z-index:1;transform:none!important;transform-origin:0 0!important;margin:0!important}.poker-remastered-card,.poker-remastered-card *{pointer-events:none!important}
+.poker-remastered-stage svg{display:block}
+.poker-remastered-table-logo{font-family:Georgia,serif;font-weight:700;letter-spacing:.18em;color:#c5e9d8;opacity:.2!important;white-space:nowrap}
+.poker-remastered-pot{font-family:Arial,"PingFang SC","Microsoft YaHei",sans-serif;font-weight:700;letter-spacing:.02em;color:#f6dfa5;white-space:nowrap;text-shadow:0 1px 3px #103e38}
+.poker-remastered-pot-chips,.poker-remastered-chip-flight{pointer-events:none!important}
+.poker-remastered-chip-amount{position:absolute;left:50%;top:70%;transform:translateX(-50%);padding:2px 6px;border-radius:6px;background:#0b2928db;color:#ffe5a5;font:700 12px Arial,"PingFang SC",sans-serif;white-space:nowrap;text-shadow:0 1px 2px #061d1c}
+.hand-result.is-remastered-reveal{visibility:hidden;pointer-events:none}
+.poker-remastered-seats{position:absolute;inset:0;z-index:2;pointer-events:none}
+.poker-remastered-seat{position:absolute;transform:translate(-50%,-50%);display:flex;align-items:center;gap:8px;min-width:112px;max-width:164px;padding:7px 10px;border:1px solid #b1ccbb70;border-radius:14px;background:linear-gradient(135deg,#1c343be8,#10222bec);box-shadow:0 8px 19px #020d14a6;pointer-events:auto;transition:border-color .2s,box-shadow .2s,opacity .2s}
+.poker-remastered-seat.is-active{border-color:#9bedba;box-shadow:0 0 0 3px #80ebad35,0 0 26px #68d2a963}
+.poker-remastered-seat.is-winner{border-color:#f6da93;box-shadow:0 0 0 3px #f3c76c50,0 0 24px #efc7759e}
+.poker-remastered-seat.is-folded{opacity:.48}
+.poker-remastered-avatar{display:grid;place-items:center;flex:0 0 30px;width:30px;height:30px;border-radius:50%;background:linear-gradient(145deg,#d6bd81,#927d59);color:#192532;font-size:13px;font-weight:900}
+.poker-remastered-seat.is-me .poker-remastered-avatar{background:linear-gradient(145deg,#92e8c5,#36a899)}
+.poker-remastered-seat-info{display:flex;flex-direction:column;min-width:0;line-height:1.32}
+.poker-remastered-seat-name{font-size:12px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.poker-remastered-seat-stack{font-size:11px;color:#f1dba6;white-space:nowrap}.poker-remastered-seat-bet,.poker-remastered-seat-committed{font-size:10px;color:#b5dcd1;white-space:nowrap}
+.poker-remastered-seat-flag{position:absolute;right:-6px;top:-10px;padding:2px 5px;border-radius:5px;background:#24444b;color:#e0f7ea;font-size:9px;white-space:nowrap}.poker-remastered-seat-flag:empty{display:none}
+.poker-remastered-dealer{position:absolute;left:-9px;bottom:-8px;display:grid;place-items:center;width:20px;height:20px;border-radius:50%;background:#f3dfae;color:#2a2d27;font:bold 11px Georgia,serif;box-shadow:0 2px 5px #0018}
+.poker-remastered-dock{display:grid;grid-template-columns:228px minmax(0,1fr);gap:14px;align-items:stretch;padding:14px 2px 0}
+.poker-remastered-controls{display:grid;grid-template-columns:minmax(0,1fr) auto;grid-template-rows:auto auto 1fr;align-content:center;align-items:center;gap:6px 12px;min-width:0;padding:12px 16px;border:1px solid #b4d8c133;border-radius:15px;background:#0b1e28bd}
+.poker-remastered-meta{grid-column:1;grid-row:1;min-width:0;color:#e7d39f;font-size:13px;font-weight:700;letter-spacing:.04em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.poker-remastered-status{grid-column:1/-1;grid-row:2;font-size:13px;color:#b5d0c9;min-height:18px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.poker-remastered-turn{grid-column:2;grid-row:1;font-size:13px;font-weight:700;color:#f5deaa;text-align:right;white-space:nowrap}.poker-remastered-turn.is-urgent{color:#ffa89b}
+.poker-remastered-actions{grid-column:1/-1;grid-row:3;display:flex;align-items:center;justify-content:flex-start;flex-wrap:wrap;gap:8px;min-height:42px}
+.poker-remastered-hand{display:flex;flex-direction:column;justify-content:center;align-items:center;gap:8px;min-width:0;padding:10px 10px 12px;border:1px solid #b4d8c14a;border-radius:15px;background:linear-gradient(110deg,#132a31e8,#0b2229ec);box-shadow:inset 0 1px #e6f8df12,0 8px 22px #030b1580}
+.poker-remastered-hand-title{max-width:100%;color:#e7d39f;font-size:13px;font-weight:700;letter-spacing:.04em;text-align:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.poker-remastered-hand-cards{display:flex;align-items:center;justify-content:center;gap:10px;min-height:126px}
+.poker-remastered-hand .poker-remastered-card{flex:none;border-radius:5px;box-shadow:0 8px 20px #010d1599}
+.poker-remastered-hand svg{display:block}
+.poker-remastered-hand-empty{color:#9fbdb3;font-size:14px}
+.poker-remastered-hand .is-arriving{animation:remastered-hand-arrive .42s cubic-bezier(.2,.8,.2,1) both}
+@keyframes remastered-hand-arrive{from{opacity:0;transform:translateY(-18px) rotate(-5deg) scale(.93)}to{opacity:1;transform:none}}
+.poker-remastered-button{border:1px solid #a3bea672;border-radius:10px;background:#1d3b3b;color:#e7f6ed;min-height:42px;padding:9px 19px;font:700 14px inherit;cursor:pointer;transition:transform .18s,background .18s,box-shadow .18s}
+.poker-remastered-button:hover:not(:disabled){transform:translateY(-2px);background:#2a5852;box-shadow:0 6px 14px #010c1580}.poker-remastered-button.is-primary{background:#dbbf83;color:#142927;border-color:#f3dea8}.poker-remastered-button.is-primary:hover:not(:disabled){background:#f2d999}.poker-remastered-button:disabled,.poker-remastered-preset:disabled{opacity:.45;cursor:default}
+.poker-remastered-raise{display:flex;align-items:center;gap:7px;flex-wrap:wrap}.poker-remastered-raise-input{width:104px;min-height:42px;box-sizing:border-box;padding:8px 10px;border:1px solid #9ab9ab7d;border-radius:9px;background:#0f2528;color:#f6efd9;font-size:15px}
+.poker-remastered-presets{display:flex;gap:3px}.poker-remastered-preset{border:0;border-radius:7px;background:#ffffff16;color:#c9e0d7;padding:7px 8px;font-size:11px;cursor:pointer}.poker-remastered-preset:hover{background:#ffffff2d}
+.poker-remastered-waiting{color:#aac7bd;font-size:14px}.poker-remastered-loading,.poker-remastered-load-error{display:grid;place-items:center;min-height:280px;text-align:center;color:#e9e6d7}.poker-remastered-load-error button{margin-top:12px;padding:9px 14px;border:0;border-radius:8px;background:#dbbf83;color:#132921;cursor:pointer}
+.poker-remastered.is-paused .poker-remastered-stage-wrap:after{content:"牌局已暂停";position:absolute;inset:0;display:grid;place-items:center;background:#05121988;color:#f5dfb7;font-size:24px;font-weight:700;pointer-events:none}
+@media(prefers-reduced-motion:reduce){.poker-remastered *{animation:none!important;transition:none!important}}

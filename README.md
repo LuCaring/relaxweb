@@ -1,6 +1,6 @@
 # RelaxWeb
 
-RelaxWeb 是一个可自托管的直播间与游戏厅。它提供 WebRTC 直播、聊天与弹幕、邀请码账号、金币与竞猜，以及多人牌桌和单人庄园。后端使用 Python 与 SQLite，前端是原生 ES Module，部署时不需要前端构建。
+RelaxWeb 是一个可自托管的直播间与游戏厅。它提供 WebRTC 直播、聊天与弹幕、邀请码账号、金币与竞猜，以及多人牌桌和单人庄园。后端使用 Python 与 SQLite，经典前端是原生 ES Module；桌面德扑重制版使用 TypeScript 与 Phaser 4，部署前需构建其资源。
 
 ## 功能与玩法概览
 
@@ -332,6 +332,16 @@ uv run --locked python scripts/preview_ui.py --game werewolf --scene waiting --p
 ```
 
 预览工具栏也能切换七种多人游戏、1 人到满房的等待列表，以及桌面和手机屏宽。狼人杀语音区在预览中仅展示布局，不连接麦克风或 LiveKit。
+
+桌面德扑重制版与经典德扑共用房间和结算规则。在游戏厅选择“德扑重制版”进入新版画面；构建与无账号预览可运行：
+
+```sh
+npm install
+npm run build:holdem-remastered
+uv run --locked python scripts/preview_ui.py --game holdem --no-open
+```
+
+在预览工具栏的“德扑画面”下拉框选择“重制版”，可点击“演示一手”观看发牌与结算动画。本地演示不连接真实账号或金币。牌桌及传统牌面为内联 SVG，牌面采用 Adrian Kennard 的 CC0 素材；来源和许可记录位于 `src/holdem-remastered/DECK_LICENSE.md`。部署时保留构建生成的 `assets/build/holdem-remastered.js`。
 
 再次启动会自动停止同一项目的旧预览进程。需要同时运行多个预览时加 `--no-replace`。本地服务在上述终端按 Ctrl+C 停止后重新启动；`uv run --locked python admin.py status` 可查看本地服务状态，`admin.py restart` 仅用于 systemd 部署。
 

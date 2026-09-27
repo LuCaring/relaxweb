@@ -6,7 +6,7 @@ import { elements, formatCoins, renderGameView, send, state } from "./core.js";
 import { onMessage, registerView } from "./registry.js";
 import { ratingCard } from "./rating.js";
 import { assetCard } from "./asset-ranking.js";
-import { DEFAULT_GAME, GAME_TYPES, ROOM_GAME_TYPES, gameMetaById } from "./game-config.js";
+import { DEFAULT_GAME, GAME_TYPES, ROOM_GAME_TYPES, gameMetaById, serverGameId } from "./game-config.js";
 import "./create-room.js";
 
 export { fillBlindOptions, gameMetaById } from "./game-config.js";
@@ -56,6 +56,7 @@ function renderEntry() {
 
 function selectGame(gameId) {
   const game = gameMetaById(gameId);
+  if (serverGameId(game.id) === "holdem") localStorage.setItem("relaxweb:holdem-view", game.id === "holdem-remastered" ? "remastered" : "classic");
   state.currentGameId = game.id;
   state.hallPage = game.mode === "solo" ? game.view : "rooms";
   renderGameView();
@@ -130,7 +131,7 @@ function roomKey(room) {
 }
 
 function roomVisible(room, gameId) {
-  if (room.game !== gameId) return false;
+  if (room.game !== serverGameId(gameId)) return false;
   if (roomStatusFilter === "waiting" && room.status === "playing") return false;
   if (roomStatusFilter === "playing" && room.status !== "playing") return false;
   const query = roomSearch.trim().toLocaleLowerCase();
@@ -282,6 +283,7 @@ function renderGameRooms() {
   nav.append(navTitle);
   for (const game of ROOM_GAME_TYPES) {
     const item = button(`${game.icon} ${game.name.split(" · ")[0]}`, `rooms-game-link${game.id === activeGame.id ? " active" : ""}`, () => {
+      if (serverGameId(game.id) === "holdem") localStorage.setItem("relaxweb:holdem-view", game.id === "holdem-remastered" ? "remastered" : "classic");
       state.currentGameId = game.id;
       renderGameView();
     });

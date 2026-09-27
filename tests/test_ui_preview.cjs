@@ -337,6 +337,27 @@ const python = process.env.PYTHON || path.join(root, '.venv', 'bin', 'python');
     await page.reload();
     await page.locator('html[data-preview-ready="uno"][data-preview-watch="p2"]').waitFor();
     assert.deepEqual(errors, []);
+    await page.goto(origin + '/?game=holdem&holdemView=remastered&scene=normal&size=1440x900&perspective=player');
+    frame = await table('holdem');
+    await frame.locator('.poker-remastered-pot-chips').waitFor();
+    await page.locator('#demo-hand').click();
+    let demonstratedHand;
+    for (let tier = 1; tier <= 5; tier++) {
+      await page.waitForFunction(tier => document.querySelector('#table').contentDocument
+        ?.querySelector('.poker-remastered-pot-chips')?.dataset.tier === String(tier), tier);
+      const snapshot = await frame.locator('body').evaluate(async () => (await import('/assets/js/core.js')).state.myRoom);
+      demonstratedHand = snapshot.hand_no;
+      assert.equal(Math.round((snapshot.players.reduce((sum, player) => sum + player.stack, 0) + snapshot.pot) * 100), 80000,
+        'the local demo conserves chips while showing all five tiers');
+      assert.equal(snapshot.players.reduce((sum, player) => sum + player.hand_bet, 0), snapshot.pot);
+    }
+    await frame.locator('.poker-remastered-pot-chips[data-tier="0"]').waitFor({ state: 'attached' });
+    const paid = await frame.locator('body').evaluate(async () => (await import('/assets/js/core.js')).state.myRoom);
+    assert.ok(paid.result.payouts.p0 > 0);
+    assert.equal(paid.players.reduce((sum, player) => sum + player.stack, 0), 800);
+    await page.locator('#demo-hand').click();
+    const repeated = await frame.locator('body').evaluate(async () => (await import('/assets/js/core.js')).state.myRoom.hand_no);
+    assert.ok(repeated > demonstratedHand, 'each repeated demo starts a new hand');
     assert.deepEqual(sockets, [], 'preview never opens a network WebSocket');
     assert.deepEqual(external, [], 'all requests remain on the local preview server');
     console.log('PASS startup, 7 games × 4 player scenes and 3 spectator scenes × 4 seats, waiting counts, target switching, viewport, reload and local-only requests');

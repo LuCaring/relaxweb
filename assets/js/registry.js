@@ -34,5 +34,13 @@ export function registerGame(id, view) {
 }
 
 export function gameView(id) {
+  if (id === "holdem" && localStorage.getItem("relaxweb:holdem-view") === "remastered") {
+    return gameViews.get("holdem-remastered") || gameViews.get("holdem") || null;
+  }
+  return gameViews.get(id) || null;
+}
+
+/** Look up an exact registration, bypassing a player's selected visual variant. */
+export function registeredGameView(id) {
   return gameViews.get(id) || null;
 }

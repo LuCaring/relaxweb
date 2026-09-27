@@ -41,7 +41,8 @@ export function renderRoom() {
 onMessage("game_joined", (data) => {
   observeGameRoom(null, data.room, { initial: true });
   state.myRoom = data.room;
-  state.currentGameId = state.myRoom.game_type || state.currentGameId || "holdem";
+  state.currentGameId = state.myRoom.game_type === "holdem" && localStorage.getItem("relaxweb:holdem-view") === "remastered"
+    ? "holdem-remastered" : state.myRoom.game_type || state.currentGameId || "holdem";
   resetRoomChat();
   document.dispatchEvent(new Event("gamejoined"));
   updateCoinChip();

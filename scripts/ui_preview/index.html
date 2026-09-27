@@ -23,6 +23,7 @@
   <header>
     <strong>本地 UI 预览</strong>
     <label>游戏<select id="game"><option value="guandan">掼蛋</option><option value="mahjong">麻将</option><option value="holdem">德扑</option><option value="uno">UNO</option><option value="ludo">飞行棋</option><option value="liarsbar">骗子酒馆</option><option value="werewolf">狼人杀</option></select></label>
+    <label id="holdem-view-label" hidden>德扑画面<select id="holdemView"><option value="classic">经典版</option><option value="remastered">重制版</option></select></label>
     <label>场景<select id="scene"><option value="normal">普通牌桌</option><option value="dense">长昵称 / 拥挤牌面</option><option value="waiting">等待开局 · 列表布局</option><option value="paused">暂停</option></select></label>
     <label id="players-label" hidden>入座人数<select id="players"></select></label>
     <label>视角<select id="perspective"><option value="player">玩家</option><option value="spectator">观战</option></select></label>
@@ -31,6 +32,7 @@
     <button id="mobile">手机预览</button>
     <button id="rotate">横竖屏切换</button>
     <button id="bubbles">显示聊天气泡</button>
+    <button id="demo-hand" hidden>演示一手</button>
     <button id="reset">重置场景</button>
     <label><input type="checkbox" id="reload" checked>自动刷新</label>
     <a id="direct" target="_blank" rel="noopener">单独打开界面</a>

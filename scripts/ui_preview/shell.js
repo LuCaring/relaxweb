@@ -8,10 +8,12 @@ for (let count = 1; count <= 12; count += 1) {
   option.textContent = `${count} 人`;
   $("players").append(option);
 }
-for (const id of ["game", "scene", "size", "perspective", "watch", "players"]) {
+for (const id of ["game", "holdemView", "scene", "size", "perspective", "watch", "players"]) {
   if ([...$(id).options].some(option => option.value === params.get(id))) $(id).value = params.get(id);
 }
 function syncPlayers() {
+  $("holdem-view-label").hidden = $("game").value !== "holdem";
+  $("demo-hand").hidden = $("game").value !== "holdem" || $("holdemView").value !== "remastered" || $("scene").value === "waiting" || $("perspective").value === "spectator";
   const capacity = waitingCapacity[$("game").value];
   for (const option of $("players").options) option.disabled = Number(option.value) > capacity;
   if (Number($("players").value) > capacity) $("players").value = String(capacity);
@@ -24,7 +26,7 @@ function resize() {
   $("table").style.height = auto ? `${Math.max(320, innerHeight - $("table").getBoundingClientRect().top - 16)}px` : `${dimensions[1]}px`;
 }
 function updateURL() {
-  const next = new URLSearchParams(["game", "scene", "size", "perspective", "watch", "players"].map(id => [id, $(id).value]));
+  const next = new URLSearchParams(["game", "holdemView", "scene", "size", "perspective", "watch", "players"].map(id => [id, $(id).value]));
   history.replaceState(null, "", `?${next}`);
   $("direct").href = `/game.html?${next}`;
 }
@@ -38,7 +40,7 @@ function load(force = false) {
   if (force || $("table").src !== $("direct").href) $("table").src = $("direct").href;
   resize();
 }
-for (const id of ["game", "scene", "perspective", "watch", "players"]) $(id).addEventListener("change", () => load());
+for (const id of ["game", "holdemView", "scene", "perspective", "watch", "players"]) $(id).addEventListener("change", () => load());
 $("size").addEventListener("change", () => { updateURL(); resize(); });
 $("mobile").addEventListener("click", () => {
   $("size").value = "390x844";
@@ -50,6 +52,7 @@ $("rotate").addEventListener("click", () => {
 });
 $("reset").addEventListener("click", () => load(true));
 $("bubbles").addEventListener("click", () => $("table").contentWindow.postMessage({type: "preview-bubbles"}, location.origin));
+$("demo-hand").addEventListener("click", () => $("table").contentWindow.postMessage({type: "preview-demo-hand"}, location.origin));
 window.addEventListener("resize", resize);
 window.addEventListener("message", event => {
   if (event.origin !== location.origin || event.source !== $("table").contentWindow) return;

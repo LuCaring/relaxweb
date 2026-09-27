@@ -33,6 +33,10 @@ function syncHandResultOverlay() {
   const info = state.myRoom?.hand_ready;
   const overlay = document.getElementById(HAND_RESULT_ID);
   if (!overlay || !info) return;
+  if (overlay.classList.contains("is-remastered-reveal")
+      && !(gameView(state.myRoom.game_type)?.handResultDelay?.() > 0)) {
+    overlay.classList.remove("is-remastered-reveal");
+  }
   const ready = new Set(info.ready || []);
   const me = selfUsername();
   const total = info.total || state.myRoom.players.length;
@@ -75,6 +79,11 @@ export function renderHandResultOverlay() {
   const overlay = document.createElement("div");
   overlay.className = "hand-result";
   overlay.id = HAND_RESULT_ID;
+  // Only a running remastered payout briefly keeps this shared card out of view.
+  // Its ready deadline and button logic continue to run normally.
+  if (gameView(state.myRoom.game_type)?.handResultDelay?.() > 0) {
+    overlay.classList.add("is-remastered-reveal");
+  }
   const card = document.createElement("div");
   card.className = "hand-result-card";
 
