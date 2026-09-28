@@ -168,7 +168,7 @@ class PenguinTests(unittest.TestCase):
                             adjust_coins, lambda low, high: 1)
         self.assertEqual(result["outcome"], "stolen")
 
-    def test_defense_spends_visitor_attempt_but_not_owner_two(self):
+    def test_defense_spends_visitor_attempt_but_not_owner_three(self):
         self.conn.execute("UPDATE estate_profiles SET pet_level=4 WHERE username='alice'")
         self.conn.execute("UPDATE estate_plots SET crop_id='wheat',planted_at=?,ready_at=? "
                           "WHERE username='alice' AND plot_index=0", (NOW - 1000, NOW - 10))
@@ -178,11 +178,10 @@ class PenguinTests(unittest.TestCase):
                                 lambda low, high: low)
             self.assertEqual(result["outcome"], "defended")
             self.assertEqual(result["visitor_remaining"], 1 - index)
-            self.assertEqual(result["owner_remaining"], 2)
+            self.assertEqual(result["owner_remaining"], 3)
         state = public_estate_state(self.conn, "bob", "alice", NOW)
         self.assertEqual(state["steal_limits"], {"visitor_remaining": 0,
-                                                   "daily_remaining": 3,
-                                                   "owner_remaining": 2})
+                                                   "owner_remaining": 3})
         with self.assertRaises(EstateError) as error:
             steal_crop(self.conn, "bob", "defended-limit-third", "alice", 0,
                        NOW + 60, adjust_coins, lambda low, high: high)
@@ -193,7 +192,31 @@ class PenguinTests(unittest.TestCase):
         self.conn.execute("UPDATE estate_profiles SET level=20 WHERE username='carol'")
         stolen = steal_crop(self.conn, "carol", "after-defense-steal", "alice", 0,
                             NOW, adjust_coins, lambda low, high: high)
-        self.assertEqual((stolen["outcome"], stolen["owner_remaining"]), ("stolen", 1))
+        self.assertEqual((stolen["outcome"], stolen["owner_remaining"]), ("stolen", 2))
+
+    def test_owner_can_be_stolen_three_times_without_global_visitor_limit(self):
+        for username in ("carol", "dave", "erin", "frank", "grace", "heidi"):
+            self.conn.execute("INSERT INTO users VALUES (?,200000)", (username,))
+            ensure_estate(self.conn, username, NOW)
+            self.conn.execute("UPDATE estate_profiles SET level=20 WHERE username=?", (username,))
+        for owner in ("alice", "carol", "dave", "erin", "frank"):
+            for index in range(4):
+                self.conn.execute(
+                    "UPDATE estate_plots SET crop_id='wheat',planted_at=?,ready_at=? "
+                    "WHERE username=? AND plot_index=?",
+                    (NOW - 1000, NOW - 10, owner, index))
+        for index, owner in enumerate(("carol", "dave", "erin", "frank")):
+            result = steal_crop(self.conn, "bob", f"across-owners-{index}", owner, 0,
+                                NOW + index * 30)
+            self.assertEqual(result["outcome"], "stolen")
+            self.assertNotIn("daily_remaining", result)
+        for index, visitor in enumerate(("carol", "dave", "grace")):
+            result = steal_crop(self.conn, visitor, f"same-owner-{index}", "alice", index,
+                                NOW + index * 30)
+            self.assertEqual(result["owner_remaining"], 2 - index)
+        with self.assertRaises(EstateError) as protected:
+            steal_crop(self.conn, "heidi", "same-owner-fourth", "alice", 3, NOW + 90)
+        self.assertEqual(protected.exception.code, "owner_protected")
 
     def test_level_four_leaves_plot_empty_when_seed_unaffordable(self):
         self.conn.execute("UPDATE estate_profiles SET penguin_level=4,active_pet='stinky_penguin' WHERE username='alice'")
