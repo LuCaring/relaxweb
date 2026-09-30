@@ -8,10 +8,11 @@
 - **x**：均值回归的市场情绪（OU 过程），半衰期与 σ 逐标的配置，
   越靠近 ±60% 软墙回归越强——**没有硬顶也没有涨跌停**，价格可以越过它。
 - **s**：做市商净持仓造成的偏移，``s = −0.25 · I / 额度``。
-  玩家买入把价格推高、卖出把价格压低，且不会自动复原。
+  玩家买入把价格推高、卖出把价格压低；做市商的库存按半衰期被场外自然盘
+  消化，额度随之恢复，这部分偏移也随之回落。
 
-做市商是系统唯一的对手盘：**全市场总额度按标的数均分**，每只标的另有
-每分钟自然流上限。系统唯一的印钞来源是玩家已实现盈利，按滚动 4 周预算
+做市商是系统唯一的对手盘：**每只标的各有 100 万金币额度**，另有每分钟
+自然流上限。系统唯一的印钞来源是玩家已实现盈利，按滚动 4 周预算
 封顶；预算全市场共享，耗尽时所有标的的锚一起暂停上移，波动照常。
 """
 import math
@@ -63,10 +64,15 @@ WALL_K = 12.0
 INVENTORY_COEF = 0.25
 DEFAULT_PRICE_CENTS = 100000
 # 额度与自然流都按**金币**计量，再按当时价格折算成份数：价格（含拆股）变化时
-# 金币口径的额度、冲击与吞吐都恒定——10 万金币的买入永远推动价格 1.26%。
-INVENTORY_CAP_COINS = 2_000_000           # 全市场总额度，按标的数均分
+# 金币口径的额度、冲击与吞吐都恒定——10 万金币的买入永远推动价格约 2.5%。
+INVENTORY_CAP_COINS = 1_000_000           # 每只标的的做市商额度
+# 改成每只 100 万之前的额度（全市场 200 万按三只均分）；没记过额度的老库按它过渡。
+LEGACY_INVENTORY_CAP_COINS = 2_000_000 // 3
 FLOW_PER_MINUTE_COINS = 20_000            # 每只标的每分钟自然流
 FLOW_TOLERANCE = 0.01
+# 库存回补：场外自然盘按半衰期把做市商的净头寸消化掉，额度被买满后也会自己恢复。
+INVENTORY_HALF_LIFE_MINUTES = 24 * 60
+INVENTORY_DECAY_PER_SLOT = 0.5 ** (1 / (INVENTORY_HALF_LIFE_MINUTES * SLOTS_PER_MINUTE))
 # 拆股：锚到达基准点位两倍时 1:2 拆股，把点位打回基准。
 SPLIT_AT_CENTS = 2 * DEFAULT_PRICE_CENTS
 SPLIT_FACTOR = 2
@@ -78,12 +84,15 @@ ORDER_WINDOW_CENTS = 20 * 100
 ORDER_TTL_MINUTES = 24 * 60
 MAX_OPEN_ORDERS = 10
 FILL_HISTORY_LIMIT = 4000
+# 挂单每次至少结算 1 份（或这张单剩下的量）：回补的额度每 10 秒只放出一点，
+# 不设门槛会把一张单拆成几十笔零头成交，冲掉全服成交流水。
+MIN_SETTLE_MILLI = 1000
 
 # 印钞预算：滚动 4 周的净印钞不得超过 4 个周预算，全市场共享（§7.2）。
 WEEKLY_BUDGET_RATE = Decimal("0.05")
 BUDGET_WINDOW_DAYS = 28
 
-# 基准点位下的份数口径，仅供换算与测试引用。
+# 基准点位下每只标的的份数口径，仅供换算与测试引用。
 INVENTORY_CAP_MILLI = INVENTORY_CAP_COINS * 100 * 1000 // DEFAULT_PRICE_CENTS
 FLOW_PER_MINUTE_MILLI = FLOW_PER_MINUTE_COINS * 100 * 1000 // DEFAULT_PRICE_CENTS
 
@@ -246,14 +255,37 @@ def base_price_cents(conn, symbol=DEFAULT_SYMBOL):
     return price_from(anchor, state)
 
 
-def cap_milli_for_price(price_cents):
-    """把金币额度折算成份数：价格减半则份数翻倍，金币口径恒定。"""
-    budget = INVENTORY_CAP_COINS // len(MARKET_SYMBOLS)
-    return max(1000, budget * 100 * 1000 // max(1, price_cents))
+def cap_milli_for_price(price_cents, coins=INVENTORY_CAP_COINS):
+    """把一只标的的金币额度折算成份数：价格减半则份数翻倍，金币口径恒定。"""
+    return max(1000, coins * 100 * 1000 // max(1, price_cents))
 
 
 def inventory_cap_milli(conn, symbol=DEFAULT_SYMBOL):
     return cap_milli_for_price(base_price_cents(conn, symbol))
+
+
+def sync_inventory_cap(conn):
+    """额度调整后让报价连续：把新旧额度下的冲击差并入情绪项 x。
+
+    冲击 ``s = −0.25·I/额度``：额度变大而库存不变，冲击会当场缩小、价格跳水。
+    这里对每只有库存的标的解 ``x' + s(x', 新额度) = x + s(x, 旧额度)``，总偏离
+    不变所以价格不跳；差额留在情绪里，按该标的的半衰期慢慢回归。新额度立即生效。
+    """
+    previous = _meta_get(conn, "cap_coins", LEGACY_INVENTORY_CAP_COINS)
+    if previous != INVENTORY_CAP_COINS:
+        rows = conn.execute("SELECT symbol,anchor_cents,ou_state,inventory_milli "
+                            "FROM estate_market_symbols WHERE inventory_milli<>0").fetchall()
+        for symbol, anchor, state, inventory in rows:
+            target = state + inventory_skew(
+                inventory, cap_milli_for_price(price_from(anchor, state), previous))
+            # 额度按不含冲击的中价折算，所以 s 也随 x 变；|ds/dx| = |s|（买满时约 0.2），
+            # 不动点迭代每轮误差按这个倍数缩小，32 轮足够收敛到浮点精度。
+            for _ in range(32):
+                state = target - inventory_skew(
+                    inventory, cap_milli_for_price(price_from(anchor, state)))
+            conn.execute("UPDATE estate_market_symbols SET ou_state=? WHERE symbol=?",
+                         (state, symbol))
+    _meta_set(conn, "cap_coins", INVENTORY_CAP_COINS)
 
 
 def flow_cap_milli(conn, symbol=DEFAULT_SYMBOL):
@@ -416,13 +448,18 @@ def _advance_symbol(conn, item, slot):
     anchor, state, state_slot, price_cents, inventory = _symbol_row(conn, symbol)[:5]
     if state_slot >= 0 and slot <= state_slot:
         return price_cents
-    skew = inventory_skew(inventory, inventory_cap_milli(conn, symbol))
+    cap = inventory_cap_milli(conn, symbol)
     elapsed = slot - state_slot if state_slot >= 0 else 0
     if elapsed > 0 and budget_room(conn, slot * SLOT_SECONDS):
         anchor *= (1 + item["weekly_growth"]) ** (elapsed / SLOTS_PER_WEEK)
+    # 库存每一格都按半衰期向 0 回补：额度随之恢复，冲击随之回落。
+    level = float(inventory)
+    decay = INVENTORY_DECAY_PER_SLOT if elapsed > 0 else 1.0
     if state_slot < 0 or elapsed > MAX_BACKFILL_SLOTS:
         # 首次采样或长时间停机：从稳态重抽情绪，停机期间的 K 线留空不补造。
         state = _randn() * item["sigma"]
+        # 停机期间库存照样在回补：先一次折算到上一格，下面的循环再走最后一格。
+        level *= decay ** max(0, elapsed - 1)
         slots = [slot]
     else:
         slots = range(state_slot + 1, slot + 1)
@@ -430,8 +467,9 @@ def _advance_symbol(conn, item, slot):
     opening = price_cents
     minutes = {}
     for step_slot in slots:
-        state, deviation = step_deviation(state, skew, _randn(), item["sigma"],
-                                          half_life_steps)
+        level *= decay
+        state, deviation = step_deviation(state, inventory_skew(level, cap), _randn(),
+                                          item["sigma"], half_life_steps)
         price_cents = price_from(anchor, deviation)
         minute = step_slot * SLOT_SECONDS // 60
         bars = minutes.get(minute)
@@ -444,6 +482,10 @@ def _advance_symbol(conn, item, slot):
         opening = price_cents
     store_market_ticks(conn, symbol, [(minute, *bars)
                                       for minute, bars in sorted(minutes.items())])
+    # 回补后的库存要在拆股前落库（拆股会在库里把它翻倍）；向 0 取整，小额也能归零。
+    if int(level) != inventory:
+        conn.execute("UPDATE estate_market_symbols SET inventory_milli=? WHERE symbol=?",
+                     (int(level), symbol))
     # 拆股放在写完之后：它要把这一格刚写下的 K 线一起折算，否则会被旧的价位盖回去。
     while anchor >= SPLIT_AT_CENTS:
         anchor, price_cents = _split_market(conn, symbol, slot * SLOT_SECONDS // 60,
@@ -585,7 +627,7 @@ def market_snapshot(conn, username, now, adjust_coins, symbol=DEFAULT_SYMBOL):
             "available": True, "fee_rate": float(TAKER_FEE_RATE),
             "maker_fee_rate": float(MAKER_FEE_RATE),
             "volume": market_volume(conn, symbol, minute),
-            "capacity_left": (cap - abs(inventory)) / 1000,
+            "capacity_left": max(0.0, (cap - abs(inventory)) / 1000),
             "split_count": splits, "last_split_minute": last_split,
             "tradable_buy": tradable_milli(conn, "buy", symbol) / 1000,
             "tradable_sell": tradable_milli(conn, "sell", symbol) / 1000,
@@ -783,6 +825,12 @@ def expire_orders(conn, minute):
                  "WHERE status='open' AND expires_minute<=?", (minute,))
 
 
+def _settle_quantity(remaining_milli, budget_milli):
+    """这一笔能结算多少：不足 1 份先攒着，除非正好够把这张单剩下的量结清。"""
+    quantity = min(remaining_milli, budget_milli)
+    return quantity if quantity >= min(remaining_milli, MIN_SETTLE_MILLI) else 0
+
+
 def settle_orders(conn, symbol, now, price_cents, adjust_coins):
     """每 ``SLOT_SECONDS`` 秒结算一次：按价格优先把可成交的挂单成交掉。
 
@@ -810,7 +858,9 @@ def settle_orders(conn, symbol, now, price_cents, adjust_coins):
             order = _next_marketable_order(conn, symbol, side, price_cents)
             if order is None:
                 break
-            quantity = min(order[3] - order[4], budget)
+            quantity = _settle_quantity(order[3] - order[4], budget)
+            if quantity <= 0:
+                break
             price_cents, _ = _fill_order(conn, symbol, order, side, quantity, price_cents,
                                          minute, adjust_coins)
     return price_cents
@@ -844,9 +894,12 @@ def _quantity_milli(value):
     return quantity
 
 
-def _liquidity_error(side):
+def _liquidity_error(side, room_milli):
     action = "买入" if side == "buy" else "卖出"
-    return estate_error(("market_no_liquidity", f"做市商额度已用尽，暂时无法{action}"))
+    hours = INVENTORY_HALF_LIFE_MINUTES // 60
+    return estate_error(("market_no_liquidity",
+                         f"做市商额度不足，现在最多可{action} {room_milli / 1000:g} 份；"
+                         f"额度会自动恢复（每 {hours} 小时恢复一半），也可以挂限价委托排队成交"))
 
 
 def _flow_error(conn, side, symbol):
@@ -874,8 +927,9 @@ def trade_market(conn, username, request_id, side, quantity, now, adjust_coins,
         prices = refresh_market(conn, now, adjust_coins)
         price_cents = prices[symbol]
         minute = int(now) // 60
-        if amount_milli > tradable_milli(conn, side, symbol):
-            raise _liquidity_error(side)
+        room = tradable_milli(conn, side, symbol)
+        if amount_milli > room:
+            raise _liquidity_error(side, room)
         if amount_milli > flow_left(conn, side, minute, symbol) * (1 + FLOW_TOLERANCE):
             raise _flow_error(conn, side, symbol)
         result = apply_fill(conn, symbol, username, side, amount_milli, price_cents, now,
@@ -915,8 +969,8 @@ def place_order(conn, username, request_id, side, price, quantity, now, adjust_c
         marketable = limit_cents >= price_cents if side == "buy" else limit_cents <= price_cents
         filled_milli = 0
         if marketable:
-            usable = min(amount_milli, flow_left(conn, side, minute, symbol),
-                         tradable_milli(conn, side, symbol))
+            usable = _settle_quantity(amount_milli, min(flow_left(conn, side, minute, symbol),
+                                                        tradable_milli(conn, side, symbol)))
             if usable > 0:
                 apply_fill(conn, symbol, username, side, usable, price_cents, now, adjust_coins,
                            f"market-order-{request_id}")
