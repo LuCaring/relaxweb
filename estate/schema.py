@@ -229,6 +229,7 @@ def init_estate(conn):
     )""")
     from estate.market import (
         MARKET_EPOCH, market_epoch, market_tables, seed_market, set_market_epoch,
+        sync_inventory_cap,
     )
     if market_epoch(conn) != MARKET_EPOCH:
         for table in market_tables():
@@ -312,6 +313,8 @@ def init_estate(conn):
         PRIMARY KEY(username,symbol)
     )""")
     seed_market(conn)
+    # 做市商额度改了也不让报价跳变（见 docs/stock-market-design.md §2.6）。
+    sync_inventory_cap(conn)
     set_market_epoch(conn, MARKET_EPOCH)
     conn.execute("""
         CREATE TABLE IF NOT EXISTS estate_thefts (

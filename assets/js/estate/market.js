@@ -239,7 +239,9 @@ function bookSection(market, onPick) {
     row.className = `estate-book-row estate-book-${kind}`;
     const name = document.createElement("span");
     name.textContent = `${kind === "ask" ? "卖" : "买"} ${format(level.price, 0)} 元`;
-    const size = document.createElement("span"); size.textContent = `${format(level.quantity, 0)} 份`;
+    // 额度回补期间盘口可能只剩零点几份，整数显示会变成「0 份」。
+    const size = document.createElement("span");
+    size.textContent = `${format(level.quantity, Number.isInteger(level.quantity) ? 0 : 3)} 份`;
     row.append(name, size);
     row.addEventListener("click", () => onPick(level.price));
     wrap.append(row);

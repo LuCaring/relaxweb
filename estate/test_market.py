@@ -32,8 +32,8 @@ from server.estate.protocol import EstateProtocol
 
 NOW = 2_000_000_000
 SYMBOL = DEFAULT_SYMBOL
-# 额度与自然流按标的均分：单只标的在基准点位下的额度与分钟吞吐。
-PER_SYMBOL_COINS = INVENTORY_CAP_COINS // len(SYMBOLS)
+# 额度按标的计量：单只标的在基准点位下的额度与分钟吞吐。
+PER_SYMBOL_COINS = INVENTORY_CAP_COINS
 CAP_MILLI = cap_milli_for_price(DEFAULT_PRICE_CENTS)
 FLOW_MILLI = FLOW_PER_MINUTE_COINS * 100 * 1000 // DEFAULT_PRICE_CENTS
 
@@ -305,9 +305,12 @@ class MarketTests(unittest.TestCase):
             market_snapshot(self.conn, "alice", NOW, adjust_coins, SYMBOL)
         self.assertEqual(tradable_milli(self.conn, "buy"), CAP_MILLI)
         with self.assertRaises(EstateError) as error:
-            trade_market(self.conn, "alice", "market-cap-0001", "buy", "700",
-                         NOW, adjust_coins)
+            trade_market(self.conn, "alice", "market-cap-0001", "buy",
+                         str(CAP_MILLI // 1000 + 1), NOW, adjust_coins)
         self.assertEqual(error.exception.code, "market_no_liquidity")
+        # 提示里要告诉玩家现在最多能买多少、额度会自己恢复
+        self.assertIn(f"最多可买入 {CAP_MILLI / 1000:g} 份", error.exception.message)
+        self.assertIn("自动恢复", error.exception.message)
 
     def test_positions_are_public_and_sorted_by_size(self):
         with self.randn():
@@ -537,7 +540,8 @@ class SplitTests(unittest.TestCase):
         self.assertTrue(1000 <= after["anchor"] < 1001, after["anchor"])
         self.assertEqual(after["shares"], 40)
         self.assertEqual(after["cost_basis"], cost)
-        self.assertEqual(self.symbol("inventory_milli")[0], -40 * 1000)
+        # 这一分钟里库存照常回补了一点（约 0.05%），拆股把回补后的量翻倍
+        self.assertAlmostEqual(self.symbol("inventory_milli")[0], -40 * 1000, delta=40)
         # 额度按金币计量：拆股后份数翻倍、价格减半，金币口径的额度与冲击都不变
         from estate.market import base_price_cents, inventory_cap_milli
         base = base_price_cents(self.conn) / 100
@@ -600,7 +604,7 @@ class SplitTests(unittest.TestCase):
         with self.randn():
             after = market_snapshot(self.conn, "alice", NOW + 60, adjust_coins, SYMBOL)
         self.assertEqual(after["split_count"], 1)
-        # 拆股后份数回到基准，金币口径的分钟吞吐与额度都还是 2 万 / 200 万
+        # 拆股后份数回到基准，金币口径的分钟吞吐与额度都还是 2 万 / 100 万
         base = base_price_cents(self.conn) / 100
         self.assertEqual(after["flow_left"]["buy"], 20)
         self.assertAlmostEqual(after["flow_left"]["buy"] * base, 20_000, delta=100)
@@ -828,6 +832,170 @@ class OrderTests(unittest.TestCase):
                 trade_market(self.conn, "alice", "market-flow-0005", "buy", "1",
                              NOW + 60, adjust_coins)
             self.assertEqual(error.exception.code, "market_flow")
+
+
+class CapacityRecoveryTests(unittest.TestCase):
+    """做市商额度被买满后不能永久锁死：库存按半衰期回补，额度与冲击一起恢复。"""
+
+    def setUp(self):
+        self.conn = sqlite3.connect(":memory:")
+        self.conn.execute("CREATE TABLE users(username TEXT PRIMARY KEY,coins REAL NOT NULL)")
+        self.conn.execute("CREATE TABLE coin_transactions(username TEXT,amount REAL,kind TEXT,detail TEXT,ref TEXT)")
+        self.conn.execute("INSERT INTO users VALUES ('alice',10000)")
+        init_estate(self.conn)
+        ensure_estate(self.conn, "alice", NOW)
+        with self.randn():
+            market_snapshot(self.conn, "alice", NOW, adjust_coins, SYMBOL)
+
+    def tearDown(self):
+        self.conn.close()
+
+    def randn(self, value=0.0):
+        return patch("estate.market._randn", return_value=value)
+
+    def set_inventory(self, milli):
+        self.conn.execute("UPDATE estate_market_symbols SET inventory_milli=? WHERE symbol=?",
+                          (milli, SYMBOL))
+
+    def inventory(self):
+        return self.conn.execute("SELECT inventory_milli FROM estate_market_symbols "
+                                 "WHERE symbol=?", (SYMBOL,)).fetchone()[0]
+
+    def test_bought_out_capacity_comes_back_by_itself(self):
+        self.set_inventory(-CAP_MILLI)             # 做市商被买满
+        with self.randn():
+            full = market_snapshot(self.conn, "alice", NOW, adjust_coins, SYMBOL)
+            with self.assertRaises(EstateError) as caught:
+                trade_market(self.conn, "alice", "market-full-0001", "buy", "1",
+                             NOW, adjust_coins, SYMBOL)
+            hour = market_snapshot(self.conn, "alice", NOW + 3600, adjust_coins, SYMBOL)
+            bought = trade_market(self.conn, "alice", "market-back-0001", "buy", "1",
+                                  NOW + 3600, adjust_coins, SYMBOL)
+        self.assertEqual(full["tradable_buy"], 0)
+        self.assertEqual(full["book"]["asks"], [])
+        self.assertEqual(caught.exception.code, "market_no_liquidity")
+        # 一小时回补 1 − 0.5^(1/24) ≈ 2.8% 的额度（锚在涨，份数口径略少一点）
+        self.assertAlmostEqual(hour["tradable_buy"], CAP_MILLI / 1000 * (1 - 0.5 ** (1 / 24)),
+                               delta=1)
+        self.assertGreater(len(hour["book"]["asks"]), 0)
+        self.assertEqual(bought["market"]["shares"], 1)
+
+    def test_one_half_life_brings_back_half_of_the_capacity(self):
+        self.set_inventory(-CAP_MILLI)
+        with self.randn():
+            market_snapshot(self.conn, "alice", NOW + 24 * 3600, adjust_coins, SYMBOL)
+        self.assertAlmostEqual(self.inventory(), -CAP_MILLI / 2, delta=2)
+
+    def test_impact_fades_together_with_the_inventory(self):
+        self.set_inventory(-CAP_MILLI)
+        with self.randn():
+            pumped = market_snapshot(self.conn, "alice", NOW + 10, adjust_coins, SYMBOL)
+            later = market_snapshot(self.conn, "alice", NOW + 10 + 24 * 3600, adjust_coins, SYMBOL)
+        # 买满的冲击仍然封顶在 +28.4%，一个半衰期后剩一半
+        self.assertAlmostEqual(math.log(pumped["price"] / pumped["anchor"]), INVENTORY_COEF,
+                               delta=0.001)
+        self.assertAlmostEqual(math.log(later["price"] / later["anchor"]), INVENTORY_COEF / 2,
+                               delta=0.005)
+
+    def test_sold_out_side_recovers_too(self):
+        """回补是对称的：集中卖出把做市商买满后，卖出侧同样会恢复。"""
+        self.conn.execute("INSERT INTO estate_market_positions VALUES ('alice','XTIDE',5000,500000,0)")
+        self.set_inventory(CAP_MILLI)
+        with self.randn():
+            with self.assertRaises(EstateError) as caught:
+                trade_market(self.conn, "alice", "market-sold-0001", "sell", "1",
+                             NOW, adjust_coins, SYMBOL)
+            sold = trade_market(self.conn, "alice", "market-sold-0002", "sell", "1",
+                                NOW + 24 * 3600, adjust_coins, SYMBOL)
+        self.assertEqual(caught.exception.code, "market_no_liquidity")
+        self.assertIn("最多可卖出 0 份", caught.exception.message)
+        self.assertEqual(sold["market"]["shares"], 4)
+
+    def test_long_downtime_still_recovers_the_inventory(self):
+        """停机超过补算上限时情绪会重抽，但库存照样按停机时长回补。"""
+        self.set_inventory(-CAP_MILLI)
+        with self.randn():
+            market_snapshot(self.conn, "alice", NOW + 3 * 24 * 3600, adjust_coins, SYMBOL)
+        self.assertAlmostEqual(self.inventory(), -CAP_MILLI / 8, delta=2)
+
+    def test_resting_order_fills_in_whole_shares_while_capacity_recovers(self):
+        """额度每 10 秒只回来一点：挂单攒够 1 份才成交，不会碎成几十笔。"""
+        self.set_inventory(-CAP_MILLI)
+        with self.randn():
+            price = market_snapshot(self.conn, "alice", NOW + 10, adjust_coins, SYMBOL)["price"]
+            placed = place_order(self.conn, "alice", "market-wait-0001", "buy",
+                                 str(int(price) + 10), "3", NOW + 10, adjust_coins, SYMBOL)
+            for step in range(2, 6 * 15):          # 模拟后台每 10 秒推进一次，持续 15 分钟
+                market_snapshot(self.conn, "alice", NOW + 10 * step, adjust_coins, SYMBOL)
+        fills = [row[0] for row in self.conn.execute(
+            "SELECT qty_milli FROM estate_market_fills WHERE username='alice' ORDER BY id")]
+        # 下单那一刻只回补了约 0.08 份，不够 1 份就不吃，整张单挂进簿里
+        self.assertEqual(placed["filled"], 0)
+        self.assertEqual(sum(fills), 3000)
+        self.assertLessEqual(len(fills), 3)
+        remaining = 3000
+        for quantity in fills:
+            self.assertGreaterEqual(quantity, min(remaining, 1000))
+            remaining -= quantity
+        self.assertEqual(self.conn.execute("SELECT status FROM estate_market_orders").fetchone()[0],
+                         "filled")
+
+
+class CapacityTransitionTests(unittest.TestCase):
+    """额度从每只 66.7 万提到 100 万：部署时报价不跳，额度当场放开。"""
+
+    def setUp(self):
+        self.conn = sqlite3.connect(":memory:")
+        self.conn.execute("CREATE TABLE users(username TEXT PRIMARY KEY,coins REAL NOT NULL)")
+        self.conn.execute("CREATE TABLE coin_transactions(username TEXT,amount REAL,kind TEXT,detail TEXT,ref TEXT)")
+        init_estate(self.conn)
+
+    def tearDown(self):
+        self.conn.close()
+
+    def meta_cap(self):
+        return self.conn.execute("SELECT value FROM estate_market_meta "
+                                 "WHERE key='cap_coins'").fetchone()[0]
+
+    def test_fresh_market_just_records_the_cap(self):
+        self.assertEqual(self.meta_cap(), str(INVENTORY_CAP_COINS))
+        self.assertEqual(self.conn.execute("SELECT COUNT(*) FROM estate_market_symbols "
+                                           "WHERE ou_state<>0").fetchone()[0], 0)
+
+    def test_raising_the_cap_keeps_the_quote_continuous(self):
+        from estate.market import (LEGACY_INVENTORY_CAP_COINS, inventory_cap_milli,
+                                   inventory_skew, price_from)
+        anchor, state = 120000.0, 0.1
+        legacy_cap = cap_milli_for_price(price_from(anchor, state), LEGACY_INVENTORY_CAP_COINS)
+        # 模拟旧版部署后的库：没记过额度（按 66.7 万算），XTIDE 被买满、情绪偏高
+        self.conn.execute("DELETE FROM estate_market_meta WHERE key='cap_coins'")
+        self.conn.execute("UPDATE estate_market_symbols SET anchor_cents=?,ou_state=?,ou_slot=?,"
+                          "inventory_milli=? WHERE symbol=?",
+                          (anchor, state, NOW // 10, -legacy_cap, SYMBOL))
+        before = state + inventory_skew(-legacy_cap, legacy_cap)
+        # 如果直接换额度，冲击会当场缩到 2/3，报价跳水 5% 以上
+        naive = state + inventory_skew(-legacy_cap, cap_milli_for_price(price_from(anchor, state)))
+        self.assertLess(price_from(anchor, naive) / price_from(anchor, before), 0.95)
+
+        init_estate(self.conn)
+
+        moved = self.conn.execute("SELECT ou_state FROM estate_market_symbols WHERE symbol=?",
+                                  (SYMBOL,)).fetchone()[0]
+        after = moved + inventory_skew(-legacy_cap, inventory_cap_milli(self.conn, SYMBOL))
+        self.assertAlmostEqual(after, before, places=6)
+        self.assertGreater(moved, state)            # 差额进了情绪项，之后慢慢回归
+        self.assertEqual(self.meta_cap(), str(INVENTORY_CAP_COINS))
+        # 过渡只做一次：再初始化不会重复挪动
+        init_estate(self.conn)
+        self.assertEqual(self.conn.execute("SELECT ou_state FROM estate_market_symbols "
+                                           "WHERE symbol=?", (SYMBOL,)).fetchone()[0], moved)
+        # 新额度立刻生效：被买满的标的当场空出二十多万金币的可买额度
+        from estate.market import base_price_cents
+        room_coins = tradable_milli(self.conn, "buy", SYMBOL) / 1000 * base_price_cents(self.conn) / 100
+        self.assertGreater(room_coins, 200_000)
+        with patch("estate.market._randn", return_value=0.0):
+            quote = market_snapshot(self.conn, "nobody", NOW + 10, adjust_coins, SYMBOL)["price"]
+        self.assertAlmostEqual(quote * 100 / price_from(anchor, before), 1, delta=0.001)
 
 
 class MarketWatcherTests(unittest.IsolatedAsyncioTestCase):

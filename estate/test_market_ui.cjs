@@ -69,7 +69,7 @@ print(json.dumps(estate_state(conn,'alice',int(time.time()))))
       split_count: 2, last_split_minute: 33333333,
       cost_basis: 0, market_value: 0, realized_pnl: 0,
       book: {bids: [{price: 999, quantity: 1}, {price: 998, quantity: 2}],
-        asks: [{price: 1001, quantity: 1}, {price: 1002, quantity: 2}]},
+        asks: [{price: 1001, quantity: 0.471}, {price: 1002, quantity: 2}]},
       flow_left: {buy: 20, sell: 20},
       positions: [{username: 'bob', shares: 12, market_value: 12000, cost_basis: 9000,
         unrealized_pnl: 3000, realized_pnl: 50}],
@@ -136,6 +136,9 @@ print(json.dumps(estate_state(conn,'alice',int(time.time()))))
     assert.match(await page.locator('.estate-market-holdings').innerText(), /做市商剩余额度：2,000,000 金币/);
     assert.match(await page.locator('.estate-market').innerText(), /已拆股 2 次（最近一次/);
     assert.equal(await page.locator('.estate-book-row').count(), 4);
+    // 额度回补期间的零头深度要如实显示，不能四舍五入成「0 份」
+    assert.match(await page.locator('.estate-book-ask').nth(1).innerText(), /卖 1,001 元\s*0\.471 份/);
+    assert.match(await page.locator('.estate-book-ask').first().innerText(), /卖 1,002 元\s*2 份/);
     assert.match(await page.locator('.estate-market-orders').innerText(), /#7 买入 990 元 · 剩余 5.000 份/);
     assert.match(await page.locator('.estate-market-fills').innerText(), /bob 卖出 1.000 份 @ 995/);
     assert.match(await page.locator('.estate-market-positions').innerText(), /全服持仓（1 人持有）[\s\S]*bob[\s\S]*12\.000 份 · 市值 12,000\.00 金币/);
