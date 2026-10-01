@@ -604,7 +604,7 @@ class SplitTests(unittest.TestCase):
         with self.randn():
             after = market_snapshot(self.conn, "alice", NOW + 60, adjust_coins, SYMBOL)
         self.assertEqual(after["split_count"], 1)
-        # 拆股后份数回到基准，金币口径的分钟吞吐与额度都还是 2 万 / 100 万
+        # 拆股后份数回到基准，金币口径的分钟吞吐与额度都还是 2 万 / 1000 万
         base = base_price_cents(self.conn) / 100
         self.assertEqual(after["flow_left"]["buy"], 20)
         self.assertAlmostEqual(after["flow_left"]["buy"] * base, 20_000, delta=100)
@@ -874,9 +874,12 @@ class CapacityRecoveryTests(unittest.TestCase):
         self.assertEqual(full["tradable_buy"], 0)
         self.assertEqual(full["book"]["asks"], [])
         self.assertEqual(caught.exception.code, "market_no_liquidity")
-        # 一小时回补 1 − 0.5^(1/24) ≈ 2.8% 的额度（锚在涨，份数口径略少一点）
-        self.assertAlmostEqual(hour["tradable_buy"], CAP_MILLI / 1000 * (1 - 0.5 ** (1 / 24)),
-                               delta=1)
+        # 一小时回补 1 − 0.5^(1/24) ≈ 2.8% 的库存；锚在涨，额度折算出的份数会略少一点
+        # （每只 1000 万时一小时约少 3 份），所以按当时的额度算，而不是按基准点位
+        from estate.market import inventory_cap_milli
+        self.assertAlmostEqual(hour["tradable_buy"],
+                               (inventory_cap_milli(self.conn, SYMBOL)
+                                - CAP_MILLI * 0.5 ** (1 / 24)) / 1000, delta=0.01)
         self.assertGreater(len(hour["book"]["asks"]), 0)
         self.assertEqual(bought["market"]["shares"], 1)
 
@@ -929,7 +932,7 @@ class CapacityRecoveryTests(unittest.TestCase):
                 market_snapshot(self.conn, "alice", NOW + 10 * step, adjust_coins, SYMBOL)
         fills = [row[0] for row in self.conn.execute(
             "SELECT qty_milli FROM estate_market_fills WHERE username='alice' ORDER BY id")]
-        # 下单那一刻只回补了约 0.08 份，不够 1 份就不吃，整张单挂进簿里
+        # 下单那一刻只回补了约 0.8 份（每只 1000 万），不够 1 份就不吃，整张单挂进簿里
         self.assertEqual(placed["filled"], 0)
         self.assertEqual(sum(fills), 3000)
         self.assertLessEqual(len(fills), 3)
@@ -942,7 +945,7 @@ class CapacityRecoveryTests(unittest.TestCase):
 
 
 class CapacityTransitionTests(unittest.TestCase):
-    """额度从每只 66.7 万提到 100 万：部署时报价不跳，额度当场放开。"""
+    """调整每只标的的额度（66.7 万 → 100 万 → 1000 万）：部署时报价不跳，额度当场放开。"""
 
     def setUp(self):
         self.conn = sqlite3.connect(":memory:")
@@ -962,26 +965,35 @@ class CapacityTransitionTests(unittest.TestCase):
         self.assertEqual(self.conn.execute("SELECT COUNT(*) FROM estate_market_symbols "
                                            "WHERE ou_state<>0").fetchone()[0], 0)
 
-    def test_raising_the_cap_keeps_the_quote_continuous(self):
-        from estate.market import (LEGACY_INVENTORY_CAP_COINS, inventory_cap_milli,
-                                   inventory_skew, price_from)
-        anchor, state = 120000.0, 0.1
-        legacy_cap = cap_milli_for_price(price_from(anchor, state), LEGACY_INVENTORY_CAP_COINS)
-        # 模拟旧版部署后的库：没记过额度（按 66.7 万算），XTIDE 被买满、情绪偏高
+    def test_raising_an_unrecorded_legacy_cap_keeps_the_quote_continuous(self):
+        """没记过额度的老库（每只 66.7 万那一版）按 ``LEGACY_INVENTORY_CAP_COINS`` 过渡。"""
+        from estate.market import LEGACY_INVENTORY_CAP_COINS
         self.conn.execute("DELETE FROM estate_market_meta WHERE key='cap_coins'")
+        self.assert_smooth_transition(LEGACY_INVENTORY_CAP_COINS)
+
+    def test_raising_the_recorded_cap_keeps_the_quote_continuous(self):
+        """线上的真实路径：库里记着每只 100 万，部署后提到当前额度。"""
+        self.conn.execute("UPDATE estate_market_meta SET value='1000000' WHERE key='cap_coins'")
+        self.assert_smooth_transition(1_000_000)
+
+    def assert_smooth_transition(self, previous_coins):
+        from estate.market import base_price_cents, inventory_cap_milli, inventory_skew, price_from
+        anchor, state = 120000.0, 0.1
+        old_cap = cap_milli_for_price(price_from(anchor, state), previous_coins)
+        # XTIDE 在旧额度下被买满、情绪偏高
         self.conn.execute("UPDATE estate_market_symbols SET anchor_cents=?,ou_state=?,ou_slot=?,"
                           "inventory_milli=? WHERE symbol=?",
-                          (anchor, state, NOW // 10, -legacy_cap, SYMBOL))
-        before = state + inventory_skew(-legacy_cap, legacy_cap)
-        # 如果直接换额度，冲击会当场缩到 2/3，报价跳水 5% 以上
-        naive = state + inventory_skew(-legacy_cap, cap_milli_for_price(price_from(anchor, state)))
-        self.assertLess(price_from(anchor, naive) / price_from(anchor, before), 0.95)
+                          (anchor, state, NOW // 10, -old_cap, SYMBOL))
+        before = state + inventory_skew(-old_cap, old_cap)
+        # 如果直接换额度，冲击会当场从 +28.4% 缩到零头，报价跳水约 20%
+        naive = state + inventory_skew(-old_cap, cap_milli_for_price(price_from(anchor, state)))
+        self.assertLess(price_from(anchor, naive) / price_from(anchor, before), 0.85)
 
         init_estate(self.conn)
 
         moved = self.conn.execute("SELECT ou_state FROM estate_market_symbols WHERE symbol=?",
                                   (SYMBOL,)).fetchone()[0]
-        after = moved + inventory_skew(-legacy_cap, inventory_cap_milli(self.conn, SYMBOL))
+        after = moved + inventory_skew(-old_cap, inventory_cap_milli(self.conn, SYMBOL))
         self.assertAlmostEqual(after, before, places=6)
         self.assertGreater(moved, state)            # 差额进了情绪项，之后慢慢回归
         self.assertEqual(self.meta_cap(), str(INVENTORY_CAP_COINS))
@@ -989,10 +1001,11 @@ class CapacityTransitionTests(unittest.TestCase):
         init_estate(self.conn)
         self.assertEqual(self.conn.execute("SELECT ou_state FROM estate_market_symbols "
                                            "WHERE symbol=?", (SYMBOL,)).fetchone()[0], moved)
-        # 新额度立刻生效：被买满的标的当场空出二十多万金币的可买额度
-        from estate.market import base_price_cents
+        # 新额度立刻生效：被买满的标的当场空出新旧额度之差的绝大部分。库存按份数存，
+        # 冲击差并进情绪后中价变高，旧库存按新中价折算会多占一点，所以略少于差额。
         room_coins = tradable_milli(self.conn, "buy", SYMBOL) / 1000 * base_price_cents(self.conn) / 100
-        self.assertGreater(room_coins, 200_000)
+        self.assertGreater(room_coins, 0.95 * (INVENTORY_CAP_COINS - previous_coins))
+        self.assertLess(room_coins, INVENTORY_CAP_COINS - previous_coins)
         with patch("estate.market._randn", return_value=0.0):
             quote = market_snapshot(self.conn, "nobody", NOW + 10, adjust_coins, SYMBOL)["price"]
         self.assertAlmostEqual(quote * 100 / price_from(anchor, before), 1, delta=0.001)
