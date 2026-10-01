@@ -131,7 +131,7 @@ class PriceModelTests(unittest.TestCase):
             self.assertGreater(item["weekly_growth"], 0)
             self.assertGreater(item["sigma"], 0)
             self.assertGreater(item["half_life_minutes"], 0)
-        # 额度按标的计量：单只标的在基准点位下就是 100 万金币
+        # 额度按标的计量：单只标的在基准点位下就是 1000 万金币
         self.assertEqual(cap_milli_for_price(100000) / 1000 * 1000, INVENTORY_CAP_COINS)
         # 波动最大的标的，其日σ 必须显著高于基准档
         calm = statistics.pstdev([value for value in deviation_path(11, item=BASE)])
