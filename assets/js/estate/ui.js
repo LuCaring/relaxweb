@@ -470,9 +470,8 @@ export function createEstateUI(root, activities = {}) {
         } catch { /* 协议层统一提示 */ }
       }, { className: "estate-button estate-button-gold",
         disabled: !ready || limits.visitor_remaining < 1
-          || limits.daily_remaining < 1 || limits.owner_remaining < 1 }));
+          || limits.owner_remaining < 1 }));
       sheetBody.append(note(`你今天还能在这里尝试 ${limits.visitor_remaining ?? 0} 次；`
-        + `今日全服偷菜收获剩余 ${limits.daily_remaining ?? 0} 块；`
         + `该庄园今日还可被偷 ${limits.owner_remaining ?? 0} 块。两次偷菜操作至少间隔30秒。`));
       return;
     }

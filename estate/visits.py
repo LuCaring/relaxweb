@@ -17,8 +17,7 @@ from estate.store import (
 SHANGHAI = ZoneInfo("Asia/Shanghai")
 VISIT_UNLOCK_LEVEL = 3
 VISITOR_DAILY_LIMIT = 2
-VISITOR_GLOBAL_DAILY_LIMIT = 3
-OWNER_DAILY_LIMIT = 2
+OWNER_DAILY_LIMIT = 3
 STEAL_COOLDOWN_SECONDS = 30
 VISIT_FERTILIZE_COOLDOWN_SECONDS = 30
 NOTIFICATION_RETENTION_SECONDS = 30 * 24 * 60 * 60
@@ -72,10 +71,6 @@ def public_estate_state(conn, visitor, owner, now, adjust_coins=None):
         "AND outcome='stolen'",
         (owner, today),
     ).fetchone()[0]
-    visitor_used = conn.execute(
-        "SELECT COUNT(*) FROM estate_thefts WHERE visitor_username=? AND steal_day=? "
-        "AND outcome='stolen'", (visitor, today),
-    ).fetchone()[0]
     plots = []
     for index, land_level, crop_id, planted_at, ready_at in rows:
         plots.append({
@@ -94,7 +89,6 @@ def public_estate_state(conn, visitor, owner, now, adjust_coins=None):
         "plots": plots, "catalog": public_catalog(),
         "steal_limits": {
             "visitor_remaining": max(0, VISITOR_DAILY_LIMIT - pair_used),
-            "daily_remaining": max(0, VISITOR_GLOBAL_DAILY_LIMIT - visitor_used),
             "owner_remaining": max(0, OWNER_DAILY_LIMIT - owner_used),
         },
     }
@@ -176,19 +170,13 @@ def steal_crop(conn, visitor, request_id, owner, plot_id, now,
         ).fetchone()[0]
         if pair_used >= VISITOR_DAILY_LIMIT:
             raise estate_error(("visitor_limit", "今日已从该庄园尝试偷取 2 块"))
-        visitor_used = conn.execute(
-            "SELECT COUNT(*) FROM estate_thefts WHERE visitor_username=? AND steal_day=? "
-            "AND outcome='stolen'", (visitor, today),
-        ).fetchone()[0]
-        if visitor_used >= VISITOR_GLOBAL_DAILY_LIMIT:
-            raise estate_error(("visitor_daily_limit", "今日偷菜收获已达3块，请明天再来"))
         owner_used = conn.execute(
             "SELECT COUNT(*) FROM estate_thefts WHERE owner_username=? AND steal_day=? "
             "AND outcome='stolen'",
             (owner, today),
         ).fetchone()[0]
         if owner_used >= OWNER_DAILY_LIMIT:
-            raise estate_error(("owner_protected", "该庄园今日已被偷满2块"))
+            raise estate_error(("owner_protected", "该庄园今日已被偷满3块"))
         last_attempt = conn.execute(
             "SELECT MAX(created_at) FROM estate_thefts WHERE visitor_username=?",
             (visitor,),
@@ -224,7 +212,6 @@ def steal_crop(conn, visitor, request_id, owner, plot_id, now,
                     "crop_name": crop["name"], "quantity": 0, "coins_dropped": dropped,
                     "pet_level": pet_level,
                     "visitor_remaining": VISITOR_DAILY_LIMIT - pair_used - 1,
-                    "daily_remaining": VISITOR_GLOBAL_DAILY_LIMIT - visitor_used,
                     "owner_remaining": OWNER_DAILY_LIMIT - owner_used}
         require_capacity(conn, visitor, visitor_profile, quantity)
         changed = conn.execute(
@@ -247,7 +234,6 @@ def steal_crop(conn, visitor, request_id, owner, plot_id, now,
                 "plot_id": index, "crop_id": row[0], "crop_name": crop["name"],
                 "quantity": quantity, "outcome": "stolen", "coins_dropped": 0,
                 "visitor_remaining": VISITOR_DAILY_LIMIT - pair_used - 1,
-                "daily_remaining": VISITOR_GLOBAL_DAILY_LIMIT - visitor_used - 1,
                 "owner_remaining": OWNER_DAILY_LIMIT - owner_used - 1}
 
     return run_action(conn, visitor, request_id, "steal_crop", payload, now, mutate)
